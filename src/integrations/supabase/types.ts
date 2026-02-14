@@ -169,19 +169,49 @@ export type Database = {
       }
       profiles: {
         Row: {
+          country: string | null
+          cpf: string | null
           created_at: string
           full_name: string
+          gender: string | null
           id: string
+          institution: string | null
+          institution_city: string | null
+          neighborhood: string | null
+          nickname: string | null
+          street: string | null
+          street_number: string | null
+          zip_code: string | null
         }
         Insert: {
+          country?: string | null
+          cpf?: string | null
           created_at?: string
           full_name: string
+          gender?: string | null
           id: string
+          institution?: string | null
+          institution_city?: string | null
+          neighborhood?: string | null
+          nickname?: string | null
+          street?: string | null
+          street_number?: string | null
+          zip_code?: string | null
         }
         Update: {
+          country?: string | null
+          cpf?: string | null
           created_at?: string
           full_name?: string
+          gender?: string | null
           id?: string
+          institution?: string | null
+          institution_city?: string | null
+          neighborhood?: string | null
+          nickname?: string | null
+          street?: string | null
+          street_number?: string | null
+          zip_code?: string | null
         }
         Relationships: []
       }
