@@ -195,7 +195,7 @@ export default function StudentRoomView() {
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
     if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); } }
-    if (room?.current_stage === 'application_open') loadAppData();
+    if (room?.current_stage === 'application_open') { loadMembership(); loadAppData(); }
   }, [room?.current_stage, membership]);
 
   // Determine tRAT step based on state
