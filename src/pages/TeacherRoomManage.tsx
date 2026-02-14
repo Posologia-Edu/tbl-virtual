@@ -29,6 +29,7 @@ export default function TeacherRoomManage() {
   const [participants, setParticipants] = useState<any[]>([]);
   const [iratStats, setIratStats] = useState<{ total: number; completed: number }>({ total: 0, completed: 0 });
   const [tratStats, setTratStats] = useState<{ teamId: string; teamName: string; score: number }[]>([]);
+  const [tratAttemptsAll, setTratAttemptsAll] = useState<any[]>([]);
   const [appQOpen, setAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
   const [appOptA, setAppOptA] = useState('');
@@ -79,6 +80,7 @@ export default function TeacherRoomManage() {
     // tRAT stats
     if (teamsData) {
       const { data: tratData } = await supabase.from('trat_attempts').select('*').eq('room_id', roomId!);
+      setTratAttemptsAll(tratData || []);
       const scores = teamsData.map((t: any) => {
         const teamAttempts = (tratData || []).filter((a: any) => a.team_id === t.id && a.is_correct);
         const score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
@@ -142,6 +144,12 @@ export default function TeacherRoomManage() {
         () => { loadAll(); }
       )
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
+        () => { loadAll(); }
+      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
+        () => { loadAll(); }
+      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` },
         () => { loadAll(); }
       )
       .subscribe();
@@ -429,25 +437,49 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
-        {/* tRAT Scores */}
+        {/* tRAT Progress & Scores */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-trat">tRAT</Badge> Pontuações
+              <Badge className="phase-trat">tRAT</Badge> Progresso das Equipes
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              {tratStats.filter(t => t.score > 0).sort((a, b) => b.score - a.score).map(t => (
-                <div key={t.teamId} className="flex items-center justify-between">
-                  <span className="text-sm">{t.teamName}</span>
-                  <span className="font-mono font-bold">{t.score} pts</span>
-                </div>
-              ))}
-              {tratStats.every(t => t.score === 0) && (
-                <p className="text-sm text-muted-foreground text-center">Sem pontuações ainda</p>
-              )}
-            </div>
+            {teams.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center">Nenhuma equipe formada ainda</p>
+            ) : (
+              <div className="space-y-4">
+                {tratStats.sort((a, b) => b.score - a.score).map(t => {
+                  const teamAttempts = (tratAttemptsAll || []).filter((a: any) => a.team_id === t.teamId);
+                  const questionsAnswered = new Set(teamAttempts.filter((a: any) => a.is_correct).map((a: any) => a.question_id)).size;
+                  const questionsAttempted = new Set(teamAttempts.map((a: any) => a.question_id)).size;
+                  const totalQuestions = linkedQuiz?.questions?.length || 0;
+                  return (
+                    <div key={t.teamId} className="p-3 rounded-lg border border-border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-sm">{t.teamName}</span>
+                        <span className="font-mono font-bold text-sm">{t.score} pts</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${totalQuestions > 0 ? (questionsAnswered / totalQuestions) * 100 : 0}%`,
+                              backgroundColor: 'hsl(var(--phase-trat))',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground">{questionsAnswered}/{totalQuestions}</span>
+                      </div>
+                      {questionsAttempted > questionsAnswered && (
+                        <p className="text-xs text-muted-foreground">{questionsAttempted - questionsAnswered} questão(ões) em andamento</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
