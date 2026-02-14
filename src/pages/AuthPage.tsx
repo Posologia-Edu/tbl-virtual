@@ -41,15 +41,17 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-6">
-        <div className="text-center space-y-2">
-          <button onClick={() => navigate('/')} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
+        <div className="space-y-4">
+          <button onClick={() => navigate('/')} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" /> Voltar ao início
           </button>
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-2">
-            <GraduationCap className="w-8 h-8 text-primary-foreground" />
+          <div className="flex flex-col items-center space-y-2">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary">
+              <GraduationCap className="w-8 h-8 text-primary-foreground" />
+            </div>
+            <h1 className="text-3xl font-heading font-bold tracking-tight">TBL Virtual</h1>
+            <p className="text-muted-foreground">Área do Professor</p>
           </div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">TBL Virtual</h1>
-          <p className="text-muted-foreground">Área do Professor</p>
         </div>
 
         <Card className="shadow-lg border-0">
