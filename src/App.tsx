@@ -43,6 +43,7 @@ const App = () => (
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/dashboard" element={<DashboardRouter />} />
             <Route path="/quizzes" element={<ProtectedRoute><QuizManager /></ProtectedRoute>} />
+            <Route path="/join" element={<JoinRoomPage />} />
             <Route path="/room/:roomId/join" element={<ProtectedRoute><JoinRoomPage /></ProtectedRoute>} />
             <Route path="/room/:roomId" element={<ProtectedRoute><StudentRoomView /></ProtectedRoute>} />
             <Route path="/room/:roomId/manage" element={<ProtectedRoute><TeacherRoomManage /></ProtectedRoute>} />

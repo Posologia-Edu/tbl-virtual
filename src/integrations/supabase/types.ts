@@ -325,33 +325,48 @@ export type Database = {
           created_at: string
           current_stage: Database["public"]["Enums"]["room_stage"]
           id: string
+          individual_pct: number | null
           irat_end_time: string | null
           is_active: boolean
+          max_grade: number | null
           name: string
           quiz_id: string | null
+          show_answers_in_report: boolean | null
+          show_individual_in_team: boolean | null
           teacher_id: string
+          team_pct: number | null
         }
         Insert: {
           code: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
           id?: string
+          individual_pct?: number | null
           irat_end_time?: string | null
           is_active?: boolean
+          max_grade?: number | null
           name: string
           quiz_id?: string | null
+          show_answers_in_report?: boolean | null
+          show_individual_in_team?: boolean | null
           teacher_id: string
+          team_pct?: number | null
         }
         Update: {
           code?: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
           id?: string
+          individual_pct?: number | null
           irat_end_time?: string | null
           is_active?: boolean
+          max_grade?: number | null
           name?: string
           quiz_id?: string | null
+          show_answers_in_report?: boolean | null
+          show_individual_in_team?: boolean | null
           teacher_id?: string
+          team_pct?: number | null
         }
         Relationships: [
           {

@@ -101,7 +101,7 @@ export default function LandingPage() {
               Como Funciona
             </button>
             <button
-              onClick={() => setStudentDialogOpen(true)}
+              onClick={() => navigate('/join')}
               className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all"
             >
               Estudante
@@ -146,7 +146,7 @@ export default function LandingPage() {
               <div className="px-4 py-3 space-y-1">
                 <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Início</button>
                 <button onClick={() => { document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Como Funciona</button>
-                <button onClick={() => { setStudentDialogOpen(true); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Estudante</button>
+                <button onClick={() => { navigate('/join'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Estudante</button>
                 <button onClick={() => navigate('/auth?mode=signup')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Professor - Criar Conta</button>
                 <button onClick={() => navigate('/auth?mode=signin')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Professor - Entrar</button>
               </div>
@@ -183,7 +183,7 @@ export default function LandingPage() {
                 <Button size="lg" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8 h-12 rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow">
                   Começar Agora <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
-                <Button size="lg" variant="outline" onClick={() => setStudentDialogOpen(true)} className="text-base px-8 h-12 rounded-xl">
+                <Button size="lg" variant="outline" onClick={() => navigate('/join')} className="text-base px-8 h-12 rounded-xl">
                   Entrar como Estudante
                 </Button>
               </div>
@@ -388,7 +388,7 @@ export default function LandingPage() {
               <Button
                 size="lg"
                 variant="ghost"
-                onClick={() => setStudentDialogOpen(true)}
+                onClick={() => navigate('/join')}
                 className="text-base px-8 h-12 rounded-xl text-primary-foreground border border-primary-foreground/20 hover:bg-primary-foreground/10"
               >
                 Sou Estudante
