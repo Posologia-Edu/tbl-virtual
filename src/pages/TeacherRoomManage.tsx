@@ -9,10 +9,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
@@ -25,7 +27,7 @@ const stageLabels: Record<string, { label: string; className: string }> = {
 
 export default function TeacherRoomManage() {
   const { roomId } = useParams<{ roomId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [room, setRoom] = useState<any>(null);
   const [teams, setTeams] = useState<any[]>([]);
@@ -638,39 +640,350 @@ export default function TeacherRoomManage() {
     );
   };
 
-  // ============ FINISHED ============
-  const renderFinished = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {stages.map((s, i) => {
-              const info = stageLabels[s];
-              const isCurrent = room.current_stage === s;
-              const isPast = stages.indexOf(room.current_stage) > i;
-              return (
-                <div key={s} className="flex items-center gap-2 flex-shrink-0">
-                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    isCurrent ? info.className : isPast ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
-                  }`}>{info.label}</div>
-                  {i < stages.length - 1 && <div className="w-4 h-0.5 bg-border" />}
+  // ============ FINISHED - REPORTS ============
+  const IRAT_PCT = 0.30;
+  const TRAT_PCT = 0.40;
+  const APP_PCT = 0.30;
+
+  const maxGradeVal = parseFloat((room as any).max_grade) || 10;
+  const maxIratScore = questions.length * 4; // max 4 points per question
+  const maxTratScore = questions.length * 4;
+  const maxAppScore = appQuestions.length > 0 ? appQuestions.length : 1; // 1 point per correct app answer
+
+  // Compute per-student data for final report
+  const computeStudentReport = () => {
+    return participants.map((p: any) => {
+      const studentId = p.user_id;
+      const name = p.profiles?.full_name || 'Aluno';
+      const ra = p.participant_code || '—';
+
+      // iRAT score
+      const studentIrat = iratResponses.filter((r: any) => r.student_id === studentId);
+      const iratRawScore = studentIrat.reduce((sum: number, r: any) => sum + r.score, 0);
+
+      // Find student's team
+      const studentTeam = teams.find((t: any) =>
+        (t.team_members || []).some((m: any) => m.user_id === studentId)
+      );
+      const teamId = studentTeam?.id;
+
+      // tRAT score (team score applies to all members)
+      let tratRawScore = 0;
+      if (teamId) {
+        const teamAttempts = tratAttemptsAll.filter((a: any) => a.team_id === teamId && a.is_correct);
+        tratRawScore = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
+      }
+
+      // App score (team score)
+      let appRawScore = 0;
+      if (teamId && appQuestions.length > 0) {
+        appRawScore = appQuestions.filter(q =>
+          appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId)
+        ).length;
+      }
+
+      // Compute grades
+      const iratGrade = maxIratScore > 0 ? (iratRawScore / maxIratScore) * maxGradeVal : 0;
+      const tratGrade = maxTratScore > 0 ? (tratRawScore / maxTratScore) * maxGradeVal : 0;
+      const appGrade = maxAppScore > 0 ? (appRawScore / maxAppScore) * maxGradeVal : 0;
+      const finalGrade = iratGrade * IRAT_PCT + tratGrade * TRAT_PCT + appGrade * APP_PCT;
+
+      return {
+        ra, name, studentId, teamName: studentTeam?.name || '—',
+        iratRaw: iratRawScore, tratRaw: tratRawScore, appRaw: appRawScore,
+        iratGrade: iratGrade.toFixed(2), tratGrade: tratGrade.toFixed(2),
+        appGrade: appGrade.toFixed(2), finalGrade: finalGrade.toFixed(2),
+      };
+    });
+  };
+
+  // Compute question stats for management report
+  const computeQuestionStats = () => {
+    return questions.map((q: any, i: number) => {
+      const qResponses = iratResponses.filter((r: any) => r.question_id === q.id);
+      const totalResponses = qResponses.length;
+      const correctCount = qResponses.filter((r: any) => r.score === 4).length;
+      const partialCount = qResponses.filter((r: any) => r.score > 0 && r.score < 4).length;
+      const wrongCount = qResponses.filter((r: any) => r.score === 0).length;
+      const avgScore = totalResponses > 0 ? qResponses.reduce((s: number, r: any) => s + r.score, 0) / totalResponses : 0;
+      const correctPct = totalResponses > 0 ? (correctCount / totalResponses) * 100 : 0;
+
+      return {
+        index: i + 1, id: q.id, text: q.question_text.substring(0, 80) + (q.question_text.length > 80 ? '...' : ''),
+        totalResponses, correctCount, partialCount, wrongCount, avgScore, correctPct,
+        difficulty: correctPct >= 70 ? 'Fácil' : correctPct >= 40 ? 'Médio' : 'Difícil',
+      };
+    });
+  };
+
+  const CHART_COLORS = ['hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--destructive))', 'hsl(var(--primary))'];
+
+  const renderFinished = () => {
+    const studentData = computeStudentReport();
+    const questionStats = computeQuestionStats();
+
+    const sortedByCorrect = [...questionStats].sort((a, b) => b.correctPct - a.correctPct);
+    const easiest = sortedByCorrect.slice(0, 3);
+    const hardest = [...sortedByCorrect].reverse().slice(0, 3);
+
+    const avgIrat = studentData.length > 0 ? studentData.reduce((s, d) => s + parseFloat(d.iratGrade), 0) / studentData.length : 0;
+    const avgTrat = studentData.length > 0 ? studentData.reduce((s, d) => s + parseFloat(d.tratGrade), 0) / studentData.length : 0;
+    const avgApp = studentData.length > 0 ? studentData.reduce((s, d) => s + parseFloat(d.appGrade), 0) / studentData.length : 0;
+    const avgFinal = studentData.length > 0 ? studentData.reduce((s, d) => s + parseFloat(d.finalGrade), 0) / studentData.length : 0;
+
+    const performanceDistribution = [
+      { name: 'Excelente (≥9)', value: studentData.filter(d => parseFloat(d.finalGrade) >= 9).length },
+      { name: 'Bom (7-8.9)', value: studentData.filter(d => parseFloat(d.finalGrade) >= 7 && parseFloat(d.finalGrade) < 9).length },
+      { name: 'Regular (5-6.9)', value: studentData.filter(d => parseFloat(d.finalGrade) >= 5 && parseFloat(d.finalGrade) < 7).length },
+      { name: 'Insuficiente (<5)', value: studentData.filter(d => parseFloat(d.finalGrade) < 5).length },
+    ].filter(d => d.value > 0);
+
+    const barData = questionStats.map(q => ({
+      name: `Q${q.index}`,
+      acertos: q.correctPct,
+      erros: 100 - q.correctPct,
+    }));
+
+    return (
+      <div className="space-y-6">
+        <Tabs defaultValue="final" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="final">Relatório Final</TabsTrigger>
+            <TabsTrigger value="management">Relatório Gerencial</TabsTrigger>
+          </TabsList>
+
+          {/* ===== RELATÓRIO FINAL ===== */}
+          <TabsContent value="final" className="space-y-6">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                <strong>Professor(a):</strong> {profile?.full_name || '—'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <strong>Data aplicação:</strong> {new Date(room.created_at).toLocaleString('pt-BR')}
+              </p>
+            </div>
+
+            {/* Grade config badges */}
+            <div className="text-center space-y-4">
+              <div className="inline-block bg-warning/80 text-warning-foreground px-8 py-2 rounded-full text-xl font-bold">
+                {maxGradeVal.toFixed(2)}
+              </div>
+              <p className="text-sm font-semibold text-muted-foreground">Pontuação Máxima</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="text-center">
+                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full font-bold">
+                  {(maxGradeVal * IRAT_PCT).toFixed(2)}
                 </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-      <div className="text-center py-8">
-        <CheckCircle2 className="w-16 h-16 mx-auto text-success mb-4" />
-        <h2 className="text-2xl font-heading font-bold">Sessão Finalizada</h2>
-        <p className="text-muted-foreground mt-2">Todas as etapas foram concluídas.</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Composição da nota: 30% iRAT + 40% tRAT + 30% Aplicação
-        </p>
-        <Button onClick={() => navigate('/dashboard')} className="mt-6">Voltar ao Dashboard</Button>
+                <p className="text-xs text-muted-foreground mt-1">Nota Máx. Individual</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full font-bold">
+                  {(IRAT_PCT * 100).toFixed(0)}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">% Nota Individual</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full font-bold">
+                  {(maxGradeVal * TRAT_PCT).toFixed(2)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Nota Máx. Equipe</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-primary text-primary-foreground px-4 py-2 rounded-full font-bold">
+                  {(TRAT_PCT * 100).toFixed(0)}%
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">% Nota Equipe</p>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <div className="inline-block bg-primary/80 text-primary-foreground px-6 py-1 rounded-full font-bold text-sm">
+                Aplicação de Conceitos: {(APP_PCT * 100).toFixed(0)}% (máx {(maxGradeVal * APP_PCT).toFixed(2)})
+              </div>
+            </div>
+
+            {/* Student grades table */}
+            <ScrollArea className="w-full">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="min-w-[120px]">RA</TableHead>
+                    <TableHead className="min-w-[180px]">Nome</TableHead>
+                    <TableHead className="text-center min-w-[100px]">Acertos Individuais</TableHead>
+                    <TableHead className="text-center min-w-[120px]">Pontuação Individual</TableHead>
+                    <TableHead className="text-center min-w-[100px]">Acertos em Equipe</TableHead>
+                    <TableHead className="text-center min-w-[120px]">Pontuação da Equipe</TableHead>
+                    <TableHead className="text-center min-w-[100px]">Pont. Aplicação</TableHead>
+                    <TableHead className="text-center min-w-[110px]">Pontuação Final</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {studentData.sort((a, b) => parseFloat(b.finalGrade) - parseFloat(a.finalGrade)).map((s) => (
+                    <TableRow key={s.studentId}>
+                      <TableCell className="font-mono font-bold">{s.ra}</TableCell>
+                      <TableCell>{s.name}</TableCell>
+                      <TableCell className="text-center">{s.iratRaw}</TableCell>
+                      <TableCell className="text-center">{s.iratGrade}</TableCell>
+                      <TableCell className="text-center">{s.tratRaw}</TableCell>
+                      <TableCell className="text-center">{s.tratGrade}</TableCell>
+                      <TableCell className="text-center">{s.appGrade}</TableCell>
+                      <TableCell className="text-center font-bold text-primary">{s.finalGrade}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
+
+            <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">Voltar ao Dashboard</Button>
+          </TabsContent>
+
+          {/* ===== RELATÓRIO GERENCIAL ===== */}
+          <TabsContent value="management" className="space-y-6">
+            <h2 className="text-xl font-heading font-bold">Relatório Gerencial</h2>
+
+            {/* Overview cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card><CardContent className="pt-4 text-center">
+                <p className="text-2xl font-bold">{avgIrat.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Média iRAT</p>
+              </CardContent></Card>
+              <Card><CardContent className="pt-4 text-center">
+                <p className="text-2xl font-bold">{avgTrat.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Média tRAT</p>
+              </CardContent></Card>
+              <Card><CardContent className="pt-4 text-center">
+                <p className="text-2xl font-bold">{avgApp.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Média Aplicação</p>
+              </CardContent></Card>
+              <Card className="border-primary"><CardContent className="pt-4 text-center">
+                <p className="text-2xl font-bold text-primary">{avgFinal.toFixed(2)}</p>
+                <p className="text-xs text-muted-foreground">Média Final</p>
+              </CardContent></Card>
+            </div>
+
+            {/* Performance distribution */}
+            {performanceDistribution.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-base font-heading">Distribuição de Desempenho</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={performanceDistribution} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                          {performanceDistribution.map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Question performance chart */}
+            {barData.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-base font-heading">% de Acertos por Questão</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={barData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} domain={[0, 100]} />
+                        <Tooltip />
+                        <Bar dataKey="acertos" name="% Acertos" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Easiest and hardest questions */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-heading flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-success" /> Questões Mais Fáceis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {easiest.map(q => (
+                    <div key={q.id} className="flex items-center justify-between p-2 rounded-lg bg-success/5 border border-success/20">
+                      <span className="text-sm font-medium">Q{q.index}</span>
+                      <Badge variant="outline" className="text-success border-success/30">{q.correctPct.toFixed(0)}% acertos</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base font-heading flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-destructive" /> Questões Mais Difíceis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {hardest.map(q => (
+                    <div key={q.id} className="flex items-center justify-between p-2 rounded-lg bg-destructive/5 border border-destructive/20">
+                      <span className="text-sm font-medium">Q{q.index}</span>
+                      <Badge variant="outline" className="text-destructive border-destructive/30">{q.correctPct.toFixed(0)}% acertos</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Difficulty classification table */}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base font-heading">Classificação de Dificuldade por Questão</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Questão</TableHead>
+                      <TableHead className="text-center">Acertos</TableHead>
+                      <TableHead className="text-center">Parciais</TableHead>
+                      <TableHead className="text-center">Erros</TableHead>
+                      <TableHead className="text-center">% Acertos</TableHead>
+                      <TableHead className="text-center">Média</TableHead>
+                      <TableHead className="text-center">Dificuldade</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {questionStats.map(q => (
+                      <TableRow key={q.id}>
+                        <TableCell className="font-medium">Q{q.index}</TableCell>
+                        <TableCell className="text-center text-success font-medium">{q.correctCount}</TableCell>
+                        <TableCell className="text-center text-warning font-medium">{q.partialCount}</TableCell>
+                        <TableCell className="text-center text-destructive font-medium">{q.wrongCount}</TableCell>
+                        <TableCell className="text-center">{q.correctPct.toFixed(0)}%</TableCell>
+                        <TableCell className="text-center">{q.avgScore.toFixed(1)}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="outline" className={
+                            q.difficulty === 'Fácil' ? 'text-success border-success/30' :
+                            q.difficulty === 'Médio' ? 'text-warning border-warning/30' :
+                            'text-destructive border-destructive/30'
+                          }>{q.difficulty}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">Voltar ao Dashboard</Button>
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
