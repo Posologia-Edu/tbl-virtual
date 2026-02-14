@@ -243,7 +243,7 @@ export default function LandingPage() {
             {[
               { icon: Brain, title: 'Quizzes Inteligentes', desc: 'Crie bancos de questões com alternativas e gabarito. Reutilize em qualquer sessão.', gradient: 'from-primary/10 to-primary/5' },
               { icon: Users, title: 'Equipes em Tempo Real', desc: 'Alunos entram com um código e são organizados em equipes com sincronização instantânea.', gradient: 'from-[hsl(var(--phase-trat))]/10 to-[hsl(var(--phase-trat))]/5' },
-              { icon: Layers, title: 'Raspadinha Digital (IF-AT)', desc: 'O sistema de pontuação por tentativas motiva a discussão e garante aprendizado profundo.', gradient: 'from-[hsl(var(--phase-app))]/10 to-[hsl(var(--phase-app))]/5' },
+              { icon: Layers, title: 'Apostas de Confiança', desc: 'Distribua 4 pontos entre as alternativas. Quanto mais você sabe, mais aposta — e mais ganha!', gradient: 'from-[hsl(var(--phase-app))]/10 to-[hsl(var(--phase-app))]/5' },
               { icon: BarChart3, title: 'Resultados Instantâneos', desc: 'Acompanhe o desempenho individual e coletivo em dashboards claros e organizados.', gradient: 'from-primary/10 to-primary/5' },
               { icon: Zap, title: 'Sem Complicação', desc: 'Professores criam salas em segundos. Alunos entram com nome e código — sem cadastro.', gradient: 'from-[hsl(var(--phase-trat))]/10 to-[hsl(var(--phase-trat))]/5' },
               { icon: Target, title: 'Aplicação Guiada', desc: 'Cenários complexos onde equipes decidem juntas e comparam suas respostas.', gradient: 'from-[hsl(var(--phase-app))]/10 to-[hsl(var(--phase-app))]/5' },
@@ -297,20 +297,20 @@ export default function LandingPage() {
               {
                 step: '01',
                 title: 'iRAT — Garantia de Preparo Individual',
-                desc: 'Cada aluno responde individualmente às questões de múltipla escolha. Avalia o nível de preparo antes da colaboração.',
+                desc: 'Cada aluno distribui 4 pontos entre as alternativas de cada questão, apostando mais naquelas que acredita serem corretas.',
                 icon: BookOpen,
                 colorClass: 'phase-irat',
                 lightClass: 'phase-irat-light',
-                items: ['Questões de múltipla escolha (A, B, C, D)', 'Uma tentativa por questão', '1 ponto por resposta correta'],
+                items: ['4 pontos para distribuir livremente entre A, B, C e D', 'Aposte mais na alternativa que tem mais certeza', 'Quanto maior a confiança, maior a aposta'],
               },
               {
                 step: '02',
                 title: 'tRAT — Garantia de Preparo em Equipe',
-                desc: 'As mesmas questões são respondidas em equipe usando o sistema IF-AT (raspadinha digital) com feedback imediato.',
+                desc: 'O gabarito é revelado em equipe. Cada aluno recebe os pontos que apostou na alternativa correta durante o iRAT.',
                 icon: Users,
                 colorClass: 'phase-trat',
                 lightClass: 'phase-trat-light',
-                items: ['1ª tentativa correta = 4 pontos', '2ª tentativa = 2 pontos', '3ª tentativa = 1 ponto', 'Feedback imediato a cada resposta'],
+                items: ['Apostou 4 na correta? Ganha 4 pontos!', 'Apostou 1 na correta? Ganha 1 ponto', 'Discussão em equipe com feedback imediato', 'Raspadinha digital (IF-AT) para revelar o gabarito'],
               },
               {
                 step: '03',

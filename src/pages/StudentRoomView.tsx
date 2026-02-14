@@ -40,6 +40,13 @@ type TratAttempt = {
   is_correct: boolean;
 };
 
+type IratPointDistribution = {
+  A: number;
+  B: number;
+  C: number;
+  D: number;
+};
+
 const TRAT_SCORES = [4, 2, 1, 0];
 
 const stageInfo: Record<string, { label: string; className: string; bgClass: string }> = {
@@ -59,8 +66,9 @@ export default function StudentRoomView() {
   const [membership, setMembership] = useState<TeamMember | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   
-  const [iratResponses, setIratResponses] = useState<Record<string, string>>({});
+  const [iratDistributions, setIratDistributions] = useState<Record<string, IratPointDistribution>>({});
   const [iratSubmitted, setIratSubmitted] = useState<Set<string>>(new Set());
+  const [iratScores, setIratScores] = useState<Record<string, number>>({});
   
   const [tratAttempts, setTratAttempts] = useState<TratAttempt[]>([]);
   const [tratFeedback, setTratFeedback] = useState<{ correct: boolean; option: string } | null>(null);
@@ -91,17 +99,20 @@ export default function StudentRoomView() {
   const loadIratResponses = useCallback(async () => {
     const { data } = await supabase
       .from('irat_responses')
-      .select('question_id, selected_option')
+      .select('question_id, points_a, points_b, points_c, points_d, score')
       .eq('student_id', user!.id)
       .eq('room_id', roomId!);
     if (data) {
-      const map: Record<string, string> = {};
+      const distMap: Record<string, IratPointDistribution> = {};
+      const scoreMap: Record<string, number> = {};
       const submitted = new Set<string>();
       data.forEach((r: any) => {
-        map[r.question_id] = r.selected_option;
+        distMap[r.question_id] = { A: r.points_a, B: r.points_b, C: r.points_c, D: r.points_d };
+        scoreMap[r.question_id] = r.score;
         submitted.add(r.question_id);
       });
-      setIratResponses(map);
+      setIratDistributions(distMap);
+      setIratScores(scoreMap);
       setIratSubmitted(submitted);
     }
   }, [user, roomId]);
@@ -158,22 +169,32 @@ export default function StudentRoomView() {
     return () => { supabase.removeChannel(channel); };
   }, [roomId, loadTratAttempts]);
 
-  const submitIrat = async (questionId: string, option: string) => {
+  const submitIrat = async (questionId: string, distribution: IratPointDistribution) => {
     if (iratSubmitted.has(questionId)) return;
+    const total = distribution.A + distribution.B + distribution.C + distribution.D;
+    if (total !== 4) { toast.error('Distribua exatamente 4 pontos'); return; }
+    
     const question = questions.find(q => q.id === questionId);
-    const isCorrect = question?.correct_option === option;
+    const correctOpt = question?.correct_option?.toUpperCase() as keyof IratPointDistribution;
+    const score = correctOpt ? distribution[correctOpt] : 0;
     
     const { error } = await supabase.from('irat_responses').insert({
       student_id: user!.id,
       question_id: questionId,
       room_id: roomId!,
-      selected_option: option,
-      is_correct: isCorrect,
+      points_a: distribution.A,
+      points_b: distribution.B,
+      points_c: distribution.C,
+      points_d: distribution.D,
+      score,
+      is_correct: score > 0,
     });
     if (error) { toast.error('Falha ao enviar'); return; }
     
-    setIratResponses(prev => ({ ...prev, [questionId]: option }));
+    setIratDistributions(prev => ({ ...prev, [questionId]: distribution }));
+    setIratScores(prev => ({ ...prev, [questionId]: score }));
     setIratSubmitted(prev => new Set(prev).add(questionId));
+    toast.success(`Resposta registrada!`);
     
     if (currentQ < questions.length - 1) {
       setTimeout(() => setCurrentQ(prev => prev + 1), 300);
@@ -284,6 +305,66 @@ export default function StudentRoomView() {
     </Card>
   );
 
+  const IratPointDistributor = ({ question }: { question: Question }) => {
+    const [dist, setDist] = useState<IratPointDistribution>({ A: 0, B: 0, C: 0, D: 0 });
+    const total = dist.A + dist.B + dist.C + dist.D;
+    const remaining = 4 - total;
+
+    const adjustPoints = (opt: keyof IratPointDistribution, delta: number) => {
+      const newVal = dist[opt] + delta;
+      if (newVal < 0 || newVal > 4) return;
+      const newTotal = total + delta;
+      if (newTotal > 4) return;
+      setDist(prev => ({ ...prev, [opt]: newVal }));
+    };
+
+    return (
+      <Card className="overflow-hidden">
+        <CardContent className="pt-6 space-y-4">
+          <p className="font-medium text-lg leading-relaxed">
+            <span className="text-muted-foreground mr-2">Q{currentQ + 1}/{questions.length}</span>
+            {question.question_text}
+          </p>
+          <div className="text-center">
+            <Badge variant={remaining === 0 ? 'default' : 'outline'} className="text-sm">
+              {remaining === 0 ? '✓ Todos os pontos distribuídos' : `${remaining} ponto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}`}
+            </Badge>
+          </div>
+          <div className="space-y-3">
+            {(['A', 'B', 'C', 'D'] as const).map(opt => (
+              <div key={opt} className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                dist[opt] > 0 ? 'border-primary bg-primary/5' : 'border-border'
+              }`}>
+                <span className="font-semibold w-6">{opt}.</span>
+                <span className="flex-1 text-sm">{question[`option_${opt.toLowerCase()}` as keyof Question] as string}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => adjustPoints(opt, -1)}
+                    disabled={dist[opt] === 0}
+                    className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-lg font-bold disabled:opacity-30 hover:bg-accent transition-colors"
+                  >−</button>
+                  <span className="w-6 text-center font-bold text-lg">{dist[opt]}</span>
+                  <button
+                    onClick={() => adjustPoints(opt, 1)}
+                    disabled={remaining === 0 || dist[opt] === 4}
+                    className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-lg font-bold disabled:opacity-30 hover:bg-accent transition-colors"
+                  >+</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <Button
+            className="w-full"
+            disabled={remaining !== 0}
+            onClick={() => submitIrat(question.id, dist)}
+          >
+            Confirmar Distribuição
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderIrat = () => {
     if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
     const q = questions[currentQ];
@@ -296,10 +377,17 @@ export default function StudentRoomView() {
         </div>
         {submitted ? (
           <Card>
-            <CardContent className="py-8 text-center">
+            <CardContent className="py-8 text-center space-y-2">
               <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-success" />
-              <p className="font-medium">Resposta enviada</p>
-              <p className="text-sm text-muted-foreground">Você escolheu: {iratResponses[q.id]}</p>
+              <p className="font-medium">Distribuição enviada</p>
+              <div className="flex justify-center gap-3">
+                {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                  <div key={opt} className="text-center">
+                    <span className="text-xs text-muted-foreground">{opt}</span>
+                    <p className="font-bold">{iratDistributions[q.id]?.[opt] ?? 0}</p>
+                  </div>
+                ))}
+              </div>
               <div className="flex gap-2 justify-center mt-4">
                 {currentQ > 0 && <Button variant="outline" size="sm" onClick={() => setCurrentQ(p => p - 1)}>Anterior</Button>}
                 {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima</Button>}
@@ -307,7 +395,7 @@ export default function StudentRoomView() {
             </CardContent>
           </Card>
         ) : (
-          renderQuestion(q, submitIrat, new Set())
+          <IratPointDistributor question={q} />
         )}
         <div className="flex justify-center gap-1.5 pt-2">
           {questions.map((_, i) => (

@@ -111,27 +111,42 @@ export type Database = {
         Row: {
           id: string
           is_correct: boolean
+          points_a: number
+          points_b: number
+          points_c: number
+          points_d: number
           question_id: string
           room_id: string
-          selected_option: string
+          score: number
+          selected_option: string | null
           student_id: string
           submitted_at: string
         }
         Insert: {
           id?: string
           is_correct?: boolean
+          points_a?: number
+          points_b?: number
+          points_c?: number
+          points_d?: number
           question_id: string
           room_id: string
-          selected_option: string
+          score?: number
+          selected_option?: string | null
           student_id: string
           submitted_at?: string
         }
         Update: {
           id?: string
           is_correct?: boolean
+          points_a?: number
+          points_b?: number
+          points_c?: number
+          points_d?: number
           question_id?: string
           room_id?: string
-          selected_option?: string
+          score?: number
+          selected_option?: string | null
           student_id?: string
           submitted_at?: string
         }
