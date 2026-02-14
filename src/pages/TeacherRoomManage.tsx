@@ -269,10 +269,11 @@ export default function TeacherRoomManage() {
       </div>
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
           <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
         </div>
       </div>
       <hr className="border-primary/30" />
@@ -338,10 +339,11 @@ export default function TeacherRoomManage() {
       )}
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
           <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
         </div>
       </div>
       <hr className="border-primary/30" />
@@ -432,11 +434,12 @@ export default function TeacherRoomManage() {
 
         <div className="text-center">
           <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-          <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
-          </div>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
+        </div>
         </div>
 
         <hr className="border-primary/30" />
@@ -479,10 +482,11 @@ export default function TeacherRoomManage() {
     <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
           <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
-          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
         </div>
       </div>
 
@@ -564,11 +568,12 @@ export default function TeacherRoomManage() {
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-          <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
-          </div>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
+        </div>
         </div>
 
         <hr className="border-primary/30" />
