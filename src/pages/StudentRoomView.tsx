@@ -447,18 +447,26 @@ export default function StudentRoomView() {
     </Card>
   );
 
-  const IratPointDistributor = ({ question }: { question: Question }) => {
-    const [dist, setDist] = useState<IratPointDistribution>({ A: 0, B: 0, C: 0, D: 0 });
+  const getIratDist = (questionId: string): IratPointDistribution => {
+    return iratDistributions[questionId] || { A: 0, B: 0, C: 0, D: 0 };
+  };
+
+  const adjustIratPoints = (questionId: string, opt: keyof IratPointDistribution, delta: number) => {
+    const dist = getIratDist(questionId);
+    const newVal = dist[opt] + delta;
+    if (newVal < 0 || newVal > 4) return;
+    const total = dist.A + dist.B + dist.C + dist.D;
+    if (total + delta > 4) return;
+    setIratDistributions(prev => ({
+      ...prev,
+      [questionId]: { ...dist, [opt]: newVal },
+    }));
+  };
+
+  const renderIratDistributor = (question: Question) => {
+    const dist = getIratDist(question.id);
     const total = dist.A + dist.B + dist.C + dist.D;
     const remaining = 4 - total;
-
-    const adjustPoints = (opt: keyof IratPointDistribution, delta: number) => {
-      const newVal = dist[opt] + delta;
-      if (newVal < 0 || newVal > 4) return;
-      const newTotal = total + delta;
-      if (newTotal > 4) return;
-      setDist(prev => ({ ...prev, [opt]: newVal }));
-    };
 
     return (
       <Card className="overflow-hidden">
@@ -481,13 +489,13 @@ export default function StudentRoomView() {
                 <span className="flex-1 text-sm">{question[`option_${opt.toLowerCase()}` as keyof Question] as string}</span>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => adjustPoints(opt, -1)}
+                    onClick={() => adjustIratPoints(question.id, opt, -1)}
                     disabled={dist[opt] === 0}
                     className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-lg font-bold disabled:opacity-30 hover:bg-accent transition-colors"
                   >−</button>
                   <span className="w-6 text-center font-bold text-lg">{dist[opt]}</span>
                   <button
-                    onClick={() => adjustPoints(opt, 1)}
+                    onClick={() => adjustIratPoints(question.id, opt, 1)}
                     disabled={remaining === 0 || dist[opt] === 4}
                     className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-lg font-bold disabled:opacity-30 hover:bg-accent transition-colors"
                   >+</button>
@@ -552,7 +560,7 @@ export default function StudentRoomView() {
             </CardContent>
           </Card>
         ) : (
-          <IratPointDistributor question={q} />
+          renderIratDistributor(q)
         )}
         <div className="flex justify-center gap-1.5 pt-2">
           {questions.map((_, i) => (
