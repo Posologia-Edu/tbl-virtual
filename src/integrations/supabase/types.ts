@@ -250,12 +250,45 @@ export type Database = {
         }
         Relationships: []
       }
+      room_participants: {
+        Row: {
+          id: string
+          joined_at: string
+          participant_code: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          participant_code: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          participant_code?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       rooms: {
         Row: {
           code: string
           created_at: string
           current_stage: Database["public"]["Enums"]["room_stage"]
           id: string
+          irat_end_time: string | null
           is_active: boolean
           name: string
           quiz_id: string | null
@@ -266,6 +299,7 @@ export type Database = {
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
           id?: string
+          irat_end_time?: string | null
           is_active?: boolean
           name: string
           quiz_id?: string | null
@@ -276,6 +310,7 @@ export type Database = {
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
           id?: string
+          irat_end_time?: string | null
           is_active?: boolean
           name?: string
           quiz_id?: string | null
@@ -437,12 +472,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_participant_code: {
+        Args: { p_room_id: string }
+        Returns: string
+      }
       generate_room_code: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_room_participant: {
+        Args: { p_room_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      is_team_member: {
+        Args: { p_team_id: string; p_user_id: string }
         Returns: boolean
       }
     }

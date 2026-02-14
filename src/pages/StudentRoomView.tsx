@@ -4,7 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Plus, Search, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -25,6 +28,7 @@ type Room = {
   code: string;
   current_stage: string;
   quiz_id: string | null;
+  irat_end_time: string | null;
 };
 
 type TeamMember = {
@@ -76,6 +80,19 @@ export default function StudentRoomView() {
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<Record<string, string>>({});
 
+  // Timer
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  // Group formation
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [myTeam, setMyTeam] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [allParticipants, setAllParticipants] = useState<any[]>([]);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
+
   const loadRoom = useCallback(async () => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
     if (data) setRoom(data as Room);
@@ -93,8 +110,29 @@ export default function StudentRoomView() {
       .eq('user_id', user!.id)
       .eq('room_id', roomId!)
       .single();
-    if (data) setMembership(data as any);
+    if (data) {
+      setMembership(data as any);
+      // Load team details
+      const { data: members } = await supabase
+        .from('team_members')
+        .select('user_id, profiles:user_id(full_name)')
+        .eq('team_id', (data as any).team_id);
+      setTeamMembers(members || []);
+      setMyTeam(data);
+    } else {
+      setMembership(null);
+      setMyTeam(null);
+      setTeamMembers([]);
+    }
   }, [user, roomId]);
+
+  const loadParticipants = useCallback(async () => {
+    const { data } = await supabase
+      .from('room_participants')
+      .select('user_id, participant_code, profiles:user_id(full_name)')
+      .eq('room_id', roomId!);
+    setAllParticipants(data || []);
+  }, [roomId]);
 
   const loadIratResponses = useCallback(async () => {
     const { data } = await supabase
@@ -143,7 +181,8 @@ export default function StudentRoomView() {
   useEffect(() => {
     loadRoom();
     loadMembership();
-  }, [loadRoom, loadMembership]);
+    loadParticipants();
+  }, [loadRoom, loadMembership, loadParticipants]);
 
   useEffect(() => {
     if (room?.quiz_id) loadQuestions(room.quiz_id);
@@ -151,9 +190,30 @@ export default function StudentRoomView() {
 
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
-    if (room?.current_stage === 'trat_open' && membership) loadTratAttempts();
+    if (room?.current_stage === 'trat_open') {
+      loadMembership();
+      loadParticipants();
+      if (membership) loadTratAttempts();
+    }
     if (room?.current_stage === 'application_open') loadAppData();
   }, [room?.current_stage, membership]);
+
+  // Timer effect
+  useEffect(() => {
+    if (!room?.irat_end_time || room.current_stage !== 'irat_open') {
+      setTimeLeft(null);
+      return;
+    }
+    const updateTimer = () => {
+      const end = new Date(room.irat_end_time!).getTime();
+      const now = Date.now();
+      const diff = Math.max(0, Math.floor((end - now) / 1000));
+      setTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [room?.irat_end_time, room?.current_stage]);
 
   useEffect(() => {
     const channel = supabase
@@ -164,10 +224,19 @@ export default function StudentRoomView() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
+        () => { loadMembership(); }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadTratAttempts]);
+  }, [roomId, loadTratAttempts, loadMembership]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const submitIrat = async (questionId: string, distribution: IratPointDistribution) => {
     if (iratSubmitted.has(questionId)) return;
@@ -257,6 +326,80 @@ export default function StudentRoomView() {
     toast.success('Resposta enviada!');
   };
 
+  // Group formation functions
+  const createGroup = async () => {
+    if (!newGroupName.trim()) { toast.error('Informe o nome do grupo'); return; }
+    
+    const { data: team, error: teamError } = await supabase
+      .from('teams')
+      .insert({ room_id: roomId!, name: newGroupName.trim() })
+      .select()
+      .single();
+    
+    if (teamError) { toast.error('Falha ao criar grupo'); return; }
+    
+    // Add self to team
+    const { error: memberError } = await supabase.from('team_members').insert({
+      team_id: team.id,
+      user_id: user!.id,
+      room_id: roomId!,
+    });
+    
+    if (memberError) {
+      if (memberError.code === '23505') {
+        toast.error('Você já está em um grupo nesta sala');
+        // Rollback team creation
+        await supabase.from('teams').delete().eq('id', team.id);
+      } else {
+        toast.error('Falha ao entrar no grupo');
+      }
+      return;
+    }
+    
+    setCreateGroupOpen(false);
+    setNewGroupName('');
+    toast.success('Grupo criado!');
+    loadMembership();
+  };
+
+  const searchParticipants = (query: string) => {
+    setSearchQuery(query);
+    if (!query.trim()) { setSearchResults([]); return; }
+    
+    // Get IDs of current team members
+    const memberIds = new Set(teamMembers.map((m: any) => m.user_id));
+    
+    const results = allParticipants.filter((p: any) => {
+      if (memberIds.has(p.user_id)) return false; // already in team
+      const name = (p.profiles?.full_name || '').toLowerCase();
+      const code = p.participant_code || '';
+      return name.includes(query.toLowerCase()) || code.includes(query);
+    });
+    setSearchResults(results);
+  };
+
+  const addMemberToTeam = async (participantUserId: string) => {
+    if (!membership) return;
+    
+    const { error } = await supabase.from('team_members').insert({
+      team_id: membership.team_id,
+      user_id: participantUserId,
+      room_id: roomId!,
+    });
+    
+    if (error) {
+      if (error.code === '23505') toast.error('Este aluno já está em um grupo');
+      else toast.error('Falha ao adicionar membro');
+      return;
+    }
+    
+    toast.success('Membro adicionado!');
+    setSearchQuery('');
+    setSearchResults([]);
+    loadMembership();
+    loadParticipants();
+  };
+
   if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
 
   const stage = stageInfo[room.current_stage] || stageInfo.waiting;
@@ -267,7 +410,6 @@ export default function StudentRoomView() {
       <h2 className="text-2xl font-heading font-bold">Aguardando Professor</h2>
       <p className="text-muted-foreground">A sessão ainda não começou. Aguarde!</p>
       <Badge variant="outline" className="text-lg px-4 py-1 font-mono">{room.code}</Badge>
-      {membership && <p className="text-sm text-muted-foreground">{membership.teams.name}</p>}
     </div>
   );
 
@@ -371,6 +513,21 @@ export default function StudentRoomView() {
     const submitted = iratSubmitted.has(q.id);
     return (
       <div className="space-y-4">
+        {/* Timer */}
+        {timeLeft !== null && (
+          <Card className={timeLeft <= 60 ? 'border-destructive' : ''}>
+            <CardContent className="py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className={`w-4 h-4 ${timeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+                <span className="text-sm">Tempo restante</span>
+              </div>
+              <span className={`font-mono text-xl font-bold ${timeLeft <= 60 ? 'text-destructive' : ''}`}>
+                {formatTime(timeLeft)}
+              </span>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex items-center justify-between">
           <Badge className="phase-irat">iRAT - Individual</Badge>
           <span className="text-sm text-muted-foreground">{iratSubmitted.size}/{questions.length} respondidas</span>
@@ -412,7 +569,118 @@ export default function StudentRoomView() {
     );
   };
 
+  const renderGroupFormation = () => (
+    <div className="space-y-4">
+      <Badge className="phase-trat">tRAT - Formação de Grupos</Badge>
+      <p className="text-sm text-muted-foreground">
+        Forme seu grupo antes de começar o teste em equipe. Um membro cria o grupo e adiciona os demais.
+      </p>
+
+      {!membership ? (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="py-8 text-center space-y-4">
+              <Users className="w-12 h-12 mx-auto text-muted-foreground" />
+              <p className="font-medium">Você ainda não está em um grupo</p>
+              <p className="text-sm text-muted-foreground">Crie um grupo ou aguarde ser adicionado por um colega.</p>
+              <Button onClick={() => setCreateGroupOpen(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Criar Grupo
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Dialog open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-heading">Criar Grupo</DialogTitle>
+                <DialogDescription>Dê um nome ao seu grupo. Depois você poderá adicionar membros.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                <div>
+                  <Label>Nome do Grupo</Label>
+                  <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Ex: Equipe Alpha" />
+                </div>
+                <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-heading font-semibold">{membership.teams.name}</h3>
+                <Badge variant="outline">{teamMembers.length} membro(s)</Badge>
+              </div>
+              <div className="space-y-2">
+                {teamMembers.map((m: any) => (
+                  <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary">
+                        {(m.profiles?.full_name || 'A')[0].toUpperCase()}
+                      </span>
+                    </div>
+                    <span className="text-sm font-medium">{m.profiles?.full_name || 'Aluno'}</span>
+                    {m.user_id === user!.id && <Badge variant="outline" className="text-xs ml-auto">Você</Badge>}
+                  </div>
+                ))}
+              </div>
+              <Button size="sm" variant="outline" className="w-full mt-3" onClick={() => setAddMemberOpen(true)}>
+                <UserPlus className="w-3 h-3 mr-1" /> Adicionar Membro
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-heading">Adicionar Membro</DialogTitle>
+                <DialogDescription>Busque pelo nome ou código do participante.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={e => searchParticipants(e.target.value)}
+                    placeholder="Nome ou código (#1234)"
+                    className="pl-9"
+                  />
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {searchResults.length === 0 && searchQuery.trim() && (
+                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum participante encontrado</p>
+                  )}
+                  {searchResults.map((p: any) => {
+                    // Check if this participant is already in any team
+                    return (
+                      <button
+                        key={p.user_id}
+                        onClick={() => addMemberToTeam(p.user_id)}
+                        className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all flex items-center justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-sm">{p.profiles?.full_name || 'Aluno'}</p>
+                          <p className="text-xs text-muted-foreground font-mono">#{p.participant_code}</p>
+                        </div>
+                        <UserPlus className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
+    </div>
+  );
+
   const renderTrat = () => {
+    // If no team membership yet, show group formation
+    if (!membership) return renderGroupFormation();
+
     if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
     const q = questions[currentQ];
     const qAttempts = tratAttempts.filter(a => a.question_id === q.id);
@@ -505,7 +773,9 @@ export default function StudentRoomView() {
   const renderApplication = () => (
     <div className="space-y-4">
       <Badge className="phase-app">Exercício de Aplicação</Badge>
-      {appQuestions.length === 0 ? (
+      {!membership ? (
+        <p className="text-center text-muted-foreground py-8">Você precisa estar em um grupo para participar.</p>
+      ) : appQuestions.length === 0 ? (
         <p className="text-center text-muted-foreground py-8">Nenhuma questão de aplicação ainda.</p>
       ) : (
         appQuestions.map((q, i) => (
