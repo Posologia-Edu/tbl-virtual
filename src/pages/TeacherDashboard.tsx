@@ -132,8 +132,9 @@ export default function TeacherDashboard() {
   // Quiz config state (for launching)
   const [configQuiz, setConfigQuiz] = useState<Quiz | null>(null);
   const [maxGrade, setMaxGrade] = useState('10');
-  const [individualPct, setIndividualPct] = useState('70');
-  const [teamPct, setTeamPct] = useState('30');
+  const [individualPct, setIndividualPct] = useState('30');
+  const [teamPct, setTeamPct] = useState('40');
+  const [applicationPct, setApplicationPct] = useState('30');
   const [showAnswers, setShowAnswers] = useState(true);
   const [showIndividualInTeam, setShowIndividualInTeam] = useState(false);
 
@@ -250,27 +251,34 @@ export default function TeacherDashboard() {
 
   const openQuizConfig = (quiz: Quiz) => {
     setConfigQuiz(quiz);
-    setMaxGrade('10'); setIndividualPct('70'); setTeamPct('30');
+    setMaxGrade('10'); setIndividualPct('30'); setTeamPct('40'); setApplicationPct('30');
     setShowAnswers(true); setShowIndividualInTeam(false);
     setActiveView('quiz-config');
   };
 
   const launchQuiz = async () => {
     if (!configQuiz) return;
-    const indPct = parseInt(individualPct) || 70;
-    const tmPct = parseInt(teamPct) || 30;
-    if (indPct + tmPct !== 100) { toast.error('A soma dos percentuais deve ser 100%'); return; }
-    const { data: codeData } = await supabase.rpc('generate_room_code');
-    const code = codeData as string;
-    const { data: room, error } = await supabase.from('rooms').insert({
-      name: configQuiz.title, code, teacher_id: user!.id, quiz_id: configQuiz.id,
-      max_grade: parseFloat(maxGrade) || 10,
-      individual_pct: indPct, team_pct: tmPct,
-      show_answers_in_report: showAnswers, show_individual_in_team: showIndividualInTeam,
-    } as any).select().single();
-    if (error) { toast.error('Falha ao criar sala'); return; }
-    toast.success('Sala criada!');
-    navigate(`/room/${room.id}/manage`);
+    const indPct = parseInt(individualPct) || 30;
+    const tmPct = parseInt(teamPct) || 40;
+    const appPct = parseInt(applicationPct) || 30;
+    if (indPct + tmPct + appPct !== 100) { toast.error('A soma dos percentuais deve ser 100%'); return; }
+    try {
+      const { data: codeData, error: codeError } = await supabase.rpc('generate_room_code');
+      if (codeError) { toast.error('Falha ao gerar código da sala'); console.error(codeError); return; }
+      const code = codeData as string;
+      const { data: room, error } = await supabase.from('rooms').insert({
+        name: configQuiz.title, code, teacher_id: user!.id, quiz_id: configQuiz.id,
+        max_grade: parseFloat(maxGrade) || 10,
+        individual_pct: indPct, team_pct: tmPct, application_pct: appPct,
+        show_answers_in_report: showAnswers, show_individual_in_team: showIndividualInTeam,
+      } as any).select().single();
+      if (error) { toast.error('Falha ao criar sala: ' + error.message); console.error(error); return; }
+      toast.success('Sala criada!');
+      navigate(`/room/${room.id}/manage`);
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro inesperado ao criar sala');
+    }
   };
 
   const deleteQuiz = async (id: string) => {
@@ -867,6 +875,8 @@ export default function TeacherDashboard() {
     if (!configQuiz) return null;
     const indPct = parseInt(individualPct) || 0;
     const tmPct = parseInt(teamPct) || 0;
+    const appPct = parseInt(applicationPct) || 0;
+    const totalPct = indPct + tmPct + appPct;
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <h2 className="text-2xl font-heading font-bold text-center">Questionário: {configQuiz.title}</h2>
@@ -877,17 +887,25 @@ export default function TeacherDashboard() {
               <Label className="font-semibold">Nota Máxima</Label>
               <Input value={maxGrade} onChange={e => setMaxGrade(e.target.value)} placeholder="Nota máxima do questionário" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <Separator />
+            <p className="text-sm font-semibold text-center">Composição da Nota</p>
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label className="font-semibold">% Nota Individual</Label>
-                <Input value={individualPct} onChange={e => { setIndividualPct(e.target.value); setTeamPct(String(100 - (parseInt(e.target.value) || 0))); }} />
+                <Label className="font-semibold text-xs">% Individual (iRAT)</Label>
+                <Input value={individualPct} onChange={e => setIndividualPct(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label className="font-semibold">% Nota Equipe</Label>
-                <Input value={teamPct} onChange={e => { setTeamPct(e.target.value); setIndividualPct(String(100 - (parseInt(e.target.value) || 0))); }} />
+                <Label className="font-semibold text-xs">% Equipe (tRAT)</Label>
+                <Input value={teamPct} onChange={e => setTeamPct(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold text-xs">% Aplicação</Label>
+                <Input value={applicationPct} onChange={e => setApplicationPct(e.target.value)} />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground text-center">A soma das porcentagens da nota individual e em equipe deve ser 100%.<br/>Exemplo: % Nota Individual = 70 e % Nota Equipe = 30</p>
+            <p className={`text-xs text-center ${totalPct !== 100 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
+              Total: {totalPct}% — A soma deve ser 100%.
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -902,7 +920,7 @@ export default function TeacherDashboard() {
             </div>
           </CardContent>
         </Card>
-        <Button onClick={launchQuiz} className="w-full py-6 text-lg" disabled={indPct + tmPct !== 100}>Iniciar</Button>
+        <Button onClick={launchQuiz} className="w-full py-6 text-lg" disabled={totalPct !== 100}>Iniciar</Button>
       </div>
     );
   };
