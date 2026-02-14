@@ -62,12 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+        data: { full_name: fullName, role },
+      },
     });
     if (error) throw error;
     if (data.user) {
-      await supabase.from('profiles').insert({ id: data.user.id, full_name: fullName });
-      await supabase.from('user_roles').insert({ user_id: data.user.id, role });
       setRole(role);
       setProfile({ full_name: fullName });
     }
