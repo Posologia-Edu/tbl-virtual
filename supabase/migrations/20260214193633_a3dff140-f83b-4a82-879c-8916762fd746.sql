@@ -1,0 +1,1 @@
+ALTER TABLE public.rooms ALTER COLUMN code TYPE character(11);
