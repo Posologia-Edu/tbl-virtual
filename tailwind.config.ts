@@ -13,6 +13,10 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        heading: ['Space Grotesk', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -46,6 +50,25 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        phase: {
+          irat: "hsl(var(--phase-irat))",
+          "irat-foreground": "hsl(var(--phase-irat-foreground))",
+          "irat-light": "hsl(var(--phase-irat-light))",
+          trat: "hsl(var(--phase-trat))",
+          "trat-foreground": "hsl(var(--phase-trat-foreground))",
+          "trat-light": "hsl(var(--phase-trat-light))",
+          app: "hsl(var(--phase-app))",
+          "app-foreground": "hsl(var(--phase-app-foreground))",
+          "app-light": "hsl(var(--phase-app-light))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
