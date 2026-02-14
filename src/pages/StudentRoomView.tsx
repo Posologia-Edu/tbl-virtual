@@ -362,15 +362,19 @@ export default function StudentRoomView() {
     loadMembership();
   };
 
-  const searchParticipants = (query: string) => {
+  const searchParticipants = async (query: string) => {
     setSearchQuery(query);
     if (!query.trim()) { setSearchResults([]); return; }
     
-    // Get IDs of current team members
-    const memberIds = new Set(teamMembers.map((m: any) => m.user_id));
+    // Load all team members in this room to exclude already-grouped participants
+    const { data: allTeamMembers } = await supabase
+      .from('team_members')
+      .select('user_id')
+      .eq('room_id', roomId!);
+    const groupedIds = new Set((allTeamMembers || []).map((m: any) => m.user_id));
     
     const results = allParticipants.filter((p: any) => {
-      if (memberIds.has(p.user_id)) return false; // already in team
+      if (groupedIds.has(p.user_id)) return false; // already in a team
       const name = (p.profiles?.full_name || '').toLowerCase();
       const code = p.participant_code || '';
       return name.includes(query.toLowerCase()) || code.includes(query);
