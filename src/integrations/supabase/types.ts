@@ -321,6 +321,7 @@ export type Database = {
       }
       rooms: {
         Row: {
+          application_pct: number | null
           code: string
           created_at: string
           current_stage: Database["public"]["Enums"]["room_stage"]
@@ -337,6 +338,7 @@ export type Database = {
           team_pct: number | null
         }
         Insert: {
+          application_pct?: number | null
           code: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
@@ -353,6 +355,7 @@ export type Database = {
           team_pct?: number | null
         }
         Update: {
+          application_pct?: number | null
           code?: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
