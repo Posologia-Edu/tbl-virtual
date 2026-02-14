@@ -8,10 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Plus, Search, UserPlus, Sparkles } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import heroTeam from '@/assets/hero-team.png';
 
 type Question = {
   id: string;
@@ -31,6 +33,7 @@ type Room = {
   current_stage: string;
   quiz_id: string | null;
   irat_end_time: string | null;
+  show_individual_in_team?: boolean;
 };
 
 type TeamMember = {
@@ -50,6 +53,8 @@ type IratPointDistribution = { A: number; B: number; C: number; D: number };
 
 const TRAT_SCORES = [4, 2, 1, 0];
 
+type TratStep = 'team_name' | 'add_members' | 'waiting' | 'answering';
+
 export default function StudentRoomView() {
   const { roomId } = useParams<{ roomId: string }>();
   const { user, profile } = useAuth();
@@ -66,8 +71,6 @@ export default function StudentRoomView() {
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
   const [myTeam, setMyTeam] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -75,10 +78,20 @@ export default function StudentRoomView() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
 
-  // All the data loading callbacks (same as before)
+  // tRAT step flow
+  const [tratStep, setTratStep] = useState<TratStep>('team_name');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [tratSelectedOption, setTratSelectedOption] = useState<string | null>(null);
+
+  // tRAT score
+  const [tratTotalScore, setTratTotalScore] = useState(0);
+
+  // iRAT individual responses for team members (show_individual_in_team)
+  const [memberIratResponses, setMemberIratResponses] = useState<any[]>([]);
+
   const loadRoom = useCallback(async () => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
-    if (data) setRoom(data as Room);
+    if (data) setRoom(data as any);
   }, [roomId]);
 
   const loadQuestions = useCallback(async (quizId: string) => {
@@ -142,8 +155,21 @@ export default function StudentRoomView() {
     const { data } = await supabase
       .from('trat_attempts').select('*')
       .eq('team_id', membership.team_id).eq('room_id', roomId!);
-    if (data) setTratAttempts(data as TratAttempt[]);
+    if (data) {
+      setTratAttempts(data as TratAttempt[]);
+      const score = data.filter((a: any) => a.is_correct).reduce((sum: number, a: any) => sum + TRAT_SCORES[a.attempt_number - 1], 0);
+      setTratTotalScore(score);
+    }
   }, [membership, roomId]);
+
+  const loadMemberIratResponses = useCallback(async () => {
+    if (!membership || !room?.show_individual_in_team) return;
+    const { data: members } = await supabase.from('team_members').select('user_id').eq('team_id', membership.team_id);
+    if (!members) return;
+    const userIds = members.map((m: any) => m.user_id);
+    const { data } = await supabase.from('irat_responses').select('student_id, question_id, selected_option, points_a, points_b, points_c, points_d').eq('room_id', roomId!).in('student_id', userIds);
+    setMemberIratResponses(data || []);
+  }, [membership, roomId, room?.show_individual_in_team]);
 
   const loadAppData = useCallback(async () => {
     const [{ data: qs }, { data: rs }] = await Promise.all([
@@ -162,9 +188,21 @@ export default function StudentRoomView() {
   useEffect(() => { if (room?.quiz_id && room?.current_stage !== 'waiting') loadQuestions(room.quiz_id); }, [room?.quiz_id, room?.current_stage, loadQuestions]);
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
-    if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) loadTratAttempts(); }
+    if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); } }
     if (room?.current_stage === 'application_open') loadAppData();
   }, [room?.current_stage, membership]);
+
+  // Determine tRAT step based on state
+  useEffect(() => {
+    if (room?.current_stage !== 'trat_open') return;
+    if (!membership) {
+      setTratStep('team_name');
+    } else {
+      // Check if tRAT is actually started (room is trat_open and team exists)
+      // If team has attempts, they're answering. Otherwise waiting for teacher.
+      setTratStep('add_members');
+    }
+  }, [membership, room?.current_stage]);
 
   // Timer
   useEffect(() => {
@@ -183,7 +221,7 @@ export default function StudentRoomView() {
     const channel = supabase
       .channel(`room-${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
-        (payload) => { setRoom(payload.new as Room); setCurrentQ(0); setTratFeedback(null); })
+        (payload) => { setRoom(payload.new as any); setCurrentQ(0); setTratFeedback(null); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
@@ -243,9 +281,10 @@ export default function StudentRoomView() {
     });
     if (error) { if (error.code === '23505') toast.error('Opção já tentada'); else toast.error('Falha ao enviar'); return; }
     setTratFeedback({ correct: isCorrect, option });
+    setTratSelectedOption(null);
     if (isCorrect) {
       toast.success(`Correto! ${TRAT_SCORES[attemptNumber - 1]} pontos!`);
-      setTimeout(() => { setTratFeedback(null); if (currentQ < questions.length - 1) setCurrentQ(p => p + 1); }, 1500);
+      setTimeout(() => { setTratFeedback(null); }, 1500);
     } else {
       toast.error(`Errado! ${4 - attemptNumber} tentativas restantes`);
       setTimeout(() => setTratFeedback(null), 1000);
@@ -265,27 +304,28 @@ export default function StudentRoomView() {
 
   // Group formation
   const createGroup = async () => {
-    if (!newGroupName.trim()) { toast.error('Informe o nome do grupo'); return; }
+    if (!newGroupName.trim()) { toast.error('Informe o nome da equipe'); return; }
     const { data: team, error: teamError } = await supabase.from('teams').insert({ room_id: roomId!, name: newGroupName.trim() }).select().single();
-    if (teamError) { toast.error('Falha ao criar grupo'); return; }
+    if (teamError) { toast.error('Falha ao criar equipe'); return; }
     const { error: memberError } = await supabase.from('team_members').insert({ team_id: team.id, user_id: user!.id, room_id: roomId! });
     if (memberError) {
-      if (memberError.code === '23505') { toast.error('Você já está em um grupo'); await supabase.from('teams').delete().eq('id', team.id); }
-      else toast.error('Falha ao entrar no grupo');
+      if (memberError.code === '23505') { toast.error('Você já está em uma equipe'); await supabase.from('teams').delete().eq('id', team.id); }
+      else toast.error('Falha ao entrar na equipe');
       return;
     }
-    setCreateGroupOpen(false); setNewGroupName(''); toast.success('Grupo criado!'); loadMembership();
+    setNewGroupName('');
+    toast.success('Equipe criada!');
+    loadMembership();
   };
 
-  const searchParticipants = async (query: string) => {
-    setSearchQuery(query);
-    if (!query.trim()) { setSearchResults([]); return; }
+  const searchParticipants = async () => {
     const { data: allTeamMembers } = await supabase.from('team_members').select('user_id').eq('room_id', roomId!);
     const groupedIds = new Set((allTeamMembers || []).map((m: any) => m.user_id));
     const results = allParticipants.filter((p: any) => {
       if (groupedIds.has(p.user_id)) return false;
+      if (!searchQuery.trim()) return true;
       const name = (p.profiles?.full_name || '').toLowerCase();
-      return name.includes(query.toLowerCase()) || (p.participant_code || '').includes(query);
+      return name.includes(searchQuery.toLowerCase()) || (p.participant_code || '').includes(searchQuery);
     });
     setSearchResults(results);
   };
@@ -293,8 +333,19 @@ export default function StudentRoomView() {
   const addMemberToTeam = async (participantUserId: string) => {
     if (!membership) return;
     const { error } = await supabase.from('team_members').insert({ team_id: membership.team_id, user_id: participantUserId, room_id: roomId! });
-    if (error) { if (error.code === '23505') toast.error('Aluno já está em um grupo'); else toast.error('Falha ao adicionar'); return; }
-    toast.success('Membro adicionado!'); setSearchQuery(''); setSearchResults([]); loadMembership(); loadParticipants();
+    if (error) { if (error.code === '23505') toast.error('Aluno já está em uma equipe'); else toast.error('Falha ao adicionar'); return; }
+    toast.success('Membro adicionado!');
+    setSearchQuery('');
+    setSearchResults([]);
+    loadMembership();
+    loadParticipants();
+  };
+
+  const removeMember = async (userId: string) => {
+    if (!membership || userId === user!.id) return;
+    await supabase.from('team_members').delete().eq('team_id', membership.team_id).eq('user_id', userId);
+    toast.success('Membro removido');
+    loadMembership();
   };
 
   if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
@@ -311,7 +362,6 @@ export default function StudentRoomView() {
         <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
       </div>
       <p className="text-lg text-muted-foreground">Aguarde a liberação do professor para início da Aplicação.</p>
-      {/* Animated dots */}
       <div className="flex gap-3 mt-8">
         {[0, 1, 2, 3, 4].map(i => (
           <motion.div
@@ -337,8 +387,14 @@ export default function StudentRoomView() {
             </div>
             <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
           </div>
-          <p className="text-lg text-muted-foreground">Aplicação individual concluída com sucesso!</p>
+          <p className="text-lg text-primary font-semibold">Aplicação individual concluída com sucesso!</p>
           <p className="text-muted-foreground">Aguarde orientações do professor, permaneça na tela.</p>
+          <div className="border rounded-xl p-6 mt-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
+            // When tRAT is open, this would navigate. For now it's just visual.
+          }}>
+            <img src={heroTeam} alt="Equipe" className="w-48 h-auto mx-auto" />
+            <p className="text-primary font-medium mt-2">Iniciar aplicação em equipe</p>
+          </div>
         </div>
       );
     }
@@ -351,7 +407,6 @@ export default function StudentRoomView() {
 
     return (
       <div className="space-y-4">
-        {/* Logo + room info */}
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
@@ -363,7 +418,6 @@ export default function StudentRoomView() {
           <p className="text-sm text-muted-foreground">Estudante Conectado: {profile?.full_name}</p>
         </div>
 
-        {/* Timer */}
         {timeLeft !== null && (
           <Card className={timeLeft <= 60 ? 'border-destructive' : ''}>
             <CardContent className="py-3 flex items-center justify-between">
@@ -434,7 +488,6 @@ export default function StudentRoomView() {
           </Card>
         )}
 
-        {/* Question dots */}
         <div className="flex justify-center gap-1.5 pt-2">
           {questions.map((_, i) => (
             <button key={i} onClick={() => setCurrentQ(i)}
@@ -447,130 +500,211 @@ export default function StudentRoomView() {
     );
   };
 
-  // ===== RENDER: Group formation =====
-  const renderGroupFormation = () => (
-    <div className="space-y-4">
-      <Badge className="phase-trat">tRAT - Formação de Grupos</Badge>
-      <p className="text-sm text-muted-foreground">Forme seu grupo antes de começar o teste em equipe.</p>
-      {!membership ? (
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="py-8 text-center space-y-4">
-              <Users className="w-12 h-12 mx-auto text-muted-foreground" />
-              <p className="font-medium">Você ainda não está em um grupo</p>
-              <Button onClick={() => setCreateGroupOpen(true)}><Plus className="w-4 h-4 mr-1" /> Criar Grupo</Button>
-            </CardContent>
-          </Card>
-          <Dialog open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Grupo</DialogTitle>
-                <DialogDescription>Dê um nome ao seu grupo.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 pt-2">
-                <div><Label>Nome do Grupo</Label><Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Ex: Equipe Alpha" /></div>
-                <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+  // ===== RENDER: tRAT =====
+  const renderTrat = () => {
+    // Step 1: Create team (enter team name)
+    if (!membership) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5">
+            <p className="text-center text-muted-foreground">
+              Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
+            </p>
+            <div className="space-y-2 text-left">
+              <Label className="font-semibold">Nome da equipe</Label>
+              <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Nome Equipe" />
+            </div>
+            <Button onClick={createGroup} className="w-full py-5 text-base">Entrar</Button>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-heading font-semibold">{membership.teams.name}</h3>
-                <Badge variant="outline">{teamMembers.length} membro(s)</Badge>
+      );
+    }
+
+    // Step 2: Add members
+    if (tratStep === 'add_members' || tratStep === 'team_name') {
+      // Check if team has started answering (has tRAT attempts)
+      const hasStarted = tratAttempts.length > 0;
+      if (hasStarted) {
+        // Go to answering
+        return renderTratAnswering();
+      }
+
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+          <div className="flex items-center gap-2.5 mb-8">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5">
+            <p className="text-center text-muted-foreground">
+              Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
+            </p>
+            <div className="space-y-2 text-left">
+              <Label className="font-semibold">Informe os membros da equipe:</Label>
+              <div className="flex gap-2">
+                <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Registro Acadêmico ou CPF ou RG" className="flex-1" />
+                <Button size="icon" variant="outline" onClick={() => setAddMemberOpen(true)}>
+                  <UserPlus className="w-4 h-4" />
+                </Button>
               </div>
-              <div className="space-y-2">
-                {teamMembers.map((m: any) => (
-                  <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">{(m.profiles?.full_name || 'A')[0].toUpperCase()}</span>
-                    </div>
-                    <span className="text-sm font-medium">{m.profiles?.full_name || 'Aluno'}</span>
-                    {m.user_id === user!.id && <Badge variant="outline" className="text-xs ml-auto">Você</Badge>}
-                  </div>
-                ))}
-              </div>
-              <Button size="sm" variant="outline" className="w-full mt-3" onClick={() => setAddMemberOpen(true)}>
-                <UserPlus className="w-3 h-3 mr-1" /> Adicionar Membro
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <Button onClick={() => { searchParticipants(); setAddMemberOpen(true); }} className="w-full py-4">
+              <Search className="w-4 h-4 mr-2" /> Localizar Estudante
+            </Button>
+
+            {/* Team members table */}
+            {teamMembers.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Número de Registro</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead className="text-right">Excluir</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {teamMembers.map((m: any) => {
+                    const participant = allParticipants.find((p: any) => p.user_id === m.user_id);
+                    return (
+                      <TableRow key={m.user_id}>
+                        <TableCell className="font-mono">{participant?.participant_code || '—'}</TableCell>
+                        <TableCell>{m.profiles?.full_name || 'Aluno'}</TableCell>
+                        <TableCell className="text-right">
+                          {m.user_id !== user!.id && (
+                            <Button size="icon" variant="ghost" onClick={() => removeMember(m.user_id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+
+            <Button onClick={() => setTratStep('waiting')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
+              Iniciar Aplicação Em Equipe
+            </Button>
+          </div>
+
+          {/* Search dialog */}
           <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Adicionar Membro</DialogTitle>
-                <DialogDescription>Busque pelo nome ou código.</DialogDescription>
+                <DialogTitle>Localizar Estudantes na sala</DialogTitle>
+                <DialogDescription>Selecione os alunos para adicionar à equipe.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 pt-2">
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={searchQuery} onChange={e => searchParticipants(e.target.value)} placeholder="Nome ou código" className="pl-9" />
-                </div>
-                <div className="max-h-60 overflow-y-auto space-y-1">
-                  {searchResults.length === 0 && searchQuery.trim() && <p className="text-sm text-muted-foreground text-center py-4">Nenhum participante encontrado</p>}
-                  {searchResults.map((p: any) => (
-                    <button key={p.user_id} onClick={() => addMemberToTeam(p.user_id)}
-                      className="w-full text-left p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm">{p.profiles?.full_name || 'Aluno'}</p>
-                        <p className="text-xs text-muted-foreground font-mono">#{p.participant_code}</p>
-                      </div>
-                      <UserPlus className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  ))}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nº de Registro</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {searchResults.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-destructive/70">Registro de Aluno não encontrado!</TableCell>
+                      </TableRow>
+                    ) : (
+                      searchResults.map((p: any) => (
+                        <TableRow key={p.user_id}>
+                          <TableCell className="font-mono">{p.participant_code}</TableCell>
+                          <TableCell>{p.profiles?.full_name || 'Aluno'}</TableCell>
+                          <TableCell>
+                            <Button size="sm" onClick={() => { addMemberToTeam(p.user_id); searchParticipants(); }}>
+                              Selecionar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setAddMemberOpen(false)}>Fechar</Button>
                 </div>
               </div>
             </DialogContent>
           </Dialog>
         </div>
-      )}
-    </div>
-  );
+      );
+    }
 
-  // ===== RENDER: tRAT =====
-  const renderTrat = () => {
-    if (!membership) return renderGroupFormation();
+    // Step 3: Waiting for teacher
+    if (tratStep === 'waiting') {
+      // Check if tRAT has started via room stage (it's already trat_open, so the waiting is for the "team ready" state)
+      // Actually the teacher just clicks "Iniciar Aplicação" again to start. We wait until teacher starts.
+      // For now, go straight to answering since trat_open means it's already started.
+      return renderTratAnswering();
+    }
+
+    return renderTratAnswering();
+  };
+
+  // ===== RENDER: tRAT ANSWERING (IF-AT) =====
+  const renderTratAnswering = () => {
     if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
+
+    const allTratDone = questions.every(q => {
+      const qA = tratAttempts.filter(a => a.question_id === q.id);
+      return qA.some(a => a.is_correct) || qA.length >= 4;
+    });
+
+    if (allTratDone) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <CheckCircle2 className="w-16 h-16 text-success" />
+          <h2 className="text-2xl font-heading font-bold">Aplicação em equipe concluída!</h2>
+          <p className="text-muted-foreground">Pontuação da equipe: <span className="font-bold text-2xl text-primary">{tratTotalScore}</span></p>
+          <p className="text-sm text-muted-foreground">Aguarde orientações do professor.</p>
+        </div>
+      );
+    }
+
     const q = questions[currentQ];
     const qAttempts = tratAttempts.filter(a => a.question_id === q.id);
     const isCorrect = qAttempts.some(a => a.is_correct);
     const disabledOpts = new Set(qAttempts.map(a => a.selected_option));
-
-    const renderQuestion = (q: Question) => (
-      <Card key={q.id} className="overflow-hidden">
-        <CardContent className="pt-6 space-y-4">
-          <p className="font-medium text-lg leading-relaxed">
-            <span className="text-muted-foreground mr-2">Q{currentQ + 1}/{questions.length}</span>
-            {q.question_text}
-          </p>
-          <div className="space-y-2">
-            {(['A', 'B', 'C', 'D'] as const).map(opt => {
-              const isSelected = false;
-              const isDisabled = disabledOpts.has(opt);
-              return (
-                <button key={opt} onClick={() => !isDisabled && submitTrat(q.id, opt)} disabled={isDisabled}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                    isDisabled ? 'border-border opacity-40 line-through' : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                  }`}>
-                  <span className="font-semibold mr-3">{opt}.</span>
-                  {q[`option_${opt.toLowerCase()}` as keyof Question] as string}
-                </button>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    );
+    const attemptsLeft = 4 - qAttempts.length;
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <Badge className="phase-trat">tRAT - Equipe</Badge>
-          <span className="text-sm text-muted-foreground">{membership?.teams.name}</span>
+        {/* Header */}
+        <div className="text-center space-y-1">
+          <p className="text-lg">
+            Você está na sala de número <span className="text-primary font-bold">{room.code}</span>
+          </p>
+          <p className="text-sm text-muted-foreground">Equipe Conectada: {membership?.teams.name}</p>
         </div>
+
+        {/* Score + members + responses bar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">Pontuação:</span>
+            <Badge variant="outline" className="text-lg font-bold">{tratTotalScore}</Badge>
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              <Users className="w-4 h-4" /> membros
+            </button>
+            {room.show_individual_in_team && (
+              <span className="text-xs text-muted-foreground">respostas + marcadas pelos membros</span>
+            )}
+          </div>
+        </div>
+
         {isCorrect ? (
           <Card>
             <CardContent className="py-8 text-center">
@@ -578,7 +712,9 @@ export default function StudentRoomView() {
               <p className="text-lg font-heading font-bold">Correto!</p>
               <p className="text-2xl font-bold text-success">{TRAT_SCORES[qAttempts.findIndex(a => a.is_correct)]} pontos</p>
               <div className="flex gap-2 justify-center mt-4">
-                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima Questão</Button>}
+                {currentQ < questions.length - 1 && (
+                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); }}>Avançar</Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -589,21 +725,53 @@ export default function StudentRoomView() {
               <p className="text-lg font-heading font-bold">Sem mais tentativas</p>
               <p className="text-sm text-muted-foreground">0 pontos</p>
               <div className="flex gap-2 justify-center mt-4">
-                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima Questão</Button>}
+                {currentQ < questions.length - 1 && (
+                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); }}>Avançar</Button>
+                )}
               </div>
             </CardContent>
           </Card>
         ) : (
-          <>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4].map(n => (
-                <div key={n} className={`flex-1 h-2 rounded-full ${n <= qAttempts.length ? 'bg-destructive' : 'bg-border'}`} />
-              ))}
+          <Card className="overflow-hidden">
+            <div className="bg-muted py-3 text-center border-b">
+              <p className="font-heading font-semibold">Questão Nº {currentQ + 1}</p>
             </div>
-            <p className="text-sm text-center text-muted-foreground">Tentativa {qAttempts.length + 1}/4 • {TRAT_SCORES[qAttempts.length]} pontos se acertar</p>
-            {renderQuestion(q)}
-          </>
+            <CardContent className="pt-6 space-y-5">
+              <p className="text-base leading-relaxed">{q.question_text}</p>
+              <div className="space-y-3">
+                {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                  const isDisabled = disabledOpts.has(opt);
+                  const isSelected = tratSelectedOption === opt;
+                  return (
+                    <button key={opt} onClick={() => !isDisabled && setTratSelectedOption(opt)} disabled={isDisabled}
+                      className={`w-full text-left p-4 rounded-lg border-2 flex items-center gap-3 transition-all ${
+                        isDisabled ? 'border-border opacity-40 cursor-not-allowed' :
+                        isSelected ? 'border-primary bg-primary/5' :
+                        'border-border hover:border-primary/50 hover:bg-primary/5'
+                      }`}>
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        isSelected ? 'border-primary bg-primary/10' : 'border-muted-foreground/30'
+                      }`}>
+                        {isSelected && <div className="w-4 h-4 rounded-full bg-primary" />}
+                      </div>
+                      <span className="font-semibold mr-2">{opt})</span>
+                      <span className="text-sm flex-1">{q[`option_${opt.toLowerCase()}` as keyof Question] as string}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <Button
+                className="w-full py-5 text-base"
+                disabled={!tratSelectedOption}
+                onClick={() => tratSelectedOption && submitTrat(q.id, tratSelectedOption)}
+              >
+                Salvar
+              </Button>
+            </CardContent>
+          </Card>
         )}
+
+        {/* Feedback overlay */}
         {tratFeedback && (
           <div className="fixed inset-0 flex items-center justify-center bg-background/80 z-50 animate-in fade-in">
             <div className={`text-center p-8 rounded-2xl ${tratFeedback.correct ? 'bg-success/10' : 'bg-destructive/10'}`}>
@@ -612,13 +780,15 @@ export default function StudentRoomView() {
             </div>
           </div>
         )}
+
+        {/* Question dots */}
         <div className="flex justify-center gap-1.5 pt-2">
           {questions.map((q, i) => {
             const qA = tratAttempts.filter(a => a.question_id === q.id);
             const done = qA.some(a => a.is_correct) || qA.length >= 4;
             return (
-              <button key={i} onClick={() => { setCurrentQ(i); setTratFeedback(null); }}
-                className={`w-2.5 h-2.5 rounded-full transition-all ${i === currentQ ? 'bg-phase-trat scale-125' : done ? 'bg-success' : 'bg-border'}`} />
+              <button key={i} onClick={() => { setCurrentQ(i); setTratFeedback(null); setTratSelectedOption(null); }}
+                className={`w-2.5 h-2.5 rounded-full transition-all ${i === currentQ ? 'bg-primary scale-125' : done ? 'bg-success' : 'bg-border'}`} />
             );
           })}
         </div>
@@ -646,7 +816,7 @@ export default function StudentRoomView() {
                   return (
                     <button key={opt} onClick={() => submitApp(q.id, opt)}
                       className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                        isSelected ? 'border-phase-app bg-phase-app-light' : 'border-border hover:border-phase-app/50'
+                        isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
                       }`}>
                       <span className="font-semibold mr-2">{opt}.</span>{text}
                     </button>
@@ -670,7 +840,7 @@ export default function StudentRoomView() {
 
   return (
     <div className="min-h-screen bg-background">
-      {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && (
+      {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && (
         <header className="border-b bg-card">
           <div className="container mx-auto px-4 py-3 flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>

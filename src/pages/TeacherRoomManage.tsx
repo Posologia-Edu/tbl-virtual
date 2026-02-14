@@ -66,12 +66,10 @@ export default function TeacherRoomManage() {
       .order('name');
     setTeams(teamsData || []);
 
-    // Load questions
     if (roomData?.quiz_id) {
       const { data: qs } = await supabase.from('questions').select('*').eq('quiz_id', roomData.quiz_id).order('sort_order');
       setQuestions(qs || []);
 
-      // Load iRAT responses for feedback table
       const { data: iratData } = await supabase.from('irat_responses').select('*').eq('room_id', roomId!);
       setIratResponses(iratData || []);
 
@@ -80,11 +78,9 @@ export default function TeacherRoomManage() {
       setIratStats({ total: (parts?.length || 0) * questionsCount, completed: count || 0 });
     }
 
-    // tRAT stats
     if (teamsData) {
       const { data: tratData } = await supabase.from('trat_attempts').select('*').eq('room_id', roomId!);
       setTratAttemptsAll(tratData || []);
-      const linkedQuiz = roomData?.quiz_id ? (await supabase.from('questions').select('id').eq('quiz_id', roomData.quiz_id)).data : [];
       const scores = teamsData.map((t: any) => {
         const teamAttempts = (tratData || []).filter((a: any) => a.team_id === t.id && a.is_correct);
         const score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
@@ -93,7 +89,6 @@ export default function TeacherRoomManage() {
       setTratStats(scores);
     }
 
-    // App questions
     const { data: aq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
     setAppQuestions(aq || []);
     if (aq && aq.length > 0) {
@@ -211,10 +206,8 @@ export default function TeacherRoomManage() {
   const linkedQuiz = quizzes.find((q: any) => q.id === room.quiz_id);
   const nextStageIdx = stages.indexOf(room.current_stage) + 1;
   const nextStageName = nextStageIdx < stages.length ? stageLabels[stages[nextStageIdx]]?.label : '';
-  const groupedUserIds = new Set(teams.flatMap((t: any) => (t.team_members || []).map((m: any) => m.user_id)));
-  const ungroupedParticipants = participants.filter((p: any) => !groupedUserIds.has(p.user_id));
 
-  // Feedback data: per student per question
+  // Feedback helpers
   const getStudentQuestionFeedback = (studentId: string, questionId: string) => {
     const response = iratResponses.find((r: any) => r.student_id === studentId && r.question_id === questionId);
     if (!response) return null;
@@ -233,15 +226,12 @@ export default function TeacherRoomManage() {
 
   const joinUrl = `${window.location.origin}/join`;
 
-  // ============ WAITING STAGE - SHOW WAITING ROOM ============
+  // ============ WAITING STAGE ============
   const renderWaitingRoom = () => (
     <div className="space-y-6">
-      {/* Top banner */}
       <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
         Os estudantes devem acessar o site e informar o código da sala
       </div>
-
-      {/* QR + Code + Cancel */}
       <div className="flex flex-col md:flex-row items-center gap-6">
         <div className="bg-card p-4 rounded-xl border shadow-sm">
           <QRCodeSVG value={joinUrl} size={160} />
@@ -249,56 +239,29 @@ export default function TeacherRoomManage() {
         <div className="flex-1 text-center md:text-left space-y-3">
           <div>
             <span className="text-lg font-semibold text-primary">Código da Sala: </span>
-            <button onClick={copyCode} className="text-2xl font-bold font-mono text-primary hover:underline">
-              {room.code}
-            </button>
+            <button onClick={copyCode} className="text-2xl font-bold font-mono text-primary hover:underline">{room.code}</button>
           </div>
           <Button variant="destructive" className="bg-warning hover:bg-warning/90 text-warning-foreground" onClick={cancelRoom}>
             Cancelar Aplicação
           </Button>
         </div>
       </div>
-
-      {/* Quiz info cards */}
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
         <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p>
-              <p className="text-xs text-muted-foreground">Nota Máxima</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p>
-              <p className="text-xs text-muted-foreground">% Nota Individual</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p>
-              <p className="text-xs text-muted-foreground">% Nota Equipe</p>
-            </CardContent>
-          </Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
         </div>
       </div>
-
       <hr className="border-primary/30" />
-
-      {/* Connected students */}
       <div>
         <h3 className="text-lg font-heading font-bold mb-3">
           <span className="text-primary font-bold">Aplicação Individual</span> : {participants.length} Estudantes Conectados
         </h3>
         {participants.length > 0 && (
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Número de Registro</TableHead>
-                <TableHead>Nome</TableHead>
-              </TableRow>
-            </TableHeader>
+            <TableHeader><TableRow><TableHead>Número de Registro</TableHead><TableHead>Nome</TableHead></TableRow></TableHeader>
             <TableBody>
               {participants.map((p: any) => (
                 <TableRow key={p.id}>
@@ -310,31 +273,20 @@ export default function TeacherRoomManage() {
           </Table>
         )}
       </div>
-
-      {/* Start button */}
-      <Button
-        onClick={handleAdvanceClick}
-        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg"
-        disabled={!room.quiz_id}
-      >
+      <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg" disabled={!room.quiz_id}>
         Iniciar Aplicação
       </Button>
     </div>
   );
 
-  // ============ iRAT STAGE - MONITORING ============
+  // ============ iRAT MONITORING ============
   const renderIratMonitoring = () => (
     <div className="space-y-6">
-      {/* Top banner */}
       <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
         Os estudantes devem acessar o site e informar o código da sala
       </div>
-
-      {/* QR + Code */}
       <div className="flex flex-col md:flex-row items-center gap-6">
-        <div className="bg-card p-4 rounded-xl border shadow-sm">
-          <QRCodeSVG value={joinUrl} size={140} />
-        </div>
+        <div className="bg-card p-4 rounded-xl border shadow-sm"><QRCodeSVG value={joinUrl} size={140} /></div>
         <div className="flex-1 text-center md:text-left space-y-3">
           <div>
             <span className="text-lg font-semibold text-primary">Código da Sala: </span>
@@ -345,8 +297,6 @@ export default function TeacherRoomManage() {
           </Button>
         </div>
       </div>
-
-      {/* Timer */}
       {timeLeft !== null && (
         <Card className={timeLeft <= 60 ? 'border-destructive' : ''}>
           <CardContent className="pt-4">
@@ -355,9 +305,7 @@ export default function TeacherRoomManage() {
                 <Clock className={`w-5 h-5 ${timeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
                 <span className="text-sm font-medium">Tempo restante do iRAT</span>
               </div>
-              <span className={`font-mono text-2xl font-bold ${timeLeft <= 60 ? 'text-destructive' : ''}`}>
-                {formatTime(timeLeft)}
-              </span>
+              <span className={`font-mono text-2xl font-bold ${timeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(timeLeft)}</span>
             </div>
             <div className="flex gap-2 mt-3">
               <Button size="sm" variant="outline" onClick={() => extendTimer(5)} className="flex-1">+5 min</Button>
@@ -367,50 +315,27 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Quiz info cards */}
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
         <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p>
-              <p className="text-xs text-muted-foreground">Nota Máxima</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p>
-              <p className="text-xs text-muted-foreground">% Nota Individual</p>
-            </CardContent>
-          </Card>
-          <Card className="bg-muted/50">
-            <CardContent className="py-4 text-center">
-              <p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p>
-              <p className="text-xs text-muted-foreground">% Nota Equipe</p>
-            </CardContent>
-          </Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
         </div>
       </div>
-
       <hr className="border-primary/30" />
-
-      {/* Connected students + Feedback */}
       <div>
         <h3 className="text-lg font-heading font-bold mb-1">
           <span className="text-primary font-bold">Aplicação Individual</span> : {participants.length} Estudantes Conectados
         </h3>
         <p className="text-sm font-semibold mb-3">Feedback das respostas</p>
-
         <ScrollArea className="w-full">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-[100px]">Nº de Registro</TableHead>
                 <TableHead className="min-w-[100px]">NOME</TableHead>
-                {questions.map((_, i) => (
-                  <TableHead key={i} className="text-center min-w-[70px]">Q{i + 1}</TableHead>
-                ))}
+                {questions.map((_, i) => (<TableHead key={i} className="text-center min-w-[70px]">Q{i + 1}</TableHead>))}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -445,39 +370,86 @@ export default function TeacherRoomManage() {
           </Table>
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
-
-        {/* Legend */}
         <div className="mt-4">
           <p className="font-semibold text-sm mb-2">Legenda</p>
           <div className="flex gap-6 items-center">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-8 h-8 text-success" />
-              <span className="text-sm">Resposta Correta</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-8 h-8 text-warning" />
-              <span className="text-sm">Resposta Parcialmente Correta</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <XCircle className="w-8 h-8 text-destructive" />
-              <span className="text-sm">Resposta Errada</span>
-            </div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-8 h-8 text-success" /><span className="text-sm">Resposta Correta</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-8 h-8 text-warning" /><span className="text-sm">Resposta Parcialmente Correta</span></div>
+            <div className="flex items-center gap-2"><XCircle className="w-8 h-8 text-destructive" /><span className="text-sm">Resposta Errada</span></div>
           </div>
         </div>
       </div>
-
-      {/* Finalize button */}
-      <Button
-        onClick={handleAdvanceClick}
-        className="w-full bg-warning hover:bg-warning/90 text-warning-foreground py-6 text-lg"
-      >
+      <Button onClick={handleAdvanceClick} className="w-full bg-warning hover:bg-warning/90 text-warning-foreground py-6 text-lg">
         Finalizar Aplicação Individual → Avançar para {nextStageName}
       </Button>
     </div>
   );
 
-  // ============ TRAT & OTHER STAGES ============
-  const renderOtherStages = () => (
+  // ============ TRAT WAITING ROOM (teams) ============
+  const renderTratWaitingRoom = () => (
+    <div className="space-y-6">
+      <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
+        Os estudantes devem acessar o site e informar o código da sala
+      </div>
+      <div className="flex flex-col md:flex-row items-center gap-6">
+        <div className="bg-card p-4 rounded-xl border shadow-sm"><QRCodeSVG value={joinUrl} size={140} /></div>
+        <div className="flex-1 text-center md:text-left space-y-3">
+          <div>
+            <span className="text-lg font-semibold text-primary">Código da Sala: </span>
+            <button onClick={copyCode} className="text-2xl font-bold font-mono text-primary hover:underline">{room.code}</button>
+          </div>
+          <Button variant="destructive" className="bg-warning hover:bg-warning/90 text-warning-foreground" onClick={cancelRoom}>
+            Cancelar Aplicação
+          </Button>
+        </div>
+      </div>
+
+      <div className="text-center">
+        <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
+        <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
+          <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+        </div>
+      </div>
+
+      <hr className="border-primary/30" />
+
+      {/* Connected teams */}
+      <div>
+        <h3 className="text-lg font-heading font-bold mb-3">
+          <span className="text-primary font-bold">Aplicação em Equipes</span> : {teams.length} Equipes Conectadas
+        </h3>
+        {teams.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Código Equipe</TableHead>
+                <TableHead>Nome Equipe</TableHead>
+                <TableHead>Integrantes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {teams.map((t: any) => (
+                <TableRow key={t.id}>
+                  <TableCell className="font-mono">{t.id.slice(0, 5)}</TableCell>
+                  <TableCell className="text-primary font-medium">{t.name}</TableCell>
+                  <TableCell>{(t.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </div>
+
+      <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
+        Iniciar Aplicação
+      </Button>
+    </div>
+  );
+
+  // ============ TRAT MONITORING ============
+  const renderTratMonitoring = () => (
     <div className="space-y-6">
       {/* Stage progress */}
       <Card>
@@ -505,227 +477,129 @@ export default function TeacherRoomManage() {
         </CardContent>
       </Card>
 
-      {/* Quiz linking */}
+      {/* Teams + tRAT Progress */}
+      <div>
+        <h2 className="text-lg font-heading font-semibold mb-3 flex items-center gap-2">
+          <Users className="w-5 h-5" /> Equipes ({teams.length})
+        </h2>
+        <div className="space-y-4">
+          {tratStats.sort((a, b) => b.score - a.score).map(t => {
+            const team = teams.find((te: any) => te.id === t.teamId);
+            const teamAttempts = (tratAttemptsAll || []).filter((a: any) => a.team_id === t.teamId);
+            const questionsAnswered = new Set(teamAttempts.filter((a: any) => a.is_correct).map((a: any) => a.question_id)).size;
+            const totalQuestions = questions.length;
+            return (
+              <div key={t.teamId} className="p-3 rounded-lg border border-border space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-medium text-sm">{t.teamName}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({(team?.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')})
+                    </span>
+                  </div>
+                  <span className="font-mono font-bold text-sm">{t.score} pts</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all bg-primary"
+                      style={{ width: `${totalQuestions > 0 ? (questionsAnswered / totalQuestions) * 100 : 0}%` }} />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{questionsAnswered}/{totalQuestions}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ============ APPLICATION & FINISHED ============
+  const renderAppAndFinished = () => (
+    <div className="space-y-6">
       <Card>
         <CardContent className="pt-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Quiz Vinculado</p>
-              <p className="text-sm text-muted-foreground">
-                {linkedQuiz ? `${linkedQuiz.title} (${linkedQuiz.questions?.length || 0} questões)` : 'Nenhum quiz vinculado'}
-              </p>
-            </div>
-            <Dialog open={linkQuizOpen} onOpenChange={setLinkQuizOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline"><Link2 className="w-3 h-3 mr-1" /> {room.quiz_id ? 'Trocar' : 'Vincular'}</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="font-heading">Vincular Quiz</DialogTitle>
-                  <DialogDescription>Selecione um quiz para vincular a esta sala.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3 pt-2">
-                  {quizzes.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum quiz disponível.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {quizzes.map((q: any) => (
-                        <button key={q.id} onClick={() => setSelectedQuizId(q.id)}
-                          className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                            selectedQuizId === q.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                          }`}>
-                          <p className="font-medium">{q.title}</p>
-                          <p className="text-xs text-muted-foreground">{q.questions?.length || 0} questões</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <Button onClick={linkQuiz} className="w-full" disabled={!selectedQuizId}>Vincular Quiz</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Participants */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-heading flex items-center gap-2">
-            <Users className="w-5 h-5" /> Participantes ({participants.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {participants.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center">Nenhum aluno na sala ainda</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {participants.map((p: any) => (
-                <div key={p.id} className="text-sm p-2 rounded-lg bg-muted/50">
-                  <p className="font-medium truncate">{(p as any).profiles?.full_name || 'Aluno'}</p>
-                  <p className="text-xs text-muted-foreground font-mono">#{p.participant_code}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Teams */}
-      {(room.current_stage === 'trat_open' || room.current_stage === 'application_open' || room.current_stage === 'finished') && (
-        <div>
-          <h2 className="text-lg font-heading font-semibold mb-3 flex items-center gap-2">
-            <Users className="w-5 h-5" /> Equipes ({teams.length})
-            {ungroupedParticipants.length > 0 && (
-              <Badge variant="outline" className="text-xs">
-                <AlertTriangle className="w-3 h-3 mr-1" />
-                {ungroupedParticipants.length} sem grupo
-              </Badge>
-            )}
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {teams.map((t: any) => {
-              const teamAttempts = (tratAttemptsAll || []).filter((a: any) => a.team_id === t.id);
-              const questionsAnswered = new Set(teamAttempts.filter((a: any) => a.is_correct).map((a: any) => a.question_id)).size;
-              const totalQuestions = questions.length;
+          <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            {stages.map((s, i) => {
+              const info = stageLabels[s];
+              const isCurrent = room.current_stage === s;
+              const isPast = stages.indexOf(room.current_stage) > i;
               return (
-                <Card key={t.id}>
-                  <CardContent className="pt-3 pb-3 text-center">
-                    <p className="font-semibold text-sm">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.team_members?.length || 0} membros</p>
-                    {t.team_members?.map((m: any) => (
-                      <p key={m.user_id} className="text-xs text-muted-foreground truncate">{m.profiles?.full_name}</p>
-                    ))}
-                    {totalQuestions > 0 && (
-                      <div className="mt-2">
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{
-                            width: `${(questionsAnswered / totalQuestions) * 100}%`,
-                            backgroundColor: 'hsl(var(--phase-trat))',
-                          }} />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{questionsAnswered}/{totalQuestions}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <div key={s} className="flex items-center gap-2 flex-shrink-0">
+                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isCurrent ? info.className : isPast ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
+                  }`}>{info.label}</div>
+                  {i < stages.length - 1 && <div className="w-4 h-0.5 bg-border" />}
+                </div>
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* iRAT Progress */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-heading flex items-center gap-2">
-            <Badge className="phase-irat">iRAT</Badge> Progresso
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-phase-irat rounded-full transition-all"
-                style={{ width: `${iratStats.total > 0 ? (iratStats.completed / iratStats.total) * 100 : 0}%` }} />
-            </div>
-            <span className="text-sm text-muted-foreground">{iratStats.completed}/{iratStats.total}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* tRAT Progress */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-heading flex items-center gap-2">
-            <Badge className="phase-trat">tRAT</Badge> Progresso das Equipes
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {teams.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center">Nenhuma equipe formada ainda</p>
-          ) : (
-            <div className="space-y-4">
-              {tratStats.sort((a, b) => b.score - a.score).map(t => {
-                const teamAttempts = (tratAttemptsAll || []).filter((a: any) => a.team_id === t.teamId);
-                const questionsAnswered = new Set(teamAttempts.filter((a: any) => a.is_correct).map((a: any) => a.question_id)).size;
-                const totalQuestions = questions.length;
-                return (
-                  <div key={t.teamId} className="p-3 rounded-lg border border-border space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-sm">{t.teamName}</span>
-                      <span className="font-mono font-bold text-sm">{t.score} pts</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all"
-                          style={{ width: `${totalQuestions > 0 ? (questionsAnswered / totalQuestions) * 100 : 0}%`, backgroundColor: 'hsl(var(--phase-trat))' }} />
-                      </div>
-                      <span className="text-xs text-muted-foreground">{questionsAnswered}/{totalQuestions}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {room.current_stage !== 'finished' && (
+            <Button onClick={handleAdvanceClick} className="w-full mt-3" size="sm">
+              <Play className="w-3 h-3 mr-1" /> Avançar para {nextStageName}
+            </Button>
           )}
         </CardContent>
       </Card>
 
       {/* App Questions */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-app">Aplicação</Badge> Questões
-            </CardTitle>
-            <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle>
-                  <DialogDescription>Crie uma questão para a fase de aplicação.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3 pt-2">
-                  <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
-                  <div><Label>Opção A</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
-                  <div><Label>Opção B</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
-                  <div><Label>Opção C</Label><Input value={appOptC} onChange={e => setAppOptC(e.target.value)} /></div>
-                  <div><Label>Opção D</Label><Input value={appOptD} onChange={e => setAppOptD(e.target.value)} /></div>
-                  <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {appQuestions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda</p>
-          ) : (
-            <div className="space-y-4">
-              {appQuestions.map((q: any, i: number) => (
-                <div key={q.id}>
-                  <p className="text-sm font-medium mb-2">Q{i + 1}. {q.question_text}</p>
-                  {appDistribution[q.id] && (
-                    <div className="flex gap-1 h-6">
-                      {(['A', 'B', 'C', 'D'] as const).map(opt => {
-                        const count = appDistribution[q.id]?.[opt] || 0;
-                        const total = Object.values(appDistribution[q.id] || {}).reduce((s, v) => s + v, 0);
-                        const pct = total > 0 ? (count / total) * 100 : 0;
-                        if (pct === 0) return null;
-                        return (
-                          <div key={opt} className="bg-phase-app rounded text-phase-app-foreground text-xs flex items-center justify-center font-medium"
-                            style={{ width: `${pct}%`, minWidth: pct > 0 ? '24px' : 0 }}>{opt}</div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
+      {room.current_stage === 'application_open' && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-heading flex items-center gap-2">
+                <Badge className="phase-app">Aplicação</Badge> Questões
+              </CardTitle>
+              <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle>
+                    <DialogDescription>Crie uma questão para a fase de aplicação.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 pt-2">
+                    <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                    <div><Label>Opção A</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
+                    <div><Label>Opção B</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+                    <div><Label>Opção C</Label><Input value={appOptC} onChange={e => setAppOptC(e.target.value)} /></div>
+                    <div><Label>Opção D</Label><Input value={appOptD} onChange={e => setAppOptD(e.target.value)} /></div>
+                    <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {appQuestions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda</p>
+            ) : (
+              <div className="space-y-4">
+                {appQuestions.map((q: any, i: number) => (
+                  <div key={q.id}>
+                    <p className="text-sm font-medium mb-2">Q{i + 1}. {q.question_text}</p>
+                    {appDistribution[q.id] && (
+                      <div className="flex gap-1 h-6">
+                        {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                          const count = appDistribution[q.id]?.[opt] || 0;
+                          const total = Object.values(appDistribution[q.id] || {}).reduce((s, v) => s + v, 0);
+                          const pct = total > 0 ? (count / total) * 100 : 0;
+                          if (pct === 0) return null;
+                          return (
+                            <div key={opt} className="bg-primary rounded text-primary-foreground text-xs flex items-center justify-center font-medium"
+                              style={{ width: `${pct}%`, minWidth: pct > 0 ? '24px' : 0 }}>{opt}</div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 
@@ -750,7 +624,8 @@ export default function TeacherRoomManage() {
       <main className="container mx-auto px-4 py-6 max-w-4xl">
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
-        {(room.current_stage === 'trat_open' || room.current_stage === 'application_open' || room.current_stage === 'finished') && renderOtherStages()}
+        {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
+        {(room.current_stage === 'application_open' || room.current_stage === 'finished') && renderAppAndFinished()}
       </main>
 
       {/* Advance confirmation */}
@@ -765,11 +640,7 @@ export default function TeacherRoomManage() {
               <Users className="w-5 h-5 text-muted-foreground" />
               <div>
                 <p className="font-medium">{participants.length} aluno(s) na sala</p>
-                {participants.length === 0 && (
-                  <p className="text-xs text-warning flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Nenhum aluno na sala
-                  </p>
-                )}
+                {teams.length > 0 && <p className="text-sm text-muted-foreground">{teams.length} equipe(s) formadas</p>}
               </div>
             </div>
             {!room.quiz_id && stages[stages.indexOf(room.current_stage) + 1] === 'irat_open' && (
