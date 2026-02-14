@@ -7,17 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Play, Users, BarChart3, Plus, Copy } from 'lucide-react';
+import { ArrowLeft, Play, Users, Plus, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
-  waiting: { label: 'Waiting', className: 'bg-muted text-muted-foreground' },
+  waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
   trat_open: { label: 'tRAT', className: 'phase-trat' },
-  application_open: { label: 'Application', className: 'phase-app' },
-  finished: { label: 'Finished', className: 'bg-muted text-muted-foreground' },
+  application_open: { label: 'Aplicação', className: 'phase-app' },
+  finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
 
 export default function TeacherRoomManage() {
@@ -50,7 +50,6 @@ export default function TeacherRoomManage() {
       .order('name');
     setTeams(teamsData || []);
 
-    // iRAT stats
     const { data: members } = await supabase.from('team_members').select('user_id').eq('room_id', roomId!);
     const { count } = await supabase.from('irat_responses').select('id', { count: 'exact', head: true }).eq('room_id', roomId!);
     const questionsCount = roomData?.quiz_id
@@ -58,7 +57,6 @@ export default function TeacherRoomManage() {
       : 0;
     setIratStats({ total: (members?.length || 0) * questionsCount, completed: count || 0 });
 
-    // tRAT stats
     if (teamsData) {
       const { data: tratData } = await supabase.from('trat_attempts').select('*').eq('room_id', roomId!);
       const scores = teamsData.map(t => {
@@ -69,20 +67,15 @@ export default function TeacherRoomManage() {
       setTratStats(scores);
     }
 
-    // Application questions & responses
     const { data: aq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
     setAppQuestions(aq || []);
     
     if (aq && aq.length > 0) {
       const { data: ar } = await supabase.from('application_responses').select('*').eq('room_id', roomId!);
       const dist: Record<string, Record<string, number>> = {};
-      (aq || []).forEach((q: any) => {
-        dist[q.id] = { A: 0, B: 0, C: 0, D: 0 };
-      });
+      (aq || []).forEach((q: any) => { dist[q.id] = { A: 0, B: 0, C: 0, D: 0 }; });
       (ar || []).forEach((r: any) => {
-        if (dist[r.question_id] && r.selected_option) {
-          dist[r.question_id][r.selected_option]++;
-        }
+        if (dist[r.question_id] && r.selected_option) dist[r.question_id][r.selected_option]++;
       });
       setAppDistribution(dist);
     }
@@ -95,7 +88,7 @@ export default function TeacherRoomManage() {
     const nextStage = stages[currentIdx + 1];
     await supabase.from('rooms').update({ current_stage: nextStage }).eq('id', roomId!);
     loadAll();
-    toast.success(`Advanced to ${stageLabels[nextStage].label}`);
+    toast.success(`Avançou para ${stageLabels[nextStage].label}`);
   };
 
   const addAppQuestion = async () => {
@@ -112,17 +105,17 @@ export default function TeacherRoomManage() {
     setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
     setAppQOpen(false);
     loadAll();
-    toast.success('Application question added');
+    toast.success('Questão de aplicação adicionada');
   };
 
   const copyCode = () => {
     if (room) {
       navigator.clipboard.writeText(room.code);
-      toast.success('Code copied!');
+      toast.success('Código copiado!');
     }
   };
 
-  if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Loading...</div>;
+  if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
 
   const stageInfo = stageLabels[room.current_stage] || stageLabels.waiting;
 
@@ -145,7 +138,6 @@ export default function TeacherRoomManage() {
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Stage Control */}
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 overflow-x-auto pb-2">
@@ -167,23 +159,22 @@ export default function TeacherRoomManage() {
             </div>
             {room.current_stage !== 'finished' && (
               <Button onClick={advanceStage} className="w-full mt-3" size="sm">
-                <Play className="w-3 h-3 mr-1" /> Advance to Next Phase
+                <Play className="w-3 h-3 mr-1" /> Avançar para Próxima Fase
               </Button>
             )}
           </CardContent>
         </Card>
 
-        {/* Teams */}
         <div>
           <h2 className="text-lg font-heading font-semibold mb-3 flex items-center gap-2">
-            <Users className="w-5 h-5" /> Teams
+            <Users className="w-5 h-5" /> Equipes
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
             {teams.map(t => (
               <Card key={t.id}>
                 <CardContent className="pt-3 pb-3 text-center">
                   <p className="font-semibold text-sm">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.team_members?.length || 0} members</p>
+                  <p className="text-xs text-muted-foreground">{t.team_members?.length || 0} membros</p>
                   {t.team_members?.map((m: any) => (
                     <p key={m.user_id} className="text-xs text-muted-foreground truncate">{m.profiles?.full_name}</p>
                   ))}
@@ -193,11 +184,10 @@ export default function TeacherRoomManage() {
           </div>
         </div>
 
-        {/* iRAT Progress */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-irat">iRAT</Badge> Progress
+              <Badge className="phase-irat">iRAT</Badge> Progresso
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -213,11 +203,10 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
-        {/* tRAT Scores */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-trat">tRAT</Badge> Scores
+              <Badge className="phase-trat">tRAT</Badge> Pontuações
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -229,34 +218,33 @@ export default function TeacherRoomManage() {
                 </div>
               ))}
               {tratStats.every(t => t.score === 0) && (
-                <p className="text-sm text-muted-foreground text-center">No scores yet</p>
+                <p className="text-sm text-muted-foreground text-center">Sem pontuações ainda</p>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Application */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-heading flex items-center gap-2">
-                <Badge className="phase-app">Application</Badge> Questions
+                <Badge className="phase-app">Aplicação</Badge> Questões
               </CardTitle>
               <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Add</Button>
+                  <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle className="font-heading">Add Application Question</DialogTitle>
+                    <DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-3 pt-2">
-                    <div><Label>Question</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
-                    <div><Label>Option A</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
-                    <div><Label>Option B</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
-                    <div><Label>Option C</Label><Input value={appOptC} onChange={e => setAppOptC(e.target.value)} /></div>
-                    <div><Label>Option D</Label><Input value={appOptD} onChange={e => setAppOptD(e.target.value)} /></div>
-                    <Button onClick={addAppQuestion} className="w-full">Add Question</Button>
+                    <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                    <div><Label>Opção A</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
+                    <div><Label>Opção B</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+                    <div><Label>Opção C</Label><Input value={appOptC} onChange={e => setAppOptC(e.target.value)} /></div>
+                    <div><Label>Opção D</Label><Input value={appOptD} onChange={e => setAppOptD(e.target.value)} /></div>
+                    <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -264,7 +252,7 @@ export default function TeacherRoomManage() {
           </CardHeader>
           <CardContent>
             {appQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center">No application questions yet</p>
+              <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda</p>
             ) : (
               <div className="space-y-4">
                 {appQuestions.map((q: any, i: number) => (

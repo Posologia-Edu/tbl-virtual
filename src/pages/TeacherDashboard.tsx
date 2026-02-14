@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, Play, Pause, Archive, LogOut, ChevronRight } from 'lucide-react';
+import { Plus, Users, Play, Archive, LogOut, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -29,11 +29,11 @@ type Quiz = {
 };
 
 const stageLabels: Record<string, { label: string; className: string }> = {
-  waiting: { label: 'Waiting', className: 'bg-muted text-muted-foreground' },
+  waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
   trat_open: { label: 'tRAT', className: 'phase-trat' },
-  application_open: { label: 'Application', className: 'phase-app' },
-  finished: { label: 'Finished', className: 'bg-muted text-muted-foreground' },
+  application_open: { label: 'Aplicação', className: 'phase-app' },
+  finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
 
 const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
@@ -74,24 +74,20 @@ export default function TeacherDashboard() {
       quiz_id: newRoomQuiz || null,
     });
     if (error) {
-      toast.error('Failed to create room');
+      toast.error('Falha ao criar sala');
       return;
     }
     
-    // Create default teams
-    const teams = Array.from({ length: 10 }, (_, i) => ({
-      room_id: undefined as any, // will be set below
-      name: `Team ${i + 1}`,
-    }));
-
     const { data: room } = await supabase.from('rooms').select('id').eq('code', code).single();
     if (room) {
-      await supabase.from('teams').insert(
-        teams.map(t => ({ ...t, room_id: room.id }))
-      );
+      const teams = Array.from({ length: 10 }, (_, i) => ({
+        room_id: room.id,
+        name: `Equipe ${i + 1}`,
+      }));
+      await supabase.from('teams').insert(teams);
     }
 
-    toast.success(`Room created! Code: ${code}`);
+    toast.success(`Sala criada! Código: ${code}`);
     setNewRoomName('');
     setNewRoomQuiz('');
     setCreateRoomOpen(false);
@@ -104,7 +100,7 @@ export default function TeacherDashboard() {
     const nextStage = stages[currentIdx + 1];
     await supabase.from('rooms').update({ current_stage: nextStage }).eq('id', room.id);
     loadData();
-    toast.success(`Stage advanced to ${stageLabels[nextStage].label}`);
+    toast.success(`Avançou para ${stageLabels[nextStage].label}`);
   };
 
   const toggleArchive = async (room: Room) => {
@@ -117,14 +113,14 @@ export default function TeacherDashboard() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-heading font-bold">TBL Manager</h1>
-            <p className="text-sm text-muted-foreground">Hello, {profile?.full_name}</p>
+            <h1 className="text-xl font-heading font-bold">TBL Active</h1>
+            <p className="text-sm text-muted-foreground">Olá, {profile?.full_name}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate('/quizzes')}>
-              Question Bank
+              Banco de Questões
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/auth'); }}>
+            <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/'); }}>
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -133,46 +129,46 @@ export default function TeacherDashboard() {
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-heading font-bold">Your Rooms</h2>
+          <h2 className="text-2xl font-heading font-bold">Suas Salas</h2>
           <Dialog open={createRoomOpen} onOpenChange={setCreateRoomOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="w-4 h-4 mr-2" /> New Room</Button>
+              <Button><Plus className="w-4 h-4 mr-2" /> Nova Sala</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="font-heading">Create Room</DialogTitle>
+                <DialogTitle className="font-heading">Criar Sala</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
-                  <Label>Room Name</Label>
-                  <Input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="e.g. Biology 101" />
+                  <Label>Nome da Sala</Label>
+                  <Input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} placeholder="Ex: Biologia 101" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Quiz (optional)</Label>
+                  <Label>Quiz (opcional)</Label>
                   <select
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     value={newRoomQuiz}
                     onChange={e => setNewRoomQuiz(e.target.value)}
                   >
-                    <option value="">No quiz assigned</option>
+                    <option value="">Nenhum quiz selecionado</option>
                     {quizzes.map(q => (
-                      <option key={q.id} value={q.id}>{q.title} ({q.questions?.length || 0} questions)</option>
+                      <option key={q.id} value={q.id}>{q.title} ({q.questions?.length || 0} questões)</option>
                     ))}
                   </select>
                 </div>
-                <Button onClick={createRoom} className="w-full">Create Room</Button>
+                <Button onClick={createRoom} className="w-full">Criar Sala</Button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading...</div>
+          <div className="text-center py-12 text-muted-foreground">Carregando...</div>
         ) : rooms.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center text-muted-foreground">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>No rooms yet. Create one to get started!</p>
+              <p>Nenhuma sala ainda. Crie uma para começar!</p>
             </CardContent>
           </Card>
         ) : (
@@ -195,7 +191,7 @@ export default function TeacherDashboard() {
                     {room.is_active && room.current_stage !== 'finished' && (
                       <Button size="sm" onClick={() => advanceStage(room)} className="flex-1">
                         <Play className="w-3 h-3 mr-1" />
-                        Next Phase
+                        Próxima Fase
                       </Button>
                     )}
                     <Button size="sm" variant="outline" onClick={() => navigate(`/room/${room.id}/manage`)}>
