@@ -78,15 +78,6 @@ export default function TeacherDashboard() {
       return;
     }
     
-    const { data: room } = await supabase.from('rooms').select('id').eq('code', code).single();
-    if (room) {
-      const teams = Array.from({ length: 10 }, (_, i) => ({
-        room_id: room.id,
-        name: `Equipe ${i + 1}`,
-      }));
-      await supabase.from('teams').insert(teams);
-    }
-
     toast.success(`Sala criada! Código: ${code}`);
     setNewRoomName('');
     setNewRoomQuiz('');

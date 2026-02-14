@@ -14,7 +14,7 @@ type JoinedRoom = {
   room_name: string;
   room_code: string;
   current_stage: string;
-  team_name: string | null;
+  participant_code: string;
 };
 
 const stageLabels: Record<string, { label: string; className: string }> = {
@@ -37,18 +37,18 @@ export default function StudentDashboard() {
   }, [user]);
 
   const loadRooms = async () => {
-    const { data: memberships } = await supabase
-      .from('team_members')
-      .select('room_id, teams(name, room_id, rooms(name, code, current_stage))')
+    const { data: participations } = await supabase
+      .from('room_participants')
+      .select('room_id, participant_code, rooms:room_id(name, code, current_stage)')
       .eq('user_id', user!.id);
 
-    if (memberships) {
-      const rooms = memberships.map((m: any) => ({
-        room_id: m.room_id,
-        room_name: m.teams?.rooms?.name || '',
-        room_code: m.teams?.rooms?.code || '',
-        current_stage: m.teams?.rooms?.current_stage || 'waiting',
-        team_name: m.teams?.name || null,
+    if (participations) {
+      const rooms = participations.map((p: any) => ({
+        room_id: p.room_id,
+        room_name: p.rooms?.name || '',
+        room_code: p.rooms?.code || '',
+        current_stage: p.rooms?.current_stage || 'waiting',
+        participant_code: p.participant_code,
       }));
       setJoinedRooms(rooms);
     }
@@ -73,8 +73,9 @@ export default function StudentDashboard() {
         return;
       }
 
+      // Check if already in room
       const { data: existing } = await supabase
-        .from('team_members')
+        .from('room_participants')
         .select('id')
         .eq('user_id', user!.id)
         .eq('room_id', room.id)
@@ -85,7 +86,28 @@ export default function StudentDashboard() {
         return;
       }
 
-      navigate(`/room/${room.id}/join`);
+      // Generate participant code
+      const { data: codeData } = await supabase.rpc('generate_participant_code', { p_room_id: room.id });
+      const participantCode = codeData as string;
+
+      // Join room
+      const { error } = await supabase.from('room_participants').insert({
+        room_id: room.id,
+        user_id: user!.id,
+        participant_code: participantCode,
+      });
+
+      if (error) {
+        if (error.code === '23505') {
+          navigate(`/room/${room.id}`);
+        } else {
+          toast.error('Falha ao entrar na sala');
+        }
+        return;
+      }
+
+      toast.success(`Entrou na sala! Seu código: ${participantCode}`);
+      navigate(`/room/${room.id}`);
     } catch {
       toast.error('Falha ao entrar na sala');
     } finally {
@@ -141,7 +163,7 @@ export default function StudentDashboard() {
                   <CardContent className="py-3 flex items-center justify-between">
                     <div>
                       <p className="font-medium">{room.room_name}</p>
-                      <p className="text-sm text-muted-foreground">{room.team_name || 'Sem equipe'}</p>
+                      <p className="text-sm text-muted-foreground font-mono">Código: #{room.participant_code}</p>
                     </div>
                     <Badge className={stageLabels[room.current_stage]?.className || ''}>
                       {stageLabels[room.current_stage]?.label || room.current_stage}
