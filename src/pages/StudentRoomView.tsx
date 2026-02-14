@@ -67,7 +67,7 @@ export default function StudentRoomView() {
   const [iratSubmitted, setIratSubmitted] = useState<Set<string>>(new Set());
   const [iratScores, setIratScores] = useState<Record<string, number>>({});
   const [tratAttempts, setTratAttempts] = useState<TratAttempt[]>([]);
-  const [tratFeedback, setTratFeedback] = useState<{ correct: boolean; option: string } | null>(null);
+  const [tratFeedback, setTratFeedback] = useState<{ correct: boolean; option: string; points: number } | null>(null);
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -88,6 +88,10 @@ export default function StudentRoomView() {
 
   // iRAT individual responses for team members (show_individual_in_team)
   const [memberIratResponses, setMemberIratResponses] = useState<any[]>([]);
+
+  // Application phase
+  const [appCurrentQ, setAppCurrentQ] = useState(0);
+  const [appWaiting, setAppWaiting] = useState(true);
 
   const loadRoom = useCallback(async () => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
@@ -182,6 +186,8 @@ export default function StudentRoomView() {
     const rMap: Record<string, string> = {};
     (rs || []).forEach((r: any) => { rMap[r.question_id] = r.selected_option; });
     setAppResponses(rMap);
+    // If we already have responses, we're not waiting
+    if (rs && rs.length > 0) setAppWaiting(false);
   }, [roomId, membership]);
 
   useEffect(() => { loadRoom(); loadMembership(); loadParticipants(); }, [loadRoom, loadMembership, loadParticipants]);
@@ -198,8 +204,6 @@ export default function StudentRoomView() {
     if (!membership) {
       setTratStep('team_name');
     } else {
-      // Check if tRAT is actually started (room is trat_open and team exists)
-      // If team has attempts, they're answering. Otherwise waiting for teacher.
       setTratStep('add_members');
     }
   }, [membership, room?.current_stage]);
@@ -221,14 +225,16 @@ export default function StudentRoomView() {
     const channel = supabase
       .channel(`room-${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
-        (payload) => { setRoom(payload.new as any); setCurrentQ(0); setTratFeedback(null); })
+        (payload) => { setRoom(payload.new as any); setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
         () => { loadMembership(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` },
+        () => { loadAppData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadTratAttempts, loadMembership]);
+  }, [roomId, loadTratAttempts, loadMembership, loadAppData]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -280,15 +286,9 @@ export default function StudentRoomView() {
       attempt_number: attemptNumber, selected_option: option, is_correct: isCorrect, submitted_by: user!.id,
     });
     if (error) { if (error.code === '23505') toast.error('Opção já tentada'); else toast.error('Falha ao enviar'); return; }
-    setTratFeedback({ correct: isCorrect, option });
+    const points = isCorrect ? TRAT_SCORES[attemptNumber - 1] : 0;
+    setTratFeedback({ correct: isCorrect, option, points });
     setTratSelectedOption(null);
-    if (isCorrect) {
-      toast.success(`Correto! ${TRAT_SCORES[attemptNumber - 1]} pontos!`);
-      setTimeout(() => { setTratFeedback(null); }, 1500);
-    } else {
-      toast.error(`Errado! ${4 - attemptNumber} tentativas restantes`);
-      setTimeout(() => setTratFeedback(null), 1000);
-    }
     loadTratAttempts();
   };
 
@@ -300,6 +300,9 @@ export default function StudentRoomView() {
     if (error) { toast.error('Falha ao enviar'); return; }
     setAppResponses(prev => ({ ...prev, [questionId]: option }));
     toast.success('Resposta enviada!');
+    if (appCurrentQ < appQuestions.length - 1) {
+      setTimeout(() => setAppCurrentQ(prev => prev + 1), 500);
+    }
   };
 
   // Group formation
@@ -389,9 +392,7 @@ export default function StudentRoomView() {
           </div>
           <p className="text-lg text-primary font-semibold">Aplicação individual concluída com sucesso!</p>
           <p className="text-muted-foreground">Aguarde orientações do professor, permaneça na tela.</p>
-          <div className="border rounded-xl p-6 mt-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => {
-            // When tRAT is open, this would navigate. For now it's just visual.
-          }}>
+          <div className="border rounded-xl p-6 mt-4 cursor-pointer hover:shadow-md transition-shadow">
             <img src={heroTeam} alt="Equipe" className="w-48 h-auto mx-auto" />
             <p className="text-primary font-medium mt-2">Iniciar aplicação em equipe</p>
           </div>
@@ -528,12 +529,8 @@ export default function StudentRoomView() {
 
     // Step 2: Add members
     if (tratStep === 'add_members' || tratStep === 'team_name') {
-      // Check if team has started answering (has tRAT attempts)
       const hasStarted = tratAttempts.length > 0;
-      if (hasStarted) {
-        // Go to answering
-        return renderTratAnswering();
-      }
+      if (hasStarted) return renderTratAnswering();
 
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
@@ -560,7 +557,6 @@ export default function StudentRoomView() {
               <Search className="w-4 h-4 mr-2" /> Localizar Estudante
             </Button>
 
-            {/* Team members table */}
             {teamMembers.length > 0 && (
               <Table>
                 <TableHeader>
@@ -644,9 +640,6 @@ export default function StudentRoomView() {
 
     // Step 3: Waiting for teacher
     if (tratStep === 'waiting') {
-      // Check if tRAT has started via room stage (it's already trat_open, so the waiting is for the "team ready" state)
-      // Actually the teacher just clicks "Iniciar Aplicação" again to start. We wait until teacher starts.
-      // For now, go straight to answering since trat_open means it's already started.
       return renderTratAnswering();
     }
 
@@ -665,10 +658,16 @@ export default function StudentRoomView() {
     if (allTratDone) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <CheckCircle2 className="w-16 h-16 text-success" />
-          <h2 className="text-2xl font-heading font-bold">Aplicação em equipe concluída!</h2>
-          <p className="text-muted-foreground">Pontuação da equipe: <span className="font-bold text-2xl text-primary">{tratTotalScore}</span></p>
-          <p className="text-sm text-muted-foreground">Aguarde orientações do professor.</p>
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <p className="text-lg text-primary font-semibold">Aplicação em Equipe concluída com sucesso!</p>
+          <p className="text-muted-foreground">
+            Aguarde o professor finalizar a aplicação, para que seja gerado o acompanhamento de seu desempenho, permanecendo na tela.
+          </p>
         </div>
       );
     }
@@ -683,17 +682,21 @@ export default function StudentRoomView() {
       <div className="space-y-4">
         {/* Header */}
         <div className="text-center space-y-1">
+          <div className="flex items-center justify-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <span className="text-lg font-heading font-bold text-primary">TBL Active</span>
+          </div>
           <p className="text-lg">
             Você está na sala de número <span className="text-primary font-bold">{room.code}</span>
           </p>
           <p className="text-sm text-muted-foreground">Equipe Conectada: {membership?.teams.name}</p>
         </div>
 
-        {/* Score + members + responses bar */}
-        <div className="flex items-center justify-between">
+        {/* Score + members bar */}
+        <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">Pontuação:</span>
-            <Badge variant="outline" className="text-lg font-bold">{tratTotalScore}</Badge>
+            <Badge variant="outline" className="text-lg font-bold px-4 py-1">{tratTotalScore}</Badge>
           </div>
           <div className="flex items-center gap-4">
             <button className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -710,10 +713,14 @@ export default function StudentRoomView() {
             <CardContent className="py-8 text-center">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-success" />
               <p className="text-lg font-heading font-bold">Correto!</p>
-              <p className="text-2xl font-bold text-success">{TRAT_SCORES[qAttempts.findIndex(a => a.is_correct)]} pontos</p>
+              <p className="text-muted-foreground">
+                Resposta Correta! Sua equipe ganhou {TRAT_SCORES[qAttempts.findIndex(a => a.is_correct)]} pontos! Clique em Avançar!
+              </p>
               <div className="flex gap-2 justify-center mt-4">
                 {currentQ < questions.length - 1 && (
-                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); }}>Avançar</Button>
+                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); setTratFeedback(null); }} className="w-full py-5 text-base">
+                    Avançar
+                  </Button>
                 )}
               </div>
             </CardContent>
@@ -726,7 +733,9 @@ export default function StudentRoomView() {
               <p className="text-sm text-muted-foreground">0 pontos</p>
               <div className="flex gap-2 justify-center mt-4">
                 {currentQ < questions.length - 1 && (
-                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); }}>Avançar</Button>
+                  <Button onClick={() => { setCurrentQ(p => p + 1); setTratSelectedOption(null); setTratFeedback(null); }} className="w-full py-5 text-base">
+                    Avançar
+                  </Button>
                 )}
               </div>
             </CardContent>
@@ -742,20 +751,27 @@ export default function StudentRoomView() {
                 {(['A', 'B', 'C', 'D'] as const).map(opt => {
                   const isDisabled = disabledOpts.has(opt);
                   const isSelected = tratSelectedOption === opt;
+                  // Check if this option was attempted and was wrong
+                  const wasWrong = qAttempts.some(a => a.selected_option === opt && !a.is_correct);
                   return (
                     <button key={opt} onClick={() => !isDisabled && setTratSelectedOption(opt)} disabled={isDisabled}
                       className={`w-full text-left p-4 rounded-lg border-2 flex items-center gap-3 transition-all ${
+                        wasWrong ? 'border-destructive/50 bg-destructive/10 opacity-60 cursor-not-allowed' :
                         isDisabled ? 'border-border opacity-40 cursor-not-allowed' :
                         isSelected ? 'border-primary bg-primary/5' :
                         'border-border hover:border-primary/50 hover:bg-primary/5'
                       }`}>
                       <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                        wasWrong ? 'border-destructive bg-destructive/20' :
                         isSelected ? 'border-primary bg-primary/10' : 'border-muted-foreground/30'
                       }`}>
-                        {isSelected && <div className="w-4 h-4 rounded-full bg-primary" />}
+                        {wasWrong && <XCircle className="w-5 h-5 text-destructive" />}
+                        {isSelected && !wasWrong && <div className="w-4 h-4 rounded-full bg-primary" />}
                       </div>
-                      <span className="font-semibold mr-2">{opt})</span>
-                      <span className="text-sm flex-1">{q[`option_${opt.toLowerCase()}` as keyof Question] as string}</span>
+                      <span className={`font-semibold mr-2 ${wasWrong ? 'text-destructive' : ''}`}>{opt})</span>
+                      <span className={`text-sm flex-1 ${wasWrong ? 'text-destructive' : ''}`}>
+                        {q[`option_${opt.toLowerCase()}` as keyof Question] as string}
+                      </span>
                     </button>
                   );
                 })}
@@ -771,14 +787,36 @@ export default function StudentRoomView() {
           </Card>
         )}
 
-        {/* Feedback overlay */}
+        {/* Feedback dialog */}
         {tratFeedback && (
-          <div className="fixed inset-0 flex items-center justify-center bg-background/80 z-50 animate-in fade-in">
-            <div className={`text-center p-8 rounded-2xl ${tratFeedback.correct ? 'bg-success/10' : 'bg-destructive/10'}`}>
-              {tratFeedback.correct ? <CheckCircle2 className="w-20 h-20 mx-auto text-success" /> : <XCircle className="w-20 h-20 mx-auto text-destructive" />}
-              <p className="text-2xl font-heading font-bold mt-3">{tratFeedback.correct ? 'Correto!' : 'Errado!'}</p>
-            </div>
-          </div>
+          <Dialog open={!!tratFeedback} onOpenChange={() => setTratFeedback(null)}>
+            <DialogContent className="text-center max-w-sm">
+              <div className="flex flex-col items-center py-4">
+                {tratFeedback.correct ? (
+                  <>
+                    <div className="w-20 h-20 rounded-full border-4 border-success/30 flex items-center justify-center mb-4">
+                      <CheckCircle2 className="w-12 h-12 text-success" />
+                    </div>
+                    <h3 className="text-2xl font-heading font-bold">Correto</h3>
+                    <p className="text-muted-foreground mt-2">
+                      Resposta Correta! Sua equipe ganhou {tratFeedback.points} pontos! Clique em Avançar!
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 rounded-full border-4 border-destructive/30 flex items-center justify-center mb-4">
+                      <XCircle className="w-12 h-12 text-destructive" />
+                    </div>
+                    <h3 className="text-2xl font-heading font-bold">Errado</h3>
+                    <p className="text-muted-foreground mt-2">
+                      Resposta Incorreta! Tente novamente.
+                    </p>
+                  </>
+                )}
+                <Button onClick={() => setTratFeedback(null)} className="mt-4 px-8">Ok</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         )}
 
         {/* Question dots */}
@@ -796,39 +834,124 @@ export default function StudentRoomView() {
     );
   };
 
-  const renderApplication = () => (
-    <div className="space-y-4">
-      <Badge className="phase-app">Exercício de Aplicação</Badge>
-      {!membership ? (
-        <p className="text-center text-muted-foreground py-8">Você precisa estar em um grupo.</p>
-      ) : appQuestions.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">Nenhuma questão de aplicação ainda.</p>
-      ) : (
-        appQuestions.map((q, i) => (
-          <Card key={q.id}>
-            <CardContent className="pt-4 space-y-3">
-              <p className="font-medium">Q{i + 1}. {q.question_text}</p>
-              <div className="space-y-2">
-                {(['A', 'B', 'C', 'D'] as const).map(opt => {
-                  const text = q[`option_${opt.toLowerCase()}`];
-                  if (!text) return null;
-                  const isSelected = appResponses[q.id] === opt;
-                  return (
-                    <button key={opt} onClick={() => submitApp(q.id, opt)}
-                      className={`w-full text-left p-3 rounded-lg border-2 transition-all ${
-                        isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                      }`}>
-                      <span className="font-semibold mr-2">{opt}.</span>{text}
-                    </button>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
-  );
+  // ===== RENDER: APPLICATION (V/F) =====
+  const renderApplication = () => {
+    if (!membership) {
+      // Team already exists from tRAT - waiting for teacher to release
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <p className="text-lg text-muted-foreground">Aguardando liberação da atividade pelo professor...</p>
+          <div className="flex gap-3 mt-4">
+            {[0, 1, 2, 3, 4].map(i => (
+              <motion.div key={i} className="w-6 h-6 rounded-full"
+                style={{ backgroundColor: `hsl(${200 + i * 20}, 70%, 55%)` }}
+                animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (appQuestions.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <p className="text-muted-foreground">Aguardando o professor liberar as questões de aplicação...</p>
+          <div className="flex gap-3 mt-4">
+            {[0, 1, 2, 3, 4].map(i => (
+              <motion.div key={i} className="w-6 h-6 rounded-full"
+                style={{ backgroundColor: `hsl(${200 + i * 20}, 70%, 55%)` }}
+                animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Check if all app questions answered
+    const allAppDone = appQuestions.every(q => appResponses[q.id]);
+
+    if (allAppDone) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
+          </div>
+          <p className="text-lg text-primary font-semibold">Aplicação de Conceitos concluída com sucesso!</p>
+          <p className="text-muted-foreground">
+            Aguarde o professor finalizar a aplicação, permanecendo na tela.
+          </p>
+        </div>
+      );
+    }
+
+    const q = appQuestions[appCurrentQ];
+    if (!q) return null;
+    const currentResponse = appResponses[q.id];
+
+    return (
+      <div className="space-y-4">
+        <div className="text-center space-y-1">
+          <div className="flex items-center justify-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <span className="text-lg font-heading font-bold text-primary">TBL Active</span>
+          </div>
+          <p className="text-lg">
+            Você está na sala de número <span className="text-primary font-bold">{room.code}</span>
+          </p>
+          <p className="text-sm text-muted-foreground">Equipe: {membership?.teams.name}</p>
+        </div>
+
+        <Card className="overflow-hidden">
+          <div className="bg-muted py-3 text-center border-b">
+            <p className="font-heading font-semibold">Questão Nº {appCurrentQ + 1}</p>
+          </div>
+          <CardContent className="pt-6 space-y-5">
+            <p className="text-base leading-relaxed">{q.question_text}</p>
+            <div className="grid grid-cols-2 gap-4">
+              {(['A', 'B'] as const).map(opt => {
+                const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
+                const isSelected = currentResponse === opt;
+                return (
+                  <button key={opt} onClick={() => submitApp(q.id, opt)}
+                    className={`p-6 rounded-xl border-2 text-center text-xl font-bold transition-all ${
+                      isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-center gap-1.5 pt-2">
+          {appQuestions.map((_, i) => (
+            <button key={i} onClick={() => setAppCurrentQ(i)}
+              className={`w-2.5 h-2.5 rounded-full transition-all ${
+                i === appCurrentQ ? 'bg-primary scale-125' : appResponses[appQuestions[i]?.id] ? 'bg-success' : 'bg-border'
+              }`} />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const renderFinished = () => (
     <div className="text-center py-16 space-y-4">
@@ -840,7 +963,7 @@ export default function StudentRoomView() {
 
   return (
     <div className="min-h-screen bg-background">
-      {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && (
+      {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
         <header className="border-b bg-card">
           <div className="container mx-auto px-4 py-3 flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>

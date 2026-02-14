@@ -37,12 +37,13 @@ export default function TeacherRoomManage() {
   const [tratAttemptsAll, setTratAttemptsAll] = useState<any[]>([]);
   const [appQOpen, setAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
-  const [appOptA, setAppOptA] = useState('');
-  const [appOptB, setAppOptB] = useState('');
+  const [appOptA, setAppOptA] = useState('V');
+  const [appOptB, setAppOptB] = useState('F');
   const [appOptC, setAppOptC] = useState('');
   const [appOptD, setAppOptD] = useState('');
   const [appDistribution, setAppDistribution] = useState<Record<string, Record<string, number>>>({});
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
+  const [appResponses, setAppResponses] = useState<any[]>([]);
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [linkQuizOpen, setLinkQuizOpen] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState('');
@@ -91,8 +92,10 @@ export default function TeacherRoomManage() {
 
     const { data: aq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
     setAppQuestions(aq || []);
+
+    const { data: ar } = await supabase.from('application_responses').select('*').eq('room_id', roomId!);
+    setAppResponses(ar || []);
     if (aq && aq.length > 0) {
-      const { data: ar } = await supabase.from('application_responses').select('*').eq('room_id', roomId!);
       const dist: Record<string, Record<string, number>> = {};
       aq.forEach((q: any) => { dist[q.id] = { A: 0, B: 0, C: 0, D: 0 }; });
       (ar || []).forEach((r: any) => {
@@ -130,6 +133,8 @@ export default function TeacherRoomManage() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` }, () => loadAll())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` }, () => loadAll())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, () => loadAll())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [roomId, loadAll]);
@@ -182,10 +187,10 @@ export default function TeacherRoomManage() {
     if (!appQText.trim()) return;
     await supabase.from('application_questions').insert({
       room_id: roomId!, question_text: appQText.trim(),
-      option_a: appOptA || null, option_b: appOptB || null, option_c: appOptC || null, option_d: appOptD || null,
+      option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
       sort_order: appQuestions.length,
     });
-    setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
+    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD('');
     setAppQOpen(false); loadAll();
     toast.success('Questão de aplicação adicionada');
   };
@@ -222,6 +227,20 @@ export default function TeacherRoomManage() {
 
   const getStudentTotalScore = (studentId: string) => {
     return iratResponses.filter((r: any) => r.student_id === studentId).reduce((sum: number, r: any) => sum + r.score, 0);
+  };
+
+  // tRAT team question feedback
+  const getTeamQuestionFeedback = (teamId: string, questionId: string) => {
+    const teamAttempts = tratAttemptsAll.filter((a: any) => a.team_id === teamId && a.question_id === questionId);
+    if (teamAttempts.length === 0) return null;
+    const correctAttempt = teamAttempts.find((a: any) => a.is_correct);
+    if (correctAttempt) {
+      const score = [4, 2, 1, 0][correctAttempt.attempt_number - 1];
+      if (correctAttempt.attempt_number === 1) return { type: 'correct', score };
+      return { type: 'partial', score };
+    }
+    if (teamAttempts.length >= 4) return { type: 'wrong', score: 0 };
+    return null; // still in progress
   };
 
   const joinUrl = `${window.location.origin}/join`;
@@ -386,24 +405,76 @@ export default function TeacherRoomManage() {
   );
 
   // ============ TRAT WAITING ROOM (teams) ============
-  const renderTratWaitingRoom = () => (
-    <div className="space-y-6">
-      <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
-        Os estudantes devem acessar o site e informar o código da sala
-      </div>
-      <div className="flex flex-col md:flex-row items-center gap-6">
-        <div className="bg-card p-4 rounded-xl border shadow-sm"><QRCodeSVG value={joinUrl} size={140} /></div>
-        <div className="flex-1 text-center md:text-left space-y-3">
-          <div>
-            <span className="text-lg font-semibold text-primary">Código da Sala: </span>
-            <button onClick={copyCode} className="text-2xl font-bold font-mono text-primary hover:underline">{room.code}</button>
-          </div>
-          <Button variant="destructive" className="bg-warning hover:bg-warning/90 text-warning-foreground" onClick={cancelRoom}>
-            Cancelar Aplicação
-          </Button>
-        </div>
-      </div>
+  const renderTratWaitingRoom = () => {
+    // Check if teams have started answering - if so, show monitoring
+    const hasAttempts = tratAttemptsAll.length > 0;
+    if (hasAttempts) return renderTratMonitoring();
 
+    return (
+      <div className="space-y-6">
+        <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
+          Os estudantes devem acessar o site e informar o código da sala
+        </div>
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <div className="bg-card p-4 rounded-xl border shadow-sm"><QRCodeSVG value={joinUrl} size={140} /></div>
+          <div className="flex-1 text-center md:text-left space-y-3">
+            <div>
+              <span className="text-lg font-semibold text-primary">Código da Sala: </span>
+              <button onClick={copyCode} className="text-2xl font-bold font-mono text-primary hover:underline">{room.code}</button>
+            </div>
+            <Button variant="destructive" className="bg-warning hover:bg-warning/90 text-warning-foreground" onClick={cancelRoom}>
+              Cancelar Aplicação
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
+          <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+          </div>
+        </div>
+
+        <hr className="border-primary/30" />
+
+        <div>
+          <h3 className="text-lg font-heading font-bold mb-3">
+            <span className="text-primary font-bold">Aplicação em Equipes</span> : {teams.length} Equipes Conectadas
+          </h3>
+          {teams.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Código Equipe</TableHead>
+                  <TableHead>Nome Equipe</TableHead>
+                  <TableHead>Integrantes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teams.map((t: any) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-mono">{t.id.slice(0, 5)}</TableCell>
+                    <TableCell className="text-primary font-medium">{t.name}</TableCell>
+                    <TableCell>{(t.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+
+        <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
+          Iniciar Aplicação
+        </Button>
+      </div>
+    );
+  };
+
+  // ============ TRAT MONITORING ============
+  const renderTratMonitoring = () => (
+    <div className="space-y-6">
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
         <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
@@ -415,140 +486,97 @@ export default function TeacherRoomManage() {
 
       <hr className="border-primary/30" />
 
-      {/* Connected teams */}
       <div>
-        <h3 className="text-lg font-heading font-bold mb-3">
-          <span className="text-primary font-bold">Aplicação em Equipes</span> : {teams.length} Equipes Conectadas
+        <h3 className="text-lg font-heading font-bold mb-1">
+          <span className="text-primary font-bold">Aplicação Equipe</span> : {teams.length} Equipes Conectados
         </h3>
-        {teams.length > 0 && (
+        <p className="text-sm font-semibold mb-3">Feedback das respostas</p>
+        <ScrollArea className="w-full">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Código Equipe</TableHead>
-                <TableHead>Nome Equipe</TableHead>
-                <TableHead>Integrantes</TableHead>
+                <TableHead className="min-w-[80px]">Código Equipe</TableHead>
+                <TableHead className="min-w-[100px]">NOME</TableHead>
+                {questions.map((_, i) => (<TableHead key={i} className="text-center min-w-[70px]">Q{i + 1}</TableHead>))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {teams.map((t: any) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-mono">{t.id.slice(0, 5)}</TableCell>
-                  <TableCell className="text-primary font-medium">{t.name}</TableCell>
-                  <TableCell>{(t.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')}</TableCell>
-                </TableRow>
-              ))}
+              {teams.map((t: any) => {
+                const stat = tratStats.find(s => s.teamId === t.id);
+                return (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-mono text-xs">{t.id.slice(0, 5)}</TableCell>
+                    <TableCell className="text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">Membros</Badge>
+                        <span>{t.name}</span>
+                      </div>
+                    </TableCell>
+                    {questions.map((q: any) => {
+                      const fb = getTeamQuestionFeedback(t.id, q.id);
+                      return (
+                        <TableCell key={q.id} className="text-center">
+                          {fb ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              {fb.type === 'correct' && <CheckCircle2 className="w-6 h-6 text-success" />}
+                              {fb.type === 'partial' && <CheckCircle2 className="w-6 h-6 text-warning" />}
+                              {fb.type === 'wrong' && <XCircle className="w-6 h-6 text-destructive" />}
+                              <span className="text-[10px] text-muted-foreground">{fb.score} pontos</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
-        )}
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+        <div className="mt-4">
+          <p className="font-semibold text-sm mb-2">Legenda</p>
+          <div className="flex gap-6 items-center">
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-8 h-8 text-success" /><span className="text-sm">Resposta Correta</span></div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="w-8 h-8 text-warning" /><span className="text-sm">Resposta Parcialmente Correta</span></div>
+            <div className="flex items-center gap-2"><XCircle className="w-8 h-8 text-destructive" /><span className="text-sm">Resposta Errada</span></div>
+          </div>
+        </div>
       </div>
-
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
-        Iniciar Aplicação
+        Finalizar Aplicação → Avançar para {nextStageName}
       </Button>
     </div>
   );
 
-  // ============ TRAT MONITORING ============
-  const renderTratMonitoring = () => (
-    <div className="space-y-6">
-      {/* Stage progress */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {stages.map((s, i) => {
-              const info = stageLabels[s];
-              const isCurrent = room.current_stage === s;
-              const isPast = stages.indexOf(room.current_stage) > i;
-              return (
-                <div key={s} className="flex items-center gap-2 flex-shrink-0">
-                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    isCurrent ? info.className : isPast ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
-                  }`}>{info.label}</div>
-                  {i < stages.length - 1 && <div className="w-4 h-0.5 bg-border" />}
-                </div>
-              );
-            })}
-          </div>
-          {room.current_stage !== 'finished' && (
-            <Button onClick={handleAdvanceClick} className="w-full mt-3" size="sm">
-              <Play className="w-3 h-3 mr-1" /> Avançar para {nextStageName}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+  // ============ APPLICATION MONITORING ============
+  const renderAppMonitoring = () => {
+    // Count teams that answered each question
+    const teamsAnsweredAll = teams.filter((t: any) => {
+      return appQuestions.every(q => appResponses.some((r: any) => r.question_id === q.id && r.team_id === t.id));
+    }).length;
 
-      {/* Teams + tRAT Progress */}
-      <div>
-        <h2 className="text-lg font-heading font-semibold mb-3 flex items-center gap-2">
-          <Users className="w-5 h-5" /> Equipes ({teams.length})
-        </h2>
-        <div className="space-y-4">
-          {tratStats.sort((a, b) => b.score - a.score).map(t => {
-            const team = teams.find((te: any) => te.id === t.teamId);
-            const teamAttempts = (tratAttemptsAll || []).filter((a: any) => a.team_id === t.teamId);
-            const questionsAnswered = new Set(teamAttempts.filter((a: any) => a.is_correct).map((a: any) => a.question_id)).size;
-            const totalQuestions = questions.length;
-            return (
-              <div key={t.teamId} className="p-3 rounded-lg border border-border space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium text-sm">{t.teamName}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({(team?.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')})
-                    </span>
-                  </div>
-                  <span className="font-mono font-bold text-sm">{t.score} pts</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full transition-all bg-primary"
-                      style={{ width: `${totalQuestions > 0 ? (questionsAnswered / totalQuestions) * 100 : 0}%` }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground">{questionsAnswered}/{totalQuestions}</span>
-                </div>
-              </div>
-            );
-          })}
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
+          <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto">
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 70}</p><p className="text-xs text-muted-foreground">% Nota Individual</p></CardContent></Card>
+            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Nota Equipe</p></CardContent></Card>
+          </div>
         </div>
-      </div>
-    </div>
-  );
 
-  // ============ APPLICATION & FINISHED ============
-  const renderAppAndFinished = () => (
-    <div className="space-y-6">
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {stages.map((s, i) => {
-              const info = stageLabels[s];
-              const isCurrent = room.current_stage === s;
-              const isPast = stages.indexOf(room.current_stage) > i;
-              return (
-                <div key={s} className="flex items-center gap-2 flex-shrink-0">
-                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    isCurrent ? info.className : isPast ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
-                  }`}>{info.label}</div>
-                  {i < stages.length - 1 && <div className="w-4 h-0.5 bg-border" />}
-                </div>
-              );
-            })}
-          </div>
-          {room.current_stage !== 'finished' && (
-            <Button onClick={handleAdvanceClick} className="w-full mt-3" size="sm">
-              <Play className="w-3 h-3 mr-1" /> Avançar para {nextStageName}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+        <hr className="border-primary/30" />
 
-      {/* App Questions */}
-      {room.current_stage === 'application_open' && (
+        {/* Add app questions */}
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-heading flex items-center gap-2">
-                <Badge className="phase-app">Aplicação</Badge> Questões
+                <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
               </CardTitle>
               <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
                 <DialogTrigger asChild>
@@ -556,15 +584,15 @@ export default function TeacherRoomManage() {
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle>
-                    <DialogDescription>Crie uma questão para a fase de aplicação.</DialogDescription>
+                    <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
+                    <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3 pt-2">
                     <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
-                    <div><Label>Opção A</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
-                    <div><Label>Opção B</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
-                    <div><Label>Opção C</Label><Input value={appOptC} onChange={e => setAppOptC(e.target.value)} /></div>
-                    <div><Label>Opção D</Label><Input value={appOptD} onChange={e => setAppOptD(e.target.value)} /></div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
+                      <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+                    </div>
                     <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
                   </div>
                 </DialogContent>
@@ -577,18 +605,17 @@ export default function TeacherRoomManage() {
             ) : (
               <div className="space-y-4">
                 {appQuestions.map((q: any, i: number) => (
-                  <div key={q.id}>
+                  <div key={q.id} className="p-3 rounded-lg border">
                     <p className="text-sm font-medium mb-2">Q{i + 1}. {q.question_text}</p>
                     {appDistribution[q.id] && (
-                      <div className="flex gap-1 h-6">
-                        {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                      <div className="flex gap-2">
+                        {(['A', 'B'] as const).map(opt => {
                           const count = appDistribution[q.id]?.[opt] || 0;
-                          const total = Object.values(appDistribution[q.id] || {}).reduce((s, v) => s + v, 0);
-                          const pct = total > 0 ? (count / total) * 100 : 0;
-                          if (pct === 0) return null;
+                          const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
                           return (
-                            <div key={opt} className="bg-primary rounded text-primary-foreground text-xs flex items-center justify-center font-medium"
-                              style={{ width: `${pct}%`, minWidth: pct > 0 ? '24px' : 0 }}>{opt}</div>
+                            <div key={opt} className="flex items-center gap-1">
+                              <Badge variant="outline">{label}: {count} equipe(s)</Badge>
+                            </div>
                           );
                         })}
                       </div>
@@ -599,7 +626,49 @@ export default function TeacherRoomManage() {
             )}
           </CardContent>
         </Card>
-      )}
+
+        <div className="text-sm text-muted-foreground text-center">
+          {teamsAnsweredAll}/{teams.length} equipes finalizaram todas as questões
+        </div>
+
+        <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
+          Finalizar Aplicação → Encerrar Sessão
+        </Button>
+      </div>
+    );
+  };
+
+  // ============ FINISHED ============
+  const renderFinished = () => (
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2">
+            {stages.map((s, i) => {
+              const info = stageLabels[s];
+              const isCurrent = room.current_stage === s;
+              const isPast = stages.indexOf(room.current_stage) > i;
+              return (
+                <div key={s} className="flex items-center gap-2 flex-shrink-0">
+                  <div className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isCurrent ? info.className : isPast ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
+                  }`}>{info.label}</div>
+                  {i < stages.length - 1 && <div className="w-4 h-0.5 bg-border" />}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+      <div className="text-center py-8">
+        <CheckCircle2 className="w-16 h-16 mx-auto text-success mb-4" />
+        <h2 className="text-2xl font-heading font-bold">Sessão Finalizada</h2>
+        <p className="text-muted-foreground mt-2">Todas as etapas foram concluídas.</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Composição da nota: 30% iRAT + 40% tRAT + 30% Aplicação
+        </p>
+        <Button onClick={() => navigate('/dashboard')} className="mt-6">Voltar ao Dashboard</Button>
+      </div>
     </div>
   );
 
@@ -625,7 +694,8 @@ export default function TeacherRoomManage() {
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
         {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
-        {(room.current_stage === 'application_open' || room.current_stage === 'finished') && renderAppAndFinished()}
+        {room.current_stage === 'application_open' && renderAppMonitoring()}
+        {room.current_stage === 'finished' && renderFinished()}
       </main>
 
       {/* Advance confirmation */}
