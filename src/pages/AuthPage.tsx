@@ -48,7 +48,7 @@ export default function AuthPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-2">
             <GraduationCap className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-heading font-bold tracking-tight">TBL Active</h1>
+          <h1 className="text-3xl font-heading font-bold tracking-tight">TBL Virtual</h1>
           <p className="text-muted-foreground">Área do Professor</p>
         </div>
 
@@ -56,7 +56,7 @@ export default function AuthPage() {
           <CardHeader className="pb-4">
             <CardTitle className="font-heading text-xl">{isSignUp ? 'Criar Conta' : 'Entrar'}</CardTitle>
             <CardDescription>
-              {isSignUp ? 'Cadastre-se como professor' : 'Bem-vindo de volta ao TBL Active'}
+              {isSignUp ? 'Cadastre-se como professor' : 'Bem-vindo de volta ao TBL Virtual'}
             </CardDescription>
           </CardHeader>
           <CardContent>

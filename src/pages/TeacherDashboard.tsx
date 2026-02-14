@@ -113,7 +113,7 @@ export default function TeacherDashboard() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-heading font-bold">TBL Active</h1>
+            <h1 className="text-xl font-heading font-bold">TBL Virtual</h1>
             <p className="text-sm text-muted-foreground">Olá, {profile?.full_name}</p>
           </div>
           <div className="flex items-center gap-2">
