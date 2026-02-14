@@ -33,29 +33,39 @@ export default function LandingPage() {
       const email = `${roomCode.trim().toLowerCase()}_${Date.now()}@student.tbl`;
       const password = `student_${roomCode.trim()}_${Date.now()}`;
       
+      // First find the room
+      const { data: room, error: roomError } = await supabase
+        .from('rooms')
+        .select('id')
+        .eq('code', roomCode.trim().toUpperCase())
+        .eq('is_active', true)
+        .single();
+      
+      if (roomError || !room) {
+        toast.error('Sala não encontrada ou inativa');
+        return;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.origin },
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { full_name: studentName.trim(), role: 'student' },
+        },
       });
       if (error) throw error;
       if (data.user) {
-        await supabase.from('profiles').insert({ id: data.user.id, full_name: studentName.trim() });
-        await supabase.from('user_roles').insert({ user_id: data.user.id, role: 'student' });
+        // Generate participant code and join room
+        const { data: codeData } = await supabase.rpc('generate_participant_code', { p_room_id: room.id });
+        await supabase.from('room_participants').insert({
+          room_id: room.id,
+          user_id: data.user.id,
+          participant_code: codeData as string,
+        });
         
-        const { data: room, error: roomError } = await supabase
-          .from('rooms')
-          .select('id')
-          .eq('code', roomCode.trim().toUpperCase())
-          .eq('is_active', true)
-          .single();
-        
-        if (roomError || !room) {
-          toast.error('Sala não encontrada ou inativa');
-          return;
-        }
-        
-        navigate(`/room/${room.id}/join`);
+        toast.success(`Entrou na sala! Seu código: ${codeData}`);
+        navigate(`/room/${room.id}`);
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao entrar na sala');
