@@ -36,7 +36,6 @@ export default function QuizManager() {
   const [newQuizTitle, setNewQuizTitle] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
 
-  // Question form
   const [qText, setQText] = useState('');
   const [optA, setOptA] = useState('');
   const [optB, setOptB] = useState('');
@@ -62,8 +61,8 @@ export default function QuizManager() {
   const createQuiz = async () => {
     if (!newQuizTitle.trim()) return;
     const { error } = await supabase.from('quizzes').insert({ title: newQuizTitle.trim(), teacher_id: user!.id });
-    if (error) { toast.error('Failed to create quiz'); return; }
-    toast.success('Quiz created!');
+    if (error) { toast.error('Falha ao criar quiz'); return; }
+    toast.success('Quiz criado!');
     setNewQuizTitle('');
     setCreateOpen(false);
     loadQuizzes();
@@ -76,7 +75,7 @@ export default function QuizManager() {
 
   const addQuestion = async () => {
     if (!qText.trim() || !optA || !optB || !optC || !optD) {
-      toast.error('Fill in all fields');
+      toast.error('Preencha todos os campos');
       return;
     }
     const { error } = await supabase.from('questions').insert({
@@ -89,8 +88,8 @@ export default function QuizManager() {
       correct_option: correct,
       sort_order: questions.length,
     });
-    if (error) { toast.error('Failed to add question'); return; }
-    toast.success('Question added!');
+    if (error) { toast.error('Falha ao adicionar questão'); return; }
+    toast.success('Questão adicionada!');
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
     setAddQOpen(false);
     loadQuestions(selectedQuiz!.id);
@@ -106,7 +105,7 @@ export default function QuizManager() {
     setSelectedQuiz(null);
     setQuestions([]);
     loadQuizzes();
-    toast.success('Quiz deleted');
+    toast.success('Quiz excluído');
   };
 
   if (selectedQuiz) {
@@ -119,31 +118,31 @@ export default function QuizManager() {
             </Button>
             <div>
               <h1 className="text-xl font-heading font-bold">{selectedQuiz.title}</h1>
-              <p className="text-sm text-muted-foreground">{questions.length} questions</p>
+              <p className="text-sm text-muted-foreground">{questions.length} questões</p>
             </div>
           </div>
         </header>
         <main className="container mx-auto px-4 py-6 space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-lg font-heading font-semibold">Questions</h2>
+            <h2 className="text-lg font-heading font-semibold">Questões</h2>
             <Dialog open={addQOpen} onOpenChange={setAddQOpen}>
               <DialogTrigger asChild>
-                <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Add Question</Button>
+                <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Questão</Button>
               </DialogTrigger>
               <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle className="font-heading">Add Question</DialogTitle>
+                  <DialogTitle className="font-heading">Adicionar Questão</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 pt-2">
                   <div className="space-y-1">
-                    <Label>Question</Label>
-                    <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Enter your question..." />
+                    <Label>Questão</Label>
+                    <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite sua questão..." />
                   </div>
                   {(['A', 'B', 'C', 'D'] as const).map((opt) => (
                     <div key={opt} className="space-y-1">
                       <Label className="flex items-center gap-2">
-                        <span>Option {opt}</span>
-                        {correct === opt && <span className="text-xs px-1.5 py-0.5 rounded bg-success text-success-foreground">Correct</span>}
+                        <span>Opção {opt}</span>
+                        {correct === opt && <span className="text-xs px-1.5 py-0.5 rounded bg-success text-success-foreground">Correta</span>}
                       </Label>
                       <div className="flex gap-2">
                         <Input
@@ -156,7 +155,7 @@ export default function QuizManager() {
                             else if (opt === 'C') setOptC(v);
                             else setOptD(v);
                           }}
-                          placeholder={`Option ${opt}`}
+                          placeholder={`Opção ${opt}`}
                         />
                         <Button
                           type="button"
@@ -169,13 +168,13 @@ export default function QuizManager() {
                       </div>
                     </div>
                   ))}
-                  <Button onClick={addQuestion} className="w-full">Add Question</Button>
+                  <Button onClick={addQuestion} className="w-full">Adicionar Questão</Button>
                 </div>
               </DialogContent>
             </Dialog>
           </div>
           {questions.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No questions yet.</p>
+            <p className="text-muted-foreground text-center py-8">Nenhuma questão ainda.</p>
           ) : (
             <div className="space-y-3">
               {questions.map((q, i) => (
@@ -219,32 +218,32 @@ export default function QuizManager() {
           <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-xl font-heading font-bold">Question Bank</h1>
+          <h1 className="text-xl font-heading font-bold">Banco de Questões</h1>
         </div>
       </header>
       <main className="container mx-auto px-4 py-6 space-y-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-heading font-semibold">Your Quizzes</h2>
+          <h2 className="text-lg font-heading font-semibold">Seus Quizzes</h2>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button size="sm"><Plus className="w-4 h-4 mr-1" /> New Quiz</Button>
+              <Button size="sm"><Plus className="w-4 h-4 mr-1" /> Novo Quiz</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="font-heading">Create Quiz</DialogTitle>
+                <DialogTitle className="font-heading">Criar Quiz</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 pt-2">
                 <div className="space-y-1">
-                  <Label>Quiz Title</Label>
-                  <Input value={newQuizTitle} onChange={e => setNewQuizTitle(e.target.value)} placeholder="e.g. Chapter 5 Review" />
+                  <Label>Título do Quiz</Label>
+                  <Input value={newQuizTitle} onChange={e => setNewQuizTitle(e.target.value)} placeholder="Ex: Revisão Capítulo 5" />
                 </div>
-                <Button onClick={createQuiz} className="w-full">Create Quiz</Button>
+                <Button onClick={createQuiz} className="w-full">Criar Quiz</Button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
         {quizzes.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">No quizzes yet.</p>
+          <p className="text-muted-foreground text-center py-8">Nenhum quiz ainda.</p>
         ) : (
           <div className="space-y-2">
             {quizzes.map(q => (
@@ -252,7 +251,7 @@ export default function QuizManager() {
                 <CardContent className="py-3 flex items-center justify-between">
                   <div>
                     <p className="font-medium">{q.title}</p>
-                    <p className="text-sm text-muted-foreground">Created {new Date(q.created_at).toLocaleDateString()}</p>
+                    <p className="text-sm text-muted-foreground">Criado em {new Date(q.created_at).toLocaleDateString('pt-BR')}</p>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="icon" onClick={e => { e.stopPropagation(); deleteQuiz(q.id); }}>

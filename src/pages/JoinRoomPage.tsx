@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -47,11 +47,11 @@ export default function JoinRoomPage() {
         room_id: roomId!,
       });
       if (error) {
-        if (error.code === '23505') toast.error('You are already in a team for this room');
-        else toast.error('Failed to join team');
+        if (error.code === '23505') toast.error('Você já está em uma equipe nesta sala');
+        else toast.error('Falha ao entrar na equipe');
         return;
       }
-      toast.success('Joined team!');
+      toast.success('Entrou na equipe!');
       navigate(`/room/${roomId}`);
     } finally {
       setJoining(false);
@@ -62,8 +62,8 @@ export default function JoinRoomPage() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3">
-          <h1 className="text-xl font-heading font-bold">Select Your Team</h1>
-          <p className="text-sm text-muted-foreground">Choose a team to join</p>
+          <h1 className="text-xl font-heading font-bold">Escolha sua Equipe</h1>
+          <p className="text-sm text-muted-foreground">Selecione uma equipe para participar</p>
         </div>
       </header>
       <main className="container mx-auto px-4 py-6 max-w-lg">
@@ -75,9 +75,9 @@ export default function JoinRoomPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <p className="font-heading font-semibold">{team.name}</p>
-                <p className="text-xs text-muted-foreground">{team.members.length} members</p>
+                <p className="text-xs text-muted-foreground">{team.members.length} membros</p>
                 <Button size="sm" className="w-full" onClick={() => joinTeam(team.id)} disabled={joining}>
-                  Join
+                  Entrar
                 </Button>
               </CardContent>
             </Card>

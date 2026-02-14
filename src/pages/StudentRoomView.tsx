@@ -43,11 +43,11 @@ type TratAttempt = {
 const TRAT_SCORES = [4, 2, 1, 0];
 
 const stageInfo: Record<string, { label: string; className: string; bgClass: string }> = {
-  waiting: { label: 'Waiting for teacher', className: 'bg-muted text-muted-foreground', bgClass: '' },
-  irat_open: { label: 'Individual Test (iRAT)', className: 'phase-irat', bgClass: 'border-t-4 border-t-phase-irat' },
-  trat_open: { label: 'Team Test (tRAT)', className: 'phase-trat', bgClass: 'border-t-4 border-t-phase-trat' },
-  application_open: { label: 'Application Exercise', className: 'phase-app', bgClass: 'border-t-4 border-t-phase-app' },
-  finished: { label: 'Session Complete', className: 'bg-muted text-muted-foreground', bgClass: '' },
+  waiting: { label: 'Aguardando professor', className: 'bg-muted text-muted-foreground', bgClass: '' },
+  irat_open: { label: 'Teste Individual (iRAT)', className: 'phase-irat', bgClass: 'border-t-4 border-t-phase-irat' },
+  trat_open: { label: 'Teste em Equipe (tRAT)', className: 'phase-trat', bgClass: 'border-t-4 border-t-phase-trat' },
+  application_open: { label: 'Exercício de Aplicação', className: 'phase-app', bgClass: 'border-t-4 border-t-phase-app' },
+  finished: { label: 'Sessão Encerrada', className: 'bg-muted text-muted-foreground', bgClass: '' },
 };
 
 export default function StudentRoomView() {
@@ -59,15 +59,12 @@ export default function StudentRoomView() {
   const [membership, setMembership] = useState<TeamMember | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   
-  // iRAT state
   const [iratResponses, setIratResponses] = useState<Record<string, string>>({});
   const [iratSubmitted, setIratSubmitted] = useState<Set<string>>(new Set());
   
-  // tRAT state
   const [tratAttempts, setTratAttempts] = useState<TratAttempt[]>([]);
   const [tratFeedback, setTratFeedback] = useState<{ correct: boolean; option: string } | null>(null);
 
-  // Application state
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<Record<string, string>>({});
 
@@ -147,7 +144,6 @@ export default function StudentRoomView() {
     if (room?.current_stage === 'application_open') loadAppData();
   }, [room?.current_stage, membership]);
 
-  // Realtime subscriptions
   useEffect(() => {
     const channel = supabase
       .channel(`room-${roomId}`)
@@ -162,7 +158,6 @@ export default function StudentRoomView() {
     return () => { supabase.removeChannel(channel); };
   }, [roomId, loadTratAttempts]);
 
-  // iRAT submit
   const submitIrat = async (questionId: string, option: string) => {
     if (iratSubmitted.has(questionId)) return;
     const question = questions.find(q => q.id === questionId);
@@ -175,7 +170,7 @@ export default function StudentRoomView() {
       selected_option: option,
       is_correct: isCorrect,
     });
-    if (error) { toast.error('Failed to submit'); return; }
+    if (error) { toast.error('Falha ao enviar'); return; }
     
     setIratResponses(prev => ({ ...prev, [questionId]: option }));
     setIratSubmitted(prev => new Set(prev).add(questionId));
@@ -185,14 +180,13 @@ export default function StudentRoomView() {
     }
   };
 
-  // tRAT submit
   const submitTrat = async (questionId: string, option: string) => {
     if (!membership) return;
     const question = questions.find(q => q.id === questionId);
     const existingAttempts = tratAttempts.filter(a => a.question_id === questionId);
     
-    if (existingAttempts.some(a => a.is_correct)) return; // already correct
-    if (existingAttempts.length >= 4) return; // max attempts
+    if (existingAttempts.some(a => a.is_correct)) return;
+    if (existingAttempts.length >= 4) return;
     
     const attemptNumber = existingAttempts.length + 1;
     const isCorrect = question?.correct_option === option;
@@ -207,28 +201,27 @@ export default function StudentRoomView() {
       submitted_by: user!.id,
     });
     if (error) { 
-      if (error.code === '23505') toast.error('This option was already tried');
-      else toast.error('Failed to submit');
+      if (error.code === '23505') toast.error('Esta opção já foi tentada');
+      else toast.error('Falha ao enviar');
       return; 
     }
     
     setTratFeedback({ correct: isCorrect, option });
     
     if (isCorrect) {
-      toast.success(`Correct! ${TRAT_SCORES[attemptNumber - 1]} points!`);
+      toast.success(`Correto! ${TRAT_SCORES[attemptNumber - 1]} pontos!`);
       setTimeout(() => {
         setTratFeedback(null);
         if (currentQ < questions.length - 1) setCurrentQ(prev => prev + 1);
       }, 1500);
     } else {
-      toast.error(`Wrong! ${4 - attemptNumber} attempts remaining`);
+      toast.error(`Errado! ${4 - attemptNumber} tentativas restantes`);
       setTimeout(() => setTratFeedback(null), 1000);
     }
     
     loadTratAttempts();
   };
 
-  // Application submit
   const submitApp = async (questionId: string, option: string) => {
     if (!membership) return;
     const { error } = await supabase.from('application_responses').upsert({
@@ -238,20 +231,20 @@ export default function StudentRoomView() {
       selected_option: option,
       submitted_by: user!.id,
     });
-    if (error) { toast.error('Failed to submit'); return; }
+    if (error) { toast.error('Falha ao enviar'); return; }
     setAppResponses(prev => ({ ...prev, [questionId]: option }));
-    toast.success('Response submitted!');
+    toast.success('Resposta enviada!');
   };
 
-  if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Loading...</div>;
+  if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
 
   const stage = stageInfo[room.current_stage] || stageInfo.waiting;
 
   const renderWaiting = () => (
     <div className="text-center py-16 space-y-4">
       <Clock className="w-16 h-16 mx-auto text-muted-foreground animate-pulse" />
-      <h2 className="text-2xl font-heading font-bold">Waiting for Teacher</h2>
-      <p className="text-muted-foreground">The session hasn't started yet. Hang tight!</p>
+      <h2 className="text-2xl font-heading font-bold">Aguardando Professor</h2>
+      <p className="text-muted-foreground">A sessão ainda não começou. Aguarde!</p>
       <Badge variant="outline" className="text-lg px-4 py-1 font-mono">{room.code}</Badge>
       {membership && <p className="text-sm text-muted-foreground">{membership.teams.name}</p>}
     </div>
@@ -292,31 +285,30 @@ export default function StudentRoomView() {
   );
 
   const renderIrat = () => {
-    if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">No questions loaded.</p>;
+    if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
     const q = questions[currentQ];
     const submitted = iratSubmitted.has(q.id);
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Badge className="phase-irat">iRAT - Individual</Badge>
-          <span className="text-sm text-muted-foreground">{iratSubmitted.size}/{questions.length} answered</span>
+          <span className="text-sm text-muted-foreground">{iratSubmitted.size}/{questions.length} respondidas</span>
         </div>
         {submitted ? (
           <Card>
             <CardContent className="py-8 text-center">
               <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-success" />
-              <p className="font-medium">Answer submitted</p>
-              <p className="text-sm text-muted-foreground">You chose: {iratResponses[q.id]}</p>
+              <p className="font-medium">Resposta enviada</p>
+              <p className="text-sm text-muted-foreground">Você escolheu: {iratResponses[q.id]}</p>
               <div className="flex gap-2 justify-center mt-4">
-                {currentQ > 0 && <Button variant="outline" size="sm" onClick={() => setCurrentQ(p => p - 1)}>Previous</Button>}
-                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Next</Button>}
+                {currentQ > 0 && <Button variant="outline" size="sm" onClick={() => setCurrentQ(p => p - 1)}>Anterior</Button>}
+                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima</Button>}
               </div>
             </CardContent>
           </Card>
         ) : (
           renderQuestion(q, submitIrat, new Set())
         )}
-        {/* Navigation dots */}
         <div className="flex justify-center gap-1.5 pt-2">
           {questions.map((_, i) => (
             <button
@@ -333,7 +325,7 @@ export default function StudentRoomView() {
   };
 
   const renderTrat = () => {
-    if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">No questions loaded.</p>;
+    if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
     const q = questions[currentQ];
     const qAttempts = tratAttempts.filter(a => a.question_id === q.id);
     const isCorrect = qAttempts.some(a => a.is_correct);
@@ -342,7 +334,7 @@ export default function StudentRoomView() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Badge className="phase-trat">tRAT - Team</Badge>
+          <Badge className="phase-trat">tRAT - Equipe</Badge>
           <span className="text-sm text-muted-foreground">{membership?.teams.name}</span>
         </div>
 
@@ -350,11 +342,11 @@ export default function StudentRoomView() {
           <Card>
             <CardContent className="py-8 text-center">
               <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-success" />
-              <p className="text-lg font-heading font-bold">Correct!</p>
-              <p className="text-2xl font-bold text-success">{TRAT_SCORES[qAttempts.findIndex(a => a.is_correct)]} points</p>
-              <p className="text-sm text-muted-foreground mt-1">Found on attempt {qAttempts.findIndex(a => a.is_correct) + 1}</p>
+              <p className="text-lg font-heading font-bold">Correto!</p>
+              <p className="text-2xl font-bold text-success">{TRAT_SCORES[qAttempts.findIndex(a => a.is_correct)]} pontos</p>
+              <p className="text-sm text-muted-foreground mt-1">Encontrado na tentativa {qAttempts.findIndex(a => a.is_correct) + 1}</p>
               <div className="flex gap-2 justify-center mt-4">
-                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Next Question</Button>}
+                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima Questão</Button>}
               </div>
             </CardContent>
           </Card>
@@ -362,10 +354,10 @@ export default function StudentRoomView() {
           <Card>
             <CardContent className="py-8 text-center">
               <XCircle className="w-12 h-12 mx-auto mb-2 text-destructive" />
-              <p className="text-lg font-heading font-bold">No more attempts</p>
-              <p className="text-sm text-muted-foreground">0 points for this question</p>
+              <p className="text-lg font-heading font-bold">Sem mais tentativas</p>
+              <p className="text-sm text-muted-foreground">0 pontos nesta questão</p>
               <div className="flex gap-2 justify-center mt-4">
-                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Next Question</Button>}
+                {currentQ < questions.length - 1 && <Button size="sm" onClick={() => setCurrentQ(p => p + 1)}>Próxima Questão</Button>}
               </div>
             </CardContent>
           </Card>
@@ -382,14 +374,14 @@ export default function StudentRoomView() {
               ))}
             </div>
             <p className="text-sm text-center text-muted-foreground">
-              Attempt {qAttempts.length + 1}/4 • {TRAT_SCORES[qAttempts.length]} points if correct
+              Tentativa {qAttempts.length + 1}/4 • {TRAT_SCORES[qAttempts.length]} pontos se acertar
             </p>
             {renderQuestion(q, submitTrat, disabledOpts)}
           </>
         )}
         
         {tratFeedback && (
-          <div className={`fixed inset-0 flex items-center justify-center bg-background/80 z-50 animate-in fade-in`}>
+          <div className="fixed inset-0 flex items-center justify-center bg-background/80 z-50 animate-in fade-in">
             <div className={`text-center p-8 rounded-2xl ${tratFeedback.correct ? 'bg-success/10' : 'bg-destructive/10'}`}>
               {tratFeedback.correct ? (
                 <CheckCircle2 className="w-20 h-20 mx-auto text-success" />
@@ -397,7 +389,7 @@ export default function StudentRoomView() {
                 <XCircle className="w-20 h-20 mx-auto text-destructive" />
               )}
               <p className="text-2xl font-heading font-bold mt-3">
-                {tratFeedback.correct ? 'Correct!' : 'Wrong!'}
+                {tratFeedback.correct ? 'Correto!' : 'Errado!'}
               </p>
             </div>
           </div>
@@ -424,9 +416,9 @@ export default function StudentRoomView() {
 
   const renderApplication = () => (
     <div className="space-y-4">
-      <Badge className="phase-app">Application Exercise</Badge>
+      <Badge className="phase-app">Exercício de Aplicação</Badge>
       {appQuestions.length === 0 ? (
-        <p className="text-center text-muted-foreground py-8">No application questions yet.</p>
+        <p className="text-center text-muted-foreground py-8">Nenhuma questão de aplicação ainda.</p>
       ) : (
         appQuestions.map((q, i) => (
           <Card key={q.id}>
@@ -460,8 +452,8 @@ export default function StudentRoomView() {
   const renderFinished = () => (
     <div className="text-center py-16 space-y-4">
       <CheckCircle2 className="w-16 h-16 mx-auto text-success" />
-      <h2 className="text-2xl font-heading font-bold">Session Complete!</h2>
-      <p className="text-muted-foreground">Thank you for participating.</p>
+      <h2 className="text-2xl font-heading font-bold">Sessão Encerrada!</h2>
+      <p className="text-muted-foreground">Obrigado por participar.</p>
     </div>
   );
 

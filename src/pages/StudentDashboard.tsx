@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GraduationCap, LogOut, DoorOpen } from 'lucide-react';
+import { LogOut, DoorOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,11 +18,11 @@ type JoinedRoom = {
 };
 
 const stageLabels: Record<string, { label: string; className: string }> = {
-  waiting: { label: 'Waiting', className: 'bg-muted text-muted-foreground' },
+  waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
   trat_open: { label: 'tRAT', className: 'phase-trat' },
-  application_open: { label: 'Application', className: 'phase-app' },
-  finished: { label: 'Finished', className: 'bg-muted text-muted-foreground' },
+  application_open: { label: 'Aplicação', className: 'phase-app' },
+  finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
 
 export default function StudentDashboard() {
@@ -56,7 +56,7 @@ export default function StudentDashboard() {
 
   const joinRoom = async () => {
     if (!roomCode.trim() || roomCode.trim().length !== 6) {
-      toast.error('Enter a 6-character room code');
+      toast.error('Informe um código de 6 caracteres');
       return;
     }
     setJoining(true);
@@ -69,11 +69,10 @@ export default function StudentDashboard() {
         .single();
 
       if (roomError || !room) {
-        toast.error('Room not found or inactive');
+        toast.error('Sala não encontrada ou inativa');
         return;
       }
 
-      // Check if already in room
       const { data: existing } = await supabase
         .from('team_members')
         .select('id')
@@ -88,7 +87,7 @@ export default function StudentDashboard() {
 
       navigate(`/room/${room.id}/join`);
     } catch {
-      toast.error('Failed to join room');
+      toast.error('Falha ao entrar na sala');
     } finally {
       setJoining(false);
     }
@@ -99,10 +98,10 @@ export default function StudentDashboard() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-heading font-bold">TBL Manager</h1>
-            <p className="text-sm text-muted-foreground">Hello, {profile?.full_name}</p>
+            <h1 className="text-xl font-heading font-bold">TBL Active</h1>
+            <p className="text-sm text-muted-foreground">Olá, {profile?.full_name}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/auth'); }}>
+          <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/'); }}>
             <LogOut className="w-4 h-4" />
           </Button>
         </div>
@@ -111,26 +110,26 @@ export default function StudentDashboard() {
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-lg">
         <Card>
           <CardContent className="pt-6">
-            <h2 className="text-lg font-heading font-semibold mb-3">Join a Room</h2>
+            <h2 className="text-lg font-heading font-semibold mb-3">Entrar na Sala</h2>
             <div className="flex gap-2">
               <Input
                 value={roomCode}
                 onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                placeholder="Enter 6-digit code"
+                placeholder="Código da sala"
                 maxLength={6}
                 className="font-mono text-lg tracking-widest text-center"
               />
               <Button onClick={joinRoom} disabled={joining}>
-                <DoorOpen className="w-4 h-4 mr-1" /> Join
+                <DoorOpen className="w-4 h-4 mr-1" /> Entrar
               </Button>
             </div>
           </CardContent>
         </Card>
 
         <div>
-          <h2 className="text-lg font-heading font-semibold mb-3">Your Rooms</h2>
+          <h2 className="text-lg font-heading font-semibold mb-3">Suas Salas</h2>
           {joinedRooms.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">No rooms yet. Enter a code to join one!</p>
+            <p className="text-muted-foreground text-center py-8">Nenhuma sala ainda. Informe o código para entrar!</p>
           ) : (
             <div className="space-y-2">
               {joinedRooms.map(room => (
@@ -142,7 +141,7 @@ export default function StudentDashboard() {
                   <CardContent className="py-3 flex items-center justify-between">
                     <div>
                       <p className="font-medium">{room.room_name}</p>
-                      <p className="text-sm text-muted-foreground">{room.team_name || 'No team'}</p>
+                      <p className="text-sm text-muted-foreground">{room.team_name || 'Sem equipe'}</p>
                     </div>
                     <Badge className={stageLabels[room.current_stage]?.className || ''}>
                       {stageLabels[room.current_stage]?.label || room.current_stage}
