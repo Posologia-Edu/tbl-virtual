@@ -14,16 +14,431 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      application_questions: {
+        Row: {
+          id: string
+          option_a: string | null
+          option_b: string | null
+          option_c: string | null
+          option_d: string | null
+          question_text: string
+          room_id: string
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          option_a?: string | null
+          option_b?: string | null
+          option_c?: string | null
+          option_d?: string | null
+          question_text: string
+          room_id: string
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          option_a?: string | null
+          option_b?: string | null
+          option_c?: string | null
+          option_d?: string | null
+          question_text?: string
+          room_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_questions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      application_responses: {
+        Row: {
+          id: string
+          question_id: string
+          room_id: string
+          selected_option: string | null
+          submitted_at: string
+          submitted_by: string
+          team_id: string
+        }
+        Insert: {
+          id?: string
+          question_id: string
+          room_id: string
+          selected_option?: string | null
+          submitted_at?: string
+          submitted_by: string
+          team_id: string
+        }
+        Update: {
+          id?: string
+          question_id?: string
+          room_id?: string
+          selected_option?: string | null
+          submitted_at?: string
+          submitted_by?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "application_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "application_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_responses_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "application_responses_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      irat_responses: {
+        Row: {
+          id: string
+          is_correct: boolean
+          question_id: string
+          room_id: string
+          selected_option: string
+          student_id: string
+          submitted_at: string
+        }
+        Insert: {
+          id?: string
+          is_correct?: boolean
+          question_id: string
+          room_id: string
+          selected_option: string
+          student_id: string
+          submitted_at?: string
+        }
+        Update: {
+          id?: string
+          is_correct?: boolean
+          question_id?: string
+          room_id?: string
+          selected_option?: string
+          student_id?: string
+          submitted_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "irat_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "irat_responses_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      questions: {
+        Row: {
+          correct_option: string
+          id: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          quiz_id: string
+          sort_order: number
+        }
+        Insert: {
+          correct_option: string
+          id?: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          quiz_id: string
+          sort_order?: number
+        }
+        Update: {
+          correct_option?: string
+          id?: string
+          option_a?: string
+          option_b?: string
+          option_c?: string
+          option_d?: string
+          question_text?: string
+          quiz_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questions_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quizzes: {
+        Row: {
+          created_at: string
+          id: string
+          teacher_id: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          teacher_id: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          teacher_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      rooms: {
+        Row: {
+          code: string
+          created_at: string
+          current_stage: Database["public"]["Enums"]["room_stage"]
+          id: string
+          is_active: boolean
+          name: string
+          quiz_id: string | null
+          teacher_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          current_stage?: Database["public"]["Enums"]["room_stage"]
+          id?: string
+          is_active?: boolean
+          name: string
+          quiz_id?: string | null
+          teacher_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          current_stage?: Database["public"]["Enums"]["room_stage"]
+          id?: string
+          is_active?: boolean
+          name?: string
+          quiz_id?: string | null
+          teacher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rooms_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          id: string
+          joined_at: string
+          room_id: string
+          team_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string
+          room_id: string
+          team_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string
+          room_id?: string
+          team_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          id: string
+          name: string
+          room_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          room_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          room_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trat_attempts: {
+        Row: {
+          attempt_number: number
+          id: string
+          is_correct: boolean
+          question_id: string
+          room_id: string
+          selected_option: string
+          submitted_at: string
+          submitted_by: string
+          team_id: string
+        }
+        Insert: {
+          attempt_number: number
+          id?: string
+          is_correct?: boolean
+          question_id: string
+          room_id: string
+          selected_option: string
+          submitted_at?: string
+          submitted_by: string
+          team_id: string
+        }
+        Update: {
+          attempt_number?: number
+          id?: string
+          is_correct?: boolean
+          question_id?: string
+          room_id?: string
+          selected_option?: string
+          submitted_at?: string
+          submitted_by?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trat_attempts_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trat_attempts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trat_attempts_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_room_code: { Args: never; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "teacher" | "student"
+      room_stage:
+        | "waiting"
+        | "irat_open"
+        | "trat_open"
+        | "application_open"
+        | "finished"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +565,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["teacher", "student"],
+      room_stage: [
+        "waiting",
+        "irat_open",
+        "trat_open",
+        "application_open",
+        "finished",
+      ],
+    },
   },
 } as const
