@@ -185,8 +185,8 @@ export default function StudentRoomView() {
   }, [loadRoom, loadMembership, loadParticipants]);
 
   useEffect(() => {
-    if (room?.quiz_id) loadQuestions(room.quiz_id);
-  }, [room?.quiz_id, loadQuestions]);
+    if (room?.quiz_id && room?.current_stage !== 'waiting') loadQuestions(room.quiz_id);
+  }, [room?.quiz_id, room?.current_stage, loadQuestions]);
 
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
