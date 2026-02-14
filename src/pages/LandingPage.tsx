@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { motion } from 'framer-motion';
-import { GraduationCap, Users, BookOpen, ArrowRight, ChevronDown, Zap, Target, BarChart3, Clock, CheckCircle2, UserPlus, LogIn, Menu, X } from 'lucide-react';
-import heroImage from '@/assets/hero-team.png';
-import tblProcessImage from '@/assets/tbl-process.png';
+import { motion, AnimatePresence } from 'framer-motion';
+import { GraduationCap, Users, BookOpen, ArrowRight, ChevronDown, Zap, Target, BarChart3, CheckCircle2, UserPlus, LogIn, Menu, X, Sparkles, Brain, Layers } from 'lucide-react';
+import heroImage from '@/assets/hero-virtual.png';
+import tblFlowImage from '@/assets/tbl-flow.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -17,7 +17,6 @@ export default function LandingPage() {
   const [roomCode, setRoomCode] = useState('');
   const [studentName, setStudentName] = useState('');
   const [joining, setJoining] = useState(false);
-  const [tblSectionVisible, setTblSectionVisible] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleStudentJoin = async () => {
@@ -31,7 +30,6 @@ export default function LandingPage() {
     }
     setJoining(true);
     try {
-      // Sign up anonymously or sign in as student
       const email = `${roomCode.trim().toLowerCase()}_${Date.now()}@student.tbl`;
       const password = `student_${roomCode.trim()}_${Date.now()}`;
       
@@ -45,7 +43,6 @@ export default function LandingPage() {
         await supabase.from('profiles').insert({ id: data.user.id, full_name: studentName.trim() });
         await supabase.from('user_roles').insert({ user_id: data.user.id, role: 'student' });
         
-        // Find room
         const { data: room, error: roomError } = await supabase
           .from('rooms')
           .select('id')
@@ -67,47 +64,43 @@ export default function LandingPage() {
     }
   };
 
-  const scrollToTbl = () => {
-    document.getElementById('tbl-section')?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
-    <div className="min-h-screen bg-card">
+    <div className="min-h-screen bg-background">
       {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-sm border-b">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-primary-foreground" />
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-heading font-bold">TBL Active</span>
+            <span className="text-lg font-heading font-bold tracking-tight">TBL Virtual</span>
           </button>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-1">
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all"
             >
-              Home
+              Início
             </button>
             <button
-              onClick={scrollToTbl}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' })}
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all"
             >
-              TBL Active
+              Como Funciona
             </button>
             <button
               onClick={() => setStudentDialogOpen(true)}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all"
             >
               Estudante
             </button>
             <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              <DropdownMenuTrigger className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all">
                 Professor <ChevronDown className="w-3 h-3" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={() => navigate('/auth?mode=signup')}>
                   <UserPlus className="w-4 h-4 mr-2" /> Criar Conta
                 </DropdownMenuItem>
@@ -116,123 +109,164 @@ export default function LandingPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <button className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all">
               Planos
             </button>
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <button className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all">
               Sobre
             </button>
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <button className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-all">
               Contato
             </button>
           </div>
 
-          {/* Mobile hamburger */}
-          <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          <button className="md:hidden p-2 rounded-lg hover:bg-accent" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
 
-        {/* Mobile menu */}
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="md:hidden bg-card border-t px-4 py-4 space-y-3"
-          >
-            <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2">Home</button>
-            <button onClick={() => { scrollToTbl(); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2">TBL Active</button>
-            <button onClick={() => { setStudentDialogOpen(true); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2">Estudante</button>
-            <button onClick={() => { navigate('/auth?mode=signup'); }} className="block w-full text-left text-sm font-medium py-2">Professor - Criar Conta</button>
-            <button onClick={() => { navigate('/auth?mode=signin'); }} className="block w-full text-left text-sm font-medium py-2">Professor - Entrar</button>
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="md:hidden overflow-hidden bg-background border-t border-border/50"
+            >
+              <div className="px-4 py-3 space-y-1">
+                <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Início</button>
+                <button onClick={() => { document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Como Funciona</button>
+                <button onClick={() => { setStudentDialogOpen(true); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Estudante</button>
+                <button onClick={() => navigate('/auth?mode=signup')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Professor - Criar Conta</button>
+                <button onClick={() => navigate('/auth?mode=signin')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-lg hover:bg-accent">Professor - Entrar</button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-24 pb-16 md:pt-32 md:pb-24">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-2 gap-12 items-center">
+      {/* Hero - Full bleed asymmetric */}
+      <section className="relative pt-20 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/10 pointer-events-none" />
+        <div className="container mx-auto px-4 py-16 md:py-24 lg:py-32">
+          <div className="grid lg:grid-cols-5 gap-10 items-center">
             <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              className="space-y-6"
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+              className="lg:col-span-3 space-y-8"
             >
-              <span className="text-sm font-semibold text-primary tracking-wider uppercase">Metodologia Ativa</span>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold leading-tight">
-                Team Based<br />Learning
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
+                <Sparkles className="w-4 h-4" />
+                Plataforma de Aprendizagem Ativa
+              </div>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-heading font-bold leading-[1.1] tracking-tight">
+                Transforme sua
+                <span className="block bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                  sala de aula
+                </span>
               </h1>
-              <p className="text-lg text-muted-foreground leading-relaxed max-w-md">
-                Aprendizagem Baseada em Equipes que visa uma aprendizagem mais colaborativa, por meio de uma sequência de práticas de ensino e aprendizagem.
+              <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-xl">
+                O <strong className="text-foreground">TBL Virtual</strong> é a plataforma que digitaliza a metodologia Team-Based Learning, tornando cada sessão mais dinâmica, organizada e envolvente.
               </p>
-              <p className="text-muted-foreground">
-                Promove o desenvolvimento de equipes e fornece oportunidades de aprendizagem mais significativa.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button size="lg" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8">
-                  Quero Me Cadastrar! <ArrowRight className="w-4 h-4 ml-2" />
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button size="lg" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8 h-12 rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-shadow">
+                  Começar Agora <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
-                <Button size="lg" variant="outline" onClick={() => setStudentDialogOpen(true)} className="text-base px-8">
-                  Sou Estudante
+                <Button size="lg" variant="outline" onClick={() => setStudentDialogOpen(true)} className="text-base px-8 h-12 rounded-xl">
+                  Entrar como Estudante
                 </Button>
+              </div>
+              {/* Stats */}
+              <div className="flex gap-8 pt-4">
+                {[
+                  { num: '3', label: 'Fases integradas' },
+                  { num: '∞', label: 'Salas simultâneas' },
+                  { num: '100%', label: 'Tempo real' },
+                ].map(s => (
+                  <div key={s.label}>
+                    <p className="text-2xl font-heading font-bold text-primary">{s.num}</p>
+                    <p className="text-xs text-muted-foreground">{s.label}</p>
+                  </div>
+                ))}
               </div>
             </motion.div>
 
             <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              className="lg:col-span-2 relative"
             >
-              <img src={heroImage} alt="Equipe colaborando em TBL" className="w-full max-w-lg mx-auto" />
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-primary/10">
+                <img src={heroImage} alt="Estudantes colaborando em ambiente virtual" className="w-full" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background/30 to-transparent" />
+              </div>
+              {/* Floating card */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.8 }}
+                className="absolute -left-6 bottom-8 bg-card rounded-xl p-3 shadow-lg border hidden lg:flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">IF-AT Digital</p>
+                  <p className="text-xs text-muted-foreground">Feedback instantâneo</p>
+                </div>
+              </motion.div>
             </motion.div>
           </div>
         </div>
       </section>
 
-      {/* Features Cards */}
-      <section className="py-16 bg-background">
+      {/* Differentials - Horizontal scroll cards */}
+      <section className="py-20 bg-card">
         <div className="container mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-center mb-12"
+            className="max-w-2xl mb-14"
           >
-            <h2 className="text-3xl font-heading font-bold mb-3">Por que usar TBL Active?</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Facilite a aplicação da metodologia TBL com tecnologia moderna e intuitiva.
+            <h2 className="text-3xl md:text-4xl font-heading font-bold mb-4">
+              Tudo que você precisa para aplicar o TBL
+            </h2>
+            <p className="text-muted-foreground text-lg">
+              Uma experiência completa — do preparo individual à aplicação em equipe.
             </p>
           </motion.div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[
-              { icon: Zap, title: 'Rápido e Fácil', desc: 'Configure uma sessão TBL em minutos com interface intuitiva.' },
-              { icon: Users, title: 'Colaborativo', desc: 'Alunos trabalham em equipe com sincronização em tempo real.' },
-              { icon: Target, title: 'IF-AT Integrado', desc: 'Sistema de raspadinha digital com pontuação automática.' },
-              { icon: BarChart3, title: 'Resultados', desc: 'Visualize o desempenho individual e em equipe instantaneamente.' },
+              { icon: Brain, title: 'Quizzes Inteligentes', desc: 'Crie bancos de questões com alternativas e gabarito. Reutilize em qualquer sessão.', gradient: 'from-primary/10 to-primary/5' },
+              { icon: Users, title: 'Equipes em Tempo Real', desc: 'Alunos entram com um código e são organizados em equipes com sincronização instantânea.', gradient: 'from-[hsl(var(--phase-trat))]/10 to-[hsl(var(--phase-trat))]/5' },
+              { icon: Layers, title: 'Raspadinha Digital (IF-AT)', desc: 'O sistema de pontuação por tentativas motiva a discussão e garante aprendizado profundo.', gradient: 'from-[hsl(var(--phase-app))]/10 to-[hsl(var(--phase-app))]/5' },
+              { icon: BarChart3, title: 'Resultados Instantâneos', desc: 'Acompanhe o desempenho individual e coletivo em dashboards claros e organizados.', gradient: 'from-primary/10 to-primary/5' },
+              { icon: Zap, title: 'Sem Complicação', desc: 'Professores criam salas em segundos. Alunos entram com nome e código — sem cadastro.', gradient: 'from-[hsl(var(--phase-trat))]/10 to-[hsl(var(--phase-trat))]/5' },
+              { icon: Target, title: 'Aplicação Guiada', desc: 'Cenários complexos onde equipes decidem juntas e comparam suas respostas.', gradient: 'from-[hsl(var(--phase-app))]/10 to-[hsl(var(--phase-app))]/5' },
             ].map((feat, i) => (
               <motion.div
                 key={feat.title}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="bg-card rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow border"
+                transition={{ delay: i * 0.08 }}
+                className={`group rounded-2xl p-6 bg-gradient-to-br ${feat.gradient} border border-border/50 hover:border-border hover:shadow-md transition-all cursor-default`}
               >
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                  <feat.icon className="w-6 h-6 text-primary" />
-                </div>
+                <feat.icon className="w-8 h-8 text-foreground/80 mb-4 group-hover:scale-110 transition-transform" />
                 <h3 className="font-heading font-semibold text-lg mb-2">{feat.title}</h3>
-                <p className="text-sm text-muted-foreground">{feat.desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{feat.desc}</p>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* TBL Process Section */}
-      <section id="tbl-section" className="py-20">
+      {/* How it works - Timeline */}
+      <section id="como-funciona" className="py-20 bg-background">
         <div className="container mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -240,78 +274,80 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <span className="text-sm font-semibold text-primary tracking-wider uppercase">Como Funciona</span>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold mt-2 mb-4">O Processo TBL</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              A dinâmica do TBL segue três fases essenciais que garantem uma aprendizagem profunda e colaborativa.
+            <span className="text-sm font-semibold text-primary tracking-wider uppercase">Passo a Passo</span>
+            <h2 className="text-3xl md:text-4xl font-heading font-bold mt-3 mb-4">Como funciona o TBL Virtual</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto text-lg">
+              Três fases que transformam o conhecimento individual em aprendizado coletivo.
             </p>
           </motion.div>
 
-          {/* Process Image */}
+          {/* Flow illustration */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="mb-16"
+            className="mb-20 max-w-3xl mx-auto"
           >
-            <img src={tblProcessImage} alt="Processo TBL" className="w-full max-w-4xl mx-auto rounded-2xl shadow-lg" />
+            <img src={tblFlowImage} alt="Fluxo do processo TBL Virtual" className="w-full rounded-2xl" />
           </motion.div>
 
-          {/* Phase Details */}
-          <div className="grid md:grid-cols-3 gap-8">
+          {/* Phase cards - vertical timeline style */}
+          <div className="max-w-4xl mx-auto space-y-8">
             {[
               {
-                phase: 'Fase 1',
-                title: 'iRAT - Teste Individual',
-                desc: 'Cada aluno responde individualmente às questões de múltipla escolha. É a Garantia de Preparo Individual.',
+                step: '01',
+                title: 'iRAT — Garantia de Preparo Individual',
+                desc: 'Cada aluno responde individualmente às questões de múltipla escolha. Avalia o nível de preparo antes da colaboração.',
                 icon: BookOpen,
-                color: 'phase-irat',
-                lightColor: 'phase-irat-light',
-                details: ['Questões de múltipla escolha (A, B, C, D)', 'Uma tentativa por questão', '1 ponto por resposta correta', 'Resultado liberado após o fechamento'],
+                colorClass: 'phase-irat',
+                lightClass: 'phase-irat-light',
+                items: ['Questões de múltipla escolha (A, B, C, D)', 'Uma tentativa por questão', '1 ponto por resposta correta'],
               },
               {
-                phase: 'Fase 2',
-                title: 'tRAT - Teste em Equipe',
-                desc: 'As mesmas questões são respondidas em equipe usando a lógica IF-AT (raspadinha).',
+                step: '02',
+                title: 'tRAT — Garantia de Preparo em Equipe',
+                desc: 'As mesmas questões são respondidas em equipe usando o sistema IF-AT (raspadinha digital) com feedback imediato.',
                 icon: Users,
-                color: 'phase-trat',
-                lightColor: 'phase-trat-light',
-                details: ['Mesmas questões do iRAT', '1ª tentativa correta = 4 pontos', '2ª tentativa = 2 pontos', '3ª tentativa = 1 ponto', 'Feedback imediato (certo/errado)'],
+                colorClass: 'phase-trat',
+                lightClass: 'phase-trat-light',
+                items: ['1ª tentativa correta = 4 pontos', '2ª tentativa = 2 pontos', '3ª tentativa = 1 ponto', 'Feedback imediato a cada resposta'],
               },
               {
-                phase: 'Fase 3',
-                title: 'Aplicação',
-                desc: 'Exercícios de aplicação com cenários complexos onde as equipes decidem juntas.',
+                step: '03',
+                title: 'Aplicação — Cenários Complexos',
+                desc: 'Exercícios de aplicação onde as equipes analisam cenários e tomam decisões conjuntas.',
                 icon: Target,
-                color: 'phase-app',
-                lightColor: 'phase-app-light',
-                details: ['Cenários complexos', 'Decisão em equipe', 'Histograma de respostas', 'Discussão guiada pelo professor'],
+                colorClass: 'phase-app',
+                lightClass: 'phase-app-light',
+                items: ['Problemas contextualizados', 'Decisão coletiva da equipe', 'Discussão guiada pelo professor'],
               },
             ].map((phase, i) => (
               <motion.div
-                key={phase.title}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                key={phase.step}
+                initial={{ opacity: 0, x: i % 2 === 0 ? -30 : 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.15 }}
-                className={`rounded-2xl p-6 border ${phase.lightColor}`}
+                transition={{ delay: 0.1 }}
+                className="flex gap-6 items-start"
               >
-                <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold mb-4 ${phase.color}`}>
-                  {phase.phase}
+                <div className={`flex-shrink-0 w-14 h-14 rounded-2xl ${phase.colorClass} flex items-center justify-center text-lg font-heading font-bold`}>
+                  {phase.step}
                 </div>
-                <div className="flex items-center gap-3 mb-3">
-                  <phase.icon className="w-6 h-6" />
-                  <h3 className="font-heading font-bold text-lg">{phase.title}</h3>
+                <div className={`flex-1 rounded-2xl p-6 border ${phase.lightClass}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <phase.icon className="w-5 h-5" />
+                    <h3 className="font-heading font-bold text-lg">{phase.title}</h3>
+                  </div>
+                  <p className="text-sm opacity-80 mb-4">{phase.desc}</p>
+                  <ul className="grid sm:grid-cols-2 gap-2">
+                    {phase.items.map(item => (
+                      <li key={item} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 opacity-60" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <p className="text-sm mb-4 opacity-80">{phase.desc}</p>
-                <ul className="space-y-2">
-                  {phase.details.map(d => (
-                    <li key={d} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0 opacity-70" />
-                      <span>{d}</span>
-                    </li>
-                  ))}
-                </ul>
               </motion.div>
             ))}
           </div>
@@ -319,24 +355,33 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 bg-primary">
-        <div className="container mx-auto px-4 text-center">
+      <section className="py-20 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary to-primary/80" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1)_0%,transparent_60%)]" />
+        <div className="container mx-auto px-4 text-center relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="space-y-6"
+            className="space-y-6 max-w-xl mx-auto"
           >
-            <h2 className="text-3xl font-heading font-bold text-primary-foreground">Comece Agora!</h2>
-            <p className="text-primary-foreground/80 max-w-md mx-auto">
-              Crie sua conta de professor e aplique o TBL na sua próxima aula.
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary-foreground">
+              Pronto para transformar suas aulas?
+            </h2>
+            <p className="text-primary-foreground/80 text-lg">
+              Crie sua conta de professor gratuitamente e aplique o TBL na sua próxima sessão.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button size="lg" variant="secondary" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8">
-                Cadastrar como Professor
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <Button size="lg" variant="secondary" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8 h-12 rounded-xl">
+                Criar Conta de Professor
               </Button>
-              <Button size="lg" variant="outline" onClick={() => setStudentDialogOpen(true)} className="text-base px-8 border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10">
-                Entrar como Estudante
+              <Button
+                size="lg"
+                variant="ghost"
+                onClick={() => setStudentDialogOpen(true)}
+                className="text-base px-8 h-12 rounded-xl text-primary-foreground border border-primary-foreground/20 hover:bg-primary-foreground/10"
+              >
+                Sou Estudante
               </Button>
             </div>
           </motion.div>
@@ -344,15 +389,19 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="py-8 border-t bg-card">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2026 TBL Active. Aprendizagem Baseada em Equipes.</p>
+      <footer className="py-10 border-t bg-card">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="text-sm font-heading font-semibold">TBL Virtual</span>
+          </div>
+          <p className="text-sm text-muted-foreground">© 2026 TBL Virtual. Aprendizagem Baseada em Equipes.</p>
         </div>
       </footer>
 
       {/* Student Dialog */}
       <Dialog open={studentDialogOpen} onOpenChange={setStudentDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-heading text-xl flex items-center gap-2">
               <GraduationCap className="w-5 h-5 text-primary" /> Entrar na Sala
@@ -365,6 +414,7 @@ export default function LandingPage() {
                 value={studentName}
                 onChange={e => setStudentName(e.target.value)}
                 placeholder="Nome completo"
+                className="rounded-xl"
               />
             </div>
             <div className="space-y-2">
@@ -374,10 +424,10 @@ export default function LandingPage() {
                 onChange={e => setRoomCode(e.target.value.toUpperCase())}
                 placeholder="Ex: ABC123"
                 maxLength={6}
-                className="font-mono text-xl tracking-[0.3em] text-center"
+                className="font-mono text-xl tracking-[0.3em] text-center rounded-xl"
               />
             </div>
-            <Button onClick={handleStudentJoin} disabled={joining} className="w-full" size="lg">
+            <Button onClick={handleStudentJoin} disabled={joining} className="w-full rounded-xl" size="lg">
               {joining ? 'Entrando...' : 'Entrar na Sala'}
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
