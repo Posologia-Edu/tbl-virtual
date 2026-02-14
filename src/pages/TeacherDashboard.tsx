@@ -23,6 +23,7 @@ import {
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
   BarChart3, Settings2,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -71,7 +72,7 @@ type ProfileData = {
 
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
-  | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz';
+  | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -127,6 +128,14 @@ export default function TeacherDashboard() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
+
+  // Quiz config state (for launching)
+  const [configQuiz, setConfigQuiz] = useState<Quiz | null>(null);
+  const [maxGrade, setMaxGrade] = useState('10');
+  const [individualPct, setIndividualPct] = useState('70');
+  const [teamPct, setTeamPct] = useState('30');
+  const [showAnswers, setShowAnswers] = useState(true);
+  const [showIndividualInTeam, setShowIndividualInTeam] = useState(false);
 
   useEffect(() => {
     if (user) loadData();
@@ -237,6 +246,31 @@ export default function TeacherDashboard() {
     setNewQuizTitle(''); setNewQuizOptions('4');
     loadData();
     setActiveView('my-quizzes');
+  };
+
+  const openQuizConfig = (quiz: Quiz) => {
+    setConfigQuiz(quiz);
+    setMaxGrade('10'); setIndividualPct('70'); setTeamPct('30');
+    setShowAnswers(true); setShowIndividualInTeam(false);
+    setActiveView('quiz-config');
+  };
+
+  const launchQuiz = async () => {
+    if (!configQuiz) return;
+    const indPct = parseInt(individualPct) || 70;
+    const tmPct = parseInt(teamPct) || 30;
+    if (indPct + tmPct !== 100) { toast.error('A soma dos percentuais deve ser 100%'); return; }
+    const { data: codeData } = await supabase.rpc('generate_room_code');
+    const code = codeData as string;
+    const { data: room, error } = await supabase.from('rooms').insert({
+      name: configQuiz.title, code, teacher_id: user!.id, quiz_id: configQuiz.id,
+      max_grade: parseFloat(maxGrade) || 10,
+      individual_pct: indPct, team_pct: tmPct,
+      show_answers_in_report: showAnswers, show_individual_in_team: showIndividualInTeam,
+    } as any).select().single();
+    if (error) { toast.error('Falha ao criar sala'); return; }
+    toast.success('Sala criada!');
+    navigate(`/room/${room.id}/manage`);
   };
 
   const deleteQuiz = async (id: string) => {
@@ -704,7 +738,7 @@ export default function TeacherDashboard() {
                     <Button variant="ghost" size="icon" onClick={() => openEditQuiz(q)}><Pencil className="w-4 h-4 text-muted-foreground" /></Button>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Button variant="ghost" size="icon" onClick={() => { setNewRoomQuiz(q.id); setActiveView('rooms'); setCreateRoomOpen(true); }}>
+                    <Button variant="ghost" size="icon" onClick={() => openQuizConfig(q)}>
                       <PlayCircle className="w-4 h-4 text-muted-foreground" />
                     </Button>
                   </TableCell>
@@ -828,6 +862,50 @@ export default function TeacherDashboard() {
       </Card>
     </div>
   );
+
+  const renderQuizConfig = () => {
+    if (!configQuiz) return null;
+    const indPct = parseInt(individualPct) || 0;
+    const tmPct = parseInt(teamPct) || 0;
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <h2 className="text-2xl font-heading font-bold text-center">Questionário: {configQuiz.title}</h2>
+        <Card>
+          <CardHeader className="text-center"><CardTitle className="flex items-center justify-center gap-2"><FileText className="w-5 h-5" /> Informativos da Prova</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label className="font-semibold">Nota Máxima</Label>
+              <Input value={maxGrade} onChange={e => setMaxGrade(e.target.value)} placeholder="Nota máxima do questionário" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="font-semibold">% Nota Individual</Label>
+                <Input value={individualPct} onChange={e => { setIndividualPct(e.target.value); setTeamPct(String(100 - (parseInt(e.target.value) || 0))); }} />
+              </div>
+              <div className="space-y-2">
+                <Label className="font-semibold">% Nota Equipe</Label>
+                <Input value={teamPct} onChange={e => { setTeamPct(e.target.value); setIndividualPct(String(100 - (parseInt(e.target.value) || 0))); }} />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">A soma das porcentagens da nota individual e em equipe deve ser 100%.<br/>Exemplo: % Nota Individual = 70 e % Nota Equipe = 30</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="flex-1">Exibir <strong>questionário com gabarito</strong> aos estudantes no relatório final</Label>
+              <Switch checked={showAnswers} onCheckedChange={setShowAnswers} />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="flex-1">Exibir na prova em equipe, as respostas selecionadas pelos membros da equipe da <strong>aplicação individual</strong></Label>
+              <Switch checked={showIndividualInTeam} onCheckedChange={setShowIndividualInTeam} />
+            </div>
+          </CardContent>
+        </Card>
+        <Button onClick={launchQuiz} className="w-full py-6 text-lg" disabled={indPct + tmPct !== 100}>Iniciar</Button>
+      </div>
+    );
+  };
 
   // ==================== SIDEBAR & LAYOUT ====================
 
@@ -966,6 +1044,7 @@ export default function TeacherDashboard() {
                 {activeView === 'my-quizzes' && renderMyQuizzes()}
                 {activeView === 'edit-quiz' && renderEditQuiz()}
                 {activeView === 'reports' && renderReports()}
+                {activeView === 'quiz-config' && renderQuizConfig()}
               </>
             )}
           </main>
