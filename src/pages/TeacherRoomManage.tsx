@@ -51,6 +51,7 @@ export default function TeacherRoomManage() {
   const [selectedQuizId, setSelectedQuizId] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [sendingEmails, setSendingEmails] = useState(false);
 
   const loadAll = useCallback(async () => {
     const { data: roomData } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
@@ -991,7 +992,28 @@ export default function TeacherRoomManage() {
               <ScrollBar orientation="horizontal" />
             </ScrollArea>
 
-            <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">Voltar ao Dashboard</Button>
+            <div className="flex gap-3">
+              <Button onClick={() => navigate('/dashboard')} variant="outline" className="flex-1">Voltar ao Dashboard</Button>
+              <Button
+                className="flex-1"
+                disabled={sendingEmails}
+                onClick={async () => {
+                  setSendingEmails(true);
+                  try {
+                    const res = await supabase.functions.invoke('send-report-email', { body: { roomId } });
+                    if (res.error) throw res.error;
+                    const data = res.data as any;
+                    toast.success(`Relatórios enviados para ${data.sent} aluno(s)!`);
+                  } catch (err: any) {
+                    toast.error('Erro ao enviar relatórios: ' + (err.message || 'Erro desconhecido'));
+                  } finally {
+                    setSendingEmails(false);
+                  }
+                }}
+              >
+                {sendingEmails ? 'Enviando...' : '📧 Enviar Relatórios por E-mail'}
+              </Button>
+            </div>
           </TabsContent>
 
           <TabsContent value="management" className="space-y-6">
