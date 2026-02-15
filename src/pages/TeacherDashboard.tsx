@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,7 +21,7 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2,
+  BarChart3, Settings2, FileQuestion,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -128,6 +128,18 @@ export default function TeacherDashboard() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
+
+  // Application question state
+  const [appQuestions, setAppQuestions] = useState<any[]>([]);
+  const [addAppQOpen, setAddAppQOpen] = useState(false);
+  const [appQText, setAppQText] = useState('');
+  const [appOptA, setAppOptA] = useState('');
+  const [appOptB, setAppOptB] = useState('');
+  const [appOptC, setAppOptC] = useState('');
+  const [appOptD, setAppOptD] = useState('');
+
+  // Question type choice dialog
+  const [showTypeChoice, setShowTypeChoice] = useState(false);
 
   // Quiz config state (for launching)
   const [configQuiz, setConfigQuiz] = useState<Quiz | null>(null);
@@ -289,8 +301,12 @@ export default function TeacherDashboard() {
 
   const openEditQuiz = async (quiz: Quiz) => {
     setSelectedQuiz(quiz);
-    const { data } = await supabase.from('questions').select('*').eq('quiz_id', quiz.id).order('sort_order');
+    const [{ data }, { data: appData }] = await Promise.all([
+      supabase.from('questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
+      supabase.from('application_questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
+    ]);
     setQuestions((data as Question[]) || []);
+    setAppQuestions(appData || []);
     setActiveView('edit-quiz');
   };
 
@@ -310,10 +326,31 @@ export default function TeacherDashboard() {
     loadData();
   };
 
+  const addAppQuestionToQuiz = async () => {
+    if (!appQText.trim() || !appOptA || !appOptB || !appOptC || !appOptD) { toast.error('Preencha todos os campos'); return; }
+    const { error } = await supabase.from('application_questions').insert({
+      quiz_id: selectedQuiz!.id, question_text: appQText.trim(),
+      option_a: appOptA, option_b: appOptB, option_c: appOptC, option_d: appOptD,
+      sort_order: appQuestions.length,
+    });
+    if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
+    toast.success('Questão de aplicação adicionada!');
+    setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
+    setAddAppQOpen(false);
+    const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
+    setAppQuestions(data || []);
+  };
+
   const deleteQuestion = async (id: string) => {
     await supabase.from('questions').delete().eq('id', id);
     const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
     setQuestions((data as Question[]) || []);
+  };
+
+  const deleteAppQuestionFromQuiz = async (id: string) => {
+    await supabase.from('application_questions').delete().eq('id', id);
+    const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
+    setAppQuestions(data || []);
   };
 
   // Chart data
@@ -767,64 +804,162 @@ export default function TeacherDashboard() {
           <Button variant="ghost" size="icon" onClick={() => setActiveView('my-quizzes')}><ChevronRight className="w-4 h-4 rotate-180" /></Button>
           <div>
             <h2 className="text-2xl font-heading font-bold">{selectedQuiz.title}</h2>
-            <p className="text-sm text-muted-foreground">{questions.length} questões</p>
+            <p className="text-sm text-muted-foreground">{questions.length} questões iRAT/tRAT · {appQuestions.length} questões de aplicação</p>
           </div>
         </div>
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-heading font-semibold">Questões</h3>
-          <Dialog open={addQOpen} onOpenChange={setAddQOpen}>
-            <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" /> Adicionar Questão</Button></DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle className="font-heading">Adicionar Questão</DialogTitle></DialogHeader>
-              <div className="space-y-3 pt-2">
-                <div className="space-y-1">
-                  <Label>Questão</Label>
-                  <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite sua questão..." />
-                </div>
-                {(['A', 'B', 'C', 'D'] as const).map((opt) => (
-                  <div key={opt} className="space-y-1">
-                    <Label className="flex items-center gap-2">
-                      <span>Opção {opt}</span>
-                      {correct === opt && <span className="text-xs px-1.5 py-0.5 rounded bg-success text-success-foreground">Correta</span>}
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input className="flex-1" value={opt === 'A' ? optA : opt === 'B' ? optB : opt === 'C' ? optC : optD}
-                        onChange={e => { const v = e.target.value; if (opt === 'A') setOptA(v); else if (opt === 'B') setOptB(v); else if (opt === 'C') setOptC(v); else setOptD(v); }}
-                        placeholder={`Opção ${opt}`} />
-                      <Button type="button" size="sm" variant={correct === opt ? 'default' : 'outline'} onClick={() => setCorrect(opt)}>✓</Button>
-                    </div>
-                  </div>
-                ))}
-                <Button onClick={addQuestion} className="w-full">Adicionar Questão</Button>
+
+        {/* Add Question Button - opens type choice */}
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setShowTypeChoice(true)}>
+            <Plus className="w-4 h-4 mr-1" /> Adicionar Questão
+          </Button>
+        </div>
+
+        {/* Type Choice Dialog */}
+        <Dialog open={showTypeChoice} onOpenChange={setShowTypeChoice}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-center text-lg font-heading">Tipo de Questão</DialogTitle>
+              <DialogDescription className="text-center">Selecione o tipo de questão que deseja criar</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <button
+                onClick={() => { setShowTypeChoice(false); setAddQOpen(true); }}
+                className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all"
+              >
+                <BookOpen className="w-10 h-10 text-primary" />
+                <span className="font-semibold text-sm">iRAT / tRAT</span>
+                <span className="text-xs text-muted-foreground text-center">Questão com gabarito para avaliação individual e em equipe</span>
+              </button>
+              <button
+                onClick={() => { setShowTypeChoice(false); setAddAppQOpen(true); }}
+                className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-orange-300/40 hover:border-orange-400 hover:bg-orange-50 transition-all"
+              >
+                <FileQuestion className="w-10 h-10 text-orange-500" />
+                <span className="font-semibold text-sm">Aplicação</span>
+                <span className="text-xs text-muted-foreground text-center">Questão para a fase de aplicação dos conceitos</span>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* iRAT/tRAT Question Dialog */}
+        <Dialog open={addQOpen} onOpenChange={setAddQOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão iRAT/tRAT</DialogTitle></DialogHeader>
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <Label>Questão</Label>
+                <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite sua questão..." />
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-        {questions.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">Nenhuma questão ainda.</p>
-        ) : (
-          <div className="space-y-3">
-            {questions.map((q, i) => (
-              <Card key={q.id}>
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">Q{i + 1}.</span>{q.question_text}</p>
-                      <div className="grid grid-cols-2 gap-1 text-sm">
-                        {(['A', 'B', 'C', 'D'] as const).map(opt => (
-                          <span key={opt} className={`px-2 py-1 rounded ${q.correct_option === opt ? 'bg-success/10 text-success font-medium' : 'text-muted-foreground'}`}>
-                            {opt}. {q[`option_${opt.toLowerCase()}` as keyof Question] as string}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+              {(['A', 'B', 'C', 'D'] as const).map((opt) => (
+                <div key={opt} className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <span>Opção {opt}</span>
+                    {correct === opt && <span className="text-xs px-1.5 py-0.5 rounded bg-success text-success-foreground">Correta</span>}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input className="flex-1" value={opt === 'A' ? optA : opt === 'B' ? optB : opt === 'C' ? optC : optD}
+                      onChange={e => { const v = e.target.value; if (opt === 'A') setOptA(v); else if (opt === 'B') setOptB(v); else if (opt === 'C') setOptC(v); else setOptD(v); }}
+                      placeholder={`Opção ${opt}`} />
+                    <Button type="button" size="sm" variant={correct === opt ? 'default' : 'outline'} onClick={() => setCorrect(opt)}>✓</Button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+              ))}
+              <Button onClick={addQuestion} className="w-full">Adicionar Questão</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Application Question Dialog */}
+        <Dialog open={addAppQOpen} onOpenChange={setAddAppQOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle></DialogHeader>
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1">
+                <Label>Questão</Label>
+                <Input value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação..." />
+              </div>
+              {(['A', 'B', 'C', 'D'] as const).map((opt) => (
+                <div key={opt} className="space-y-1">
+                  <Label>Opção {opt}</Label>
+                  <Input value={opt === 'A' ? appOptA : opt === 'B' ? appOptB : opt === 'C' ? appOptC : appOptD}
+                    onChange={e => { const v = e.target.value; if (opt === 'A') setAppOptA(v); else if (opt === 'B') setAppOptB(v); else if (opt === 'C') setAppOptC(v); else setAppOptD(v); }}
+                    placeholder={`Opção ${opt}`} />
+                </div>
+              ))}
+              <Button onClick={addAppQuestionToQuiz} className="w-full">Adicionar Questão</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* iRAT/tRAT Questions List */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 border-b pb-2">
+            <BookOpen className="w-5 h-5 text-primary" />
+            <h3 className="text-lg font-heading font-semibold">Questões iRAT / tRAT</h3>
+            <Badge variant="secondary" className="ml-auto">{questions.length}</Badge>
           </div>
-        )}
+          {questions.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4 text-sm">Nenhuma questão iRAT/tRAT adicionada.</p>
+          ) : (
+            <div className="space-y-3">
+              {questions.map((q, i) => (
+                <Card key={q.id}>
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">Q{i + 1}.</span>{q.question_text}</p>
+                        <div className="grid grid-cols-2 gap-1 text-sm">
+                          {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                            <span key={opt} className={`px-2 py-1 rounded ${q.correct_option === opt ? 'bg-success/10 text-success font-medium' : 'text-muted-foreground'}`}>
+                              {opt}. {q[`option_${opt.toLowerCase()}` as keyof Question] as string}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Application Questions List */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 border-b pb-2">
+            <FileQuestion className="w-5 h-5 text-orange-500" />
+            <h3 className="text-lg font-heading font-semibold">Questões de Aplicação</h3>
+            <Badge variant="secondary" className="ml-auto">{appQuestions.length}</Badge>
+          </div>
+          {appQuestions.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4 text-sm">Nenhuma questão de aplicação adicionada.</p>
+          ) : (
+            <div className="space-y-3">
+              {appQuestions.map((q: any, i: number) => (
+                <Card key={q.id} className="border-l-4 border-l-orange-400">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">A{i + 1}.</span>{q.question_text}</p>
+                        <div className="grid grid-cols-2 gap-1 text-sm text-muted-foreground">
+                          {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                            <span key={opt} className="px-2 py-1">
+                              {opt}. {q[`option_${opt.toLowerCase()}`] || ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
