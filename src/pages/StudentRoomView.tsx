@@ -37,7 +37,7 @@ type Room = {
 
 type TeamMember = {
   team_id: string;
-  teams: { name: string };
+  teams: { name: string; trat_started_at?: string | null };
 };
 
 type TratAttempt = {
@@ -156,6 +156,11 @@ export default function StudentRoomView() {
   // tRAT score
   const [tratTotalScore, setTratTotalScore] = useState(0);
 
+  // tRAT timer (20 min)
+  const [tratStartedAt, setTratStartedAt] = useState<string | null>(null);
+  const [tratTimeLeft, setTratTimeLeft] = useState<number | null>(null);
+  const TRAT_DURATION = 20 * 60; // 20 minutes in seconds
+
   // iRAT individual responses for team members (show_individual_in_team)
   const [memberIratResponses, setMemberIratResponses] = useState<any[]>([]);
 
@@ -176,12 +181,16 @@ export default function StudentRoomView() {
   const loadMembership = useCallback(async () => {
     const { data } = await supabase
       .from('team_members')
-      .select('team_id, teams(name)')
+      .select('team_id, teams(name, trat_started_at)')
       .eq('user_id', user!.id)
       .eq('room_id', roomId!)
       .single();
     if (data) {
       setMembership(data as any);
+      const teamData = (data as any).teams;
+      if (teamData?.trat_started_at) {
+        setTratStartedAt(teamData.trat_started_at);
+      }
       const { data: members } = await supabase
         .from('team_members')
         .select('user_id, profiles:user_id(full_name)')
@@ -277,6 +286,20 @@ export default function StudentRoomView() {
     }
   }, [membership, room?.current_stage]);
 
+  // tRAT Timer (20 minutes from trat_started_at)
+  useEffect(() => {
+    if (!tratStartedAt || room?.current_stage !== 'trat_open') { setTratTimeLeft(null); return; }
+    const updateTimer = () => {
+      const startTime = new Date(tratStartedAt).getTime();
+      const endTime = startTime + TRAT_DURATION * 1000;
+      const diff = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      setTratTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [tratStartedAt, room?.current_stage]);
+
   // Timer
   useEffect(() => {
     if (!room?.irat_end_time || room.current_stage !== 'irat_open') { setTimeLeft(null); return; }
@@ -298,6 +321,8 @@ export default function StudentRoomView() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
+        () => { loadMembership(); })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` },
         () => { loadMembership(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` },
         () => { loadAppData(); })
@@ -551,10 +576,30 @@ export default function StudentRoomView() {
 
   // ===== RENDER: tRAT =====
   const renderTrat = () => {
-    // If student was added to a team by someone else (via realtime), go straight to answering
+    // If student was added to a team by someone else (via realtime), check if tRAT started
     if (membership) {
-      // If answering has started (either via tratStep or existing attempts), show questions
-      const hasStarted = tratAttempts.length > 0 || tratStep === 'answering';
+      // If trat_started_at is set (leader started), all members see questions
+      const hasStarted = !!tratStartedAt || tratAttempts.length > 0 || tratStep === 'answering';
+      
+      // Check if timer expired
+      if (hasStarted && tratTimeLeft !== null && tratTimeLeft <= 0) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
+            <TBLVirtualLogo />
+            <Card className="w-full max-w-md">
+              <CardContent className="pt-6 pb-6 space-y-4 text-center">
+                <Clock className="w-12 h-12 mx-auto text-muted-foreground" />
+                <h3 className="text-lg font-heading font-bold">Tempo Esgotado!</h3>
+                <p className="text-sm text-muted-foreground">
+                  O tempo para o tRAT foi encerrado. Aguarde o professor iniciar a próxima etapa.
+                </p>
+                <WaitingAnimation />
+              </CardContent>
+            </Card>
+          </div>
+        );
+      }
+      
       if (hasStarted) return renderTratAnswering();
 
       // Show add members UI only if this student created the team (tratReady)
@@ -640,7 +685,7 @@ export default function StudentRoomView() {
 
   // ===== tRAT: Add Members Step =====
   const renderTratAddMembers = () => {
-    const hasStarted = tratAttempts.length > 0 || tratStep === 'answering';
+    const hasStarted = !!tratStartedAt || tratAttempts.length > 0 || tratStep === 'answering';
     if (hasStarted) return renderTratAnswering();
 
     return (
@@ -693,7 +738,12 @@ export default function StudentRoomView() {
             </Table>
           )}
 
-          <Button onClick={() => setTratStep('answering')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
+          <Button onClick={async () => {
+            // Set trat_started_at on the team to sync timer across all members
+            await supabase.from('teams').update({ trat_started_at: new Date().toISOString() } as any).eq('id', membership!.team_id);
+            setTratStartedAt(new Date().toISOString());
+            setTratStep('answering');
+          }} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
             Iniciar Aplicação Em Equipe
           </Button>
         </div>
@@ -785,6 +835,19 @@ export default function StudentRoomView() {
           </p>
           <p className="text-sm text-muted-foreground">Equipe Conectada: {membership?.teams.name}</p>
         </div>
+
+        {/* tRAT Timer */}
+        {tratTimeLeft !== null && (
+          <Card className={tratTimeLeft <= 60 ? 'border-destructive' : ''}>
+            <CardContent className="py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className={`w-4 h-4 ${tratTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+                <span className="text-sm">Tempo restante</span>
+              </div>
+              <span className={`font-mono text-xl font-bold ${tratTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(tratTimeLeft)}</span>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Score + members bar */}
         <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3">
