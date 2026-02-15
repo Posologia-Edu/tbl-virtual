@@ -329,7 +329,10 @@ export default function TeacherDashboard() {
   };
 
   const deleteQuiz = async (id: string) => {
-    await supabase.from('quizzes').delete().eq('id', id);
+    await supabase.from('application_questions').delete().eq('quiz_id', id);
+    await supabase.from('questions').delete().eq('quiz_id', id);
+    const { error } = await supabase.from('quizzes').delete().eq('id', id);
+    if (error) { toast.error('Falha ao excluir questionário'); return; }
     loadData();
     toast.success('Questionário excluído');
   };
