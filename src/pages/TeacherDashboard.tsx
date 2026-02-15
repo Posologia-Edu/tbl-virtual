@@ -243,6 +243,12 @@ export default function TeacherDashboard() {
     await supabase.from('profiles').update({ is_approved: true } as any).eq('id', id);
     toast.success('Professor aprovado!');
     loadTeachers();
+    // Send approval email in background
+    supabase.functions.invoke('send-approval-email', { body: { teacherId: id } })
+      .then(res => {
+        if (res.error) console.error('Erro ao enviar e-mail de aprovação:', res.error);
+        else toast.success('E-mail de aprovação enviado!');
+      });
   };
 
   const blockTeacher = async (id: string, block: boolean) => {
