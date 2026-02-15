@@ -22,7 +22,8 @@ export type Database = {
           option_c: string | null
           option_d: string | null
           question_text: string
-          room_id: string
+          quiz_id: string | null
+          room_id: string | null
           sort_order: number
         }
         Insert: {
@@ -32,7 +33,8 @@ export type Database = {
           option_c?: string | null
           option_d?: string | null
           question_text: string
-          room_id: string
+          quiz_id?: string | null
+          room_id?: string | null
           sort_order?: number
         }
         Update: {
@@ -42,10 +44,18 @@ export type Database = {
           option_c?: string | null
           option_d?: string | null
           question_text?: string
-          room_id?: string
+          quiz_id?: string | null
+          room_id?: string | null
           sort_order?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "application_questions_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "application_questions_room_id_fkey"
             columns: ["room_id"]
