@@ -593,9 +593,11 @@ export default function LandingPage() {
               </div>
               <span className="text-base font-heading font-bold">TBL Virtual</span>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              © 2026 TBL Virtual. Aprendizagem Baseada em Equipes, reinventada.
-            </p>
+            <div className="text-sm text-muted-foreground text-center space-y-1">
+              <p>© 2026 TBL Virtual. Aprendizagem Baseada em Equipes.</p>
+              <p>Todos os direitos reservados.</p>
+              <p>Desenvolvido por Sérgio Araújo. Posologia Produções.</p>
+            </div>
             <div className="flex gap-4 md:justify-end text-sm text-muted-foreground">
               <button onClick={() => navigate('/auth?mode=signin')} className="hover:text-foreground transition-colors">Login Professor</button>
               <button onClick={() => navigate('/join')} className="hover:text-foreground transition-colors">Acesso Estudante</button>
