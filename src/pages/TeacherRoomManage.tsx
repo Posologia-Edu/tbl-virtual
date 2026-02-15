@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -67,7 +67,9 @@ export default function TeacherRoomManage() {
       .select('id, name, team_members(user_id, profiles:user_id(full_name))')
       .eq('room_id', roomId!)
       .order('name');
-    setTeams(teamsData || []);
+    // Filter out empty teams (teams with no members)
+    const nonEmptyTeams = (teamsData || []).filter((t: any) => (t.team_members || []).length > 0);
+    setTeams(nonEmptyTeams);
 
     if (roomData?.quiz_id) {
       const { data: qs } = await supabase.from('questions').select('*').eq('quiz_id', roomData.quiz_id).order('sort_order');
@@ -81,10 +83,10 @@ export default function TeacherRoomManage() {
       setIratStats({ total: (parts?.length || 0) * questionsCount, completed: count || 0 });
     }
 
-    if (teamsData) {
+    if (nonEmptyTeams) {
       const { data: tratData } = await supabase.from('trat_attempts').select('*').eq('room_id', roomId!);
       setTratAttemptsAll(tratData || []);
-      const scores = teamsData.map((t: any) => {
+      const scores = nonEmptyTeams.map((t: any) => {
         const teamAttempts = (tratData || []).filter((a: any) => a.team_id === t.id && a.is_correct);
         const score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
         return { teamId: t.id, teamName: t.name, score };
@@ -125,21 +127,24 @@ export default function TeacherRoomManage() {
     return () => clearInterval(interval);
   }, [room?.irat_end_time, room?.current_stage]);
 
-  // Realtime
+  // Realtime - using ref to avoid stale closure
+  const loadAllRef = useRef(loadAll);
+  loadAllRef.current = loadAll;
+
   useEffect(() => {
     const channel = supabase
       .channel(`teacher-room-${roomId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, () => loadAll())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, () => loadAll())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadAll]);
+  }, [roomId]);
 
   const handleAdvanceClick = () => {
     if (!room) return;
@@ -197,6 +202,12 @@ export default function TeacherRoomManage() {
     toast.success('Questão de aplicação adicionada');
   };
 
+  const deleteAppQuestion = async (id: string) => {
+    await supabase.from('application_questions').delete().eq('id', id);
+    loadAll();
+    toast.success('Questão removida');
+  };
+
   const copyCode = () => {
     if (room) { navigator.clipboard.writeText(room.code); toast.success('Código copiado!'); }
   };
@@ -242,10 +253,61 @@ export default function TeacherRoomManage() {
       return { type: 'partial', score };
     }
     if (teamAttempts.length >= 4) return { type: 'wrong', score: 0 };
-    return null; // still in progress
+    return null;
   };
 
   const joinUrl = `${window.location.origin}/join`;
+
+  // Application Questions Management Card (reusable across stages)
+  const renderAppQuestionsCard = () => (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-heading flex items-center gap-2">
+            <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
+          </CardTitle>
+          <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
+                <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 pt-2">
+                <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
+                  <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+                </div>
+                <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {appQuestions.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda. Adicione antes de iniciar a fase de aplicação.</p>
+        ) : (
+          <div className="space-y-2">
+            {appQuestions.map((q: any, i: number) => (
+              <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">Q{i + 1}. {q.question_text}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
+                  <X className="w-3 h-3 text-destructive" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   // ============ WAITING STAGE ============
   const renderWaitingRoom = () => (
@@ -295,49 +357,59 @@ export default function TeacherRoomManage() {
           </Table>
         )}
       </div>
-      {/* Application Questions Management */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
-            </CardTitle>
-            <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
-                  <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3 pt-2">
-                  <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
-                    <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+
+      {/* Quiz linking */}
+      {!room.quiz_id && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-heading">Vincular Questionário (iRAT/tRAT)</CardTitle>
+              <Dialog open={linkQuizOpen} onOpenChange={setLinkQuizOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline"><Link2 className="w-3 h-3 mr-1" /> Vincular</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Vincular Questionário</DialogTitle>
+                    <DialogDescription>Selecione um questionário para a fase iRAT/tRAT.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 pt-2">
+                    {quizzes.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Nenhum questionário disponível. Crie um no painel do professor.</p>
+                    ) : (
+                      <>
+                        <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={selectedQuizId} onChange={e => setSelectedQuizId(e.target.value)}>
+                          <option value="">Selecione...</option>
+                          {quizzes.map((q: any) => (<option key={q.id} value={q.id}>{q.title} ({q.questions?.length || 0} questões)</option>))}
+                        </select>
+                        <Button onClick={linkQuiz} className="w-full" disabled={!selectedQuizId}>Vincular</Button>
+                      </>
+                    )}
                   </div>
-                  <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {appQuestions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda. Adicione antes de iniciar a fase de aplicação.</p>
-          ) : (
-            <div className="space-y-2">
-              {appQuestions.map((q: any, i: number) => (
-                <div key={q.id} className="p-3 rounded-lg border">
-                  <p className="text-sm font-medium">Q{i + 1}. {q.question_text}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
-                </div>
-              ))}
+                </DialogContent>
+              </Dialog>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center">Nenhum questionário vinculado. Vincule um para iniciar a fase iRAT/tRAT.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {room.quiz_id && linkedQuiz && (
+        <Card className="border-primary/30">
+          <CardContent className="py-3 flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-success" />
+            <div>
+              <p className="font-medium text-sm">Questionário iRAT/tRAT: {linkedQuiz.title}</p>
+              <p className="text-xs text-muted-foreground">{linkedQuiz.questions?.length || 0} questões</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Application Questions Management */}
+      {renderAppQuestionsCard()}
 
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg" disabled={!room.quiz_id}>
         Iniciar Aplicação
@@ -461,7 +533,7 @@ export default function TeacherRoomManage() {
     return (
       <div className="space-y-6">
         <div className="bg-primary/10 text-center py-2 text-sm text-primary font-medium rounded-lg">
-          Os estudantes devem acessar o site e informar o código da sala
+          Aguardando os estudantes formarem as equipes e iniciarem o tRAT
         </div>
         <div className="flex flex-col md:flex-row items-center gap-6">
           <div className="bg-card p-4 rounded-xl border shadow-sm"><QRCodeSVG value={joinUrl} size={140} /></div>
@@ -490,7 +562,7 @@ export default function TeacherRoomManage() {
 
         <div>
           <h3 className="text-lg font-heading font-bold mb-3">
-            <span className="text-primary font-bold">Aplicação em Equipes</span> : {teams.length} Equipes Conectadas
+            <span className="text-primary font-bold">Aplicação em Equipes</span> : {teams.length} Equipes Formadas
           </h3>
           {teams.length > 0 && (
             <Table>
@@ -514,9 +586,14 @@ export default function TeacherRoomManage() {
           )}
         </div>
 
-        <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
-          Iniciar Aplicação
-        </Button>
+        {/* Application questions management during tRAT stage */}
+        {renderAppQuestionsCard()}
+
+        {/* No advance button here - tRAT advances automatically when teams answer, 
+            or teacher can advance to application when tRAT is done */}
+        <p className="text-sm text-muted-foreground text-center">
+          As equipes estão respondendo o tRAT. O botão de avançar aparecerá quando as equipes começarem a responder.
+        </p>
       </div>
     );
   };
@@ -595,6 +672,10 @@ export default function TeacherRoomManage() {
           </div>
         </div>
       </div>
+
+      {/* Application questions management during tRAT monitoring */}
+      {renderAppQuestionsCard()}
+
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
         Finalizar Aplicação → Avançar para {nextStageName}
       </Button>
@@ -690,14 +771,14 @@ export default function TeacherRoomManage() {
   };
 
   // ============ FINISHED - REPORTS ============
-  const IRAT_PCT = 0.30;
-  const TRAT_PCT = 0.40;
-  const APP_PCT = 0.30;
+  const IRAT_PCT = ((room as any).individual_pct ?? 30) / 100;
+  const TRAT_PCT = ((room as any).team_pct ?? 40) / 100;
+  const APP_PCT = ((room as any).application_pct ?? 30) / 100;
 
   const maxGradeVal = parseFloat((room as any).max_grade) || 10;
-  const maxIratScore = questions.length * 4; // max 4 points per question
+  const maxIratScore = questions.length * 4;
   const maxTratScore = questions.length * 4;
-  const maxAppScore = appQuestions.length > 0 ? appQuestions.length : 1; // 1 point per correct app answer
+  const maxAppScore = appQuestions.length > 0 ? appQuestions.length : 1;
 
   // Compute per-student data for final report
   const computeStudentReport = () => {
@@ -706,24 +787,20 @@ export default function TeacherRoomManage() {
       const name = p.profiles?.full_name || 'Aluno';
       const ra = p.participant_code || '—';
 
-      // iRAT score
       const studentIrat = iratResponses.filter((r: any) => r.student_id === studentId);
       const iratRawScore = studentIrat.reduce((sum: number, r: any) => sum + r.score, 0);
 
-      // Find student's team
       const studentTeam = teams.find((t: any) =>
         (t.team_members || []).some((m: any) => m.user_id === studentId)
       );
       const teamId = studentTeam?.id;
 
-      // tRAT score (team score applies to all members)
       let tratRawScore = 0;
       if (teamId) {
         const teamAttempts = tratAttemptsAll.filter((a: any) => a.team_id === teamId && a.is_correct);
         tratRawScore = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
       }
 
-      // App score (team score)
       let appRawScore = 0;
       if (teamId && appQuestions.length > 0) {
         appRawScore = appQuestions.filter(q =>
@@ -731,7 +808,6 @@ export default function TeacherRoomManage() {
         ).length;
       }
 
-      // Compute grades
       const iratGrade = maxIratScore > 0 ? (iratRawScore / maxIratScore) * maxGradeVal : 0;
       const tratGrade = maxTratScore > 0 ? (tratRawScore / maxTratScore) * maxGradeVal : 0;
       const appGrade = maxAppScore > 0 ? (appRawScore / maxAppScore) * maxGradeVal : 0;
@@ -746,7 +822,6 @@ export default function TeacherRoomManage() {
     });
   };
 
-  // Compute question stats for management report
   const computeQuestionStats = () => {
     return questions.map((q: any, i: number) => {
       const qResponses = iratResponses.filter((r: any) => r.question_id === q.id);
@@ -801,7 +876,6 @@ export default function TeacherRoomManage() {
             <TabsTrigger value="management">Relatório Gerencial</TabsTrigger>
           </TabsList>
 
-          {/* ===== RELATÓRIO FINAL ===== */}
           <TabsContent value="final" className="space-y-6">
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
@@ -812,7 +886,6 @@ export default function TeacherRoomManage() {
               </p>
             </div>
 
-            {/* Grade config badges */}
             <div className="text-center space-y-4">
               <div className="inline-block bg-warning/80 text-warning-foreground px-8 py-2 rounded-full text-xl font-bold">
                 {maxGradeVal.toFixed(2)}
@@ -853,7 +926,6 @@ export default function TeacherRoomManage() {
               </div>
             </div>
 
-            {/* Student grades table */}
             <ScrollArea className="w-full">
               <Table>
                 <TableHeader>
@@ -889,11 +961,9 @@ export default function TeacherRoomManage() {
             <Button onClick={() => navigate('/dashboard')} variant="outline" className="w-full">Voltar ao Dashboard</Button>
           </TabsContent>
 
-          {/* ===== RELATÓRIO GERENCIAL ===== */}
           <TabsContent value="management" className="space-y-6">
             <h2 className="text-xl font-heading font-bold">Relatório Gerencial</h2>
 
-            {/* Overview cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Card><CardContent className="pt-4 text-center">
                 <p className="text-2xl font-bold">{avgIrat.toFixed(2)}</p>
@@ -913,7 +983,6 @@ export default function TeacherRoomManage() {
               </CardContent></Card>
             </div>
 
-            {/* Performance distribution */}
             {performanceDistribution.length > 0 && (
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-base font-heading">Distribuição de Desempenho</CardTitle></CardHeader>
@@ -934,7 +1003,6 @@ export default function TeacherRoomManage() {
               </Card>
             )}
 
-            {/* Question performance chart */}
             {barData.length > 0 && (
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-base font-heading">% de Acertos por Questão</CardTitle></CardHeader>
@@ -954,7 +1022,6 @@ export default function TeacherRoomManage() {
               </Card>
             )}
 
-            {/* Easiest and hardest questions */}
             <div className="grid md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
@@ -988,7 +1055,6 @@ export default function TeacherRoomManage() {
               </Card>
             </div>
 
-            {/* Difficulty classification table */}
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-base font-heading">Classificação de Dificuldade por Questão</CardTitle></CardHeader>
               <CardContent>

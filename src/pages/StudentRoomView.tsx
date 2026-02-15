@@ -553,7 +553,8 @@ export default function StudentRoomView() {
   const renderTrat = () => {
     // If student was added to a team by someone else (via realtime), go straight to answering
     if (membership) {
-      const hasStarted = tratAttempts.length > 0;
+      // If answering has started (either via tratStep or existing attempts), show questions
+      const hasStarted = tratAttempts.length > 0 || tratStep === 'answering';
       if (hasStarted) return renderTratAnswering();
 
       // Show add members UI only if this student created the team (tratReady)
@@ -639,7 +640,7 @@ export default function StudentRoomView() {
 
   // ===== tRAT: Add Members Step =====
   const renderTratAddMembers = () => {
-    const hasStarted = tratAttempts.length > 0;
+    const hasStarted = tratAttempts.length > 0 || tratStep === 'answering';
     if (hasStarted) return renderTratAnswering();
 
     return (
@@ -692,7 +693,7 @@ export default function StudentRoomView() {
             </Table>
           )}
 
-          <Button onClick={() => setTratStep('waiting')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
+          <Button onClick={() => setTratStep('answering')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
             Iniciar Aplicação Em Equipe
           </Button>
         </div>
