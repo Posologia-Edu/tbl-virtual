@@ -161,6 +161,35 @@ export default function TeacherRoomManage() {
       const endTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: endTime } as any).eq('id', roomId!);
     } else {
+      // When advancing to application_open, copy quiz-linked app questions to the room if needed
+      if (nextStage === 'application_open' && room.quiz_id) {
+        const { data: existingRoomQs } = await supabase
+          .from('application_questions')
+          .select('id')
+          .eq('room_id', roomId!)
+          .limit(1);
+
+        if (!existingRoomQs || existingRoomQs.length === 0) {
+          const { data: quizAppQs } = await supabase
+            .from('application_questions')
+            .select('question_text, option_a, option_b, option_c, option_d, sort_order')
+            .eq('quiz_id', room.quiz_id)
+            .order('sort_order');
+
+          if (quizAppQs && quizAppQs.length > 0) {
+            const toInsert = quizAppQs.map((q: any) => ({
+              room_id: roomId!,
+              question_text: q.question_text,
+              option_a: q.option_a,
+              option_b: q.option_b,
+              option_c: q.option_c,
+              option_d: q.option_d,
+              sort_order: q.sort_order,
+            }));
+            await supabase.from('application_questions').insert(toInsert);
+          }
+        }
+      }
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: null } as any).eq('id', roomId!);
     }
     setConfirmOpen(false);
