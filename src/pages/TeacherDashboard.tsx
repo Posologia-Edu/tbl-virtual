@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2, FileQuestion,
+  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -141,6 +141,17 @@ export default function TeacherDashboard() {
 
   // Question type choice dialog
   const [showTypeChoice, setShowTypeChoice] = useState(false);
+
+  // AI generation state
+  const [showAiDialog, setShowAiDialog] = useState(false);
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiQuizTitle, setAiQuizTitle] = useState('');
+  const aiFileInputRef = useRef<HTMLInputElement>(null);
+  const [showAiImportDialog, setShowAiImportDialog] = useState(false);
+  const [aiImportFile, setAiImportFile] = useState<File | null>(null);
+  const [aiImportLoading, setAiImportLoading] = useState(false);
+  const aiImportFileInputRef = useRef<HTMLInputElement>(null);
 
   // Quiz config state (for launching)
   const [configQuiz, setConfigQuiz] = useState<Quiz | null>(null);
@@ -390,6 +401,111 @@ export default function TeacherDashboard() {
     await supabase.from('application_questions').delete().eq('id', id);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
     setAppQuestions(data || []);
+  };
+
+  // AI helper functions
+  const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  };
+
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const generateWithAI = async () => {
+    if (!aiFile || !aiQuizTitle.trim()) return;
+    setAiLoading(true);
+    try {
+      let fileContent: string;
+      const isText = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md');
+      if (isText) { fileContent = await readFileAsText(aiFile); }
+      else { const b64 = await readFileAsBase64(aiFile); fileContent = `[Arquivo: ${aiFile.name}]\n${b64}`; }
+
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiFile.name } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const { data: quiz, error: qErr } = await supabase.from('quizzes').insert({ title: aiQuizTitle.trim(), teacher_id: user!.id }).select().single();
+      if (qErr || !quiz) throw new Error('Falha ao criar questionário');
+
+      if (data.irat_questions?.length) {
+        await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
+          quiz_id: quiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, sort_order: i,
+        })));
+      }
+      if (data.application_questions?.length) {
+        await supabase.from('application_questions').insert(data.application_questions.map((q: any, i: number) => ({
+          quiz_id: quiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, sort_order: i,
+        })));
+      }
+
+      toast.success(`Questionário criado com ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} de aplicação!`);
+      setShowAiDialog(false); setAiFile(null); setAiQuizTitle('');
+      loadData();
+      // Open the quiz for editing
+      setSelectedQuiz(quiz as Quiz);
+      const [{ data: qData }, { data: aData }] = await Promise.all([
+        supabase.from('questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
+        supabase.from('application_questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
+      ]);
+      setQuestions((qData as Question[]) || []);
+      setAppQuestions(aData || []);
+      setActiveView('edit-quiz');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Falha ao gerar questões com IA');
+    } finally { setAiLoading(false); }
+  };
+
+  const generateForExistingQuiz = async () => {
+    if (!aiImportFile || !selectedQuiz) return;
+    setAiImportLoading(true);
+    try {
+      let fileContent: string;
+      const isText = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md');
+      if (isText) { fileContent = await readFileAsText(aiImportFile); }
+      else { const b64 = await readFileAsBase64(aiImportFile); fileContent = `[Arquivo: ${aiImportFile.name}]\n${b64}`; }
+
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiImportFile.name } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      if (data.irat_questions?.length) {
+        await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
+          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, sort_order: questions.length + i,
+        })));
+      }
+      if (data.application_questions?.length) {
+        await supabase.from('application_questions').insert(data.application_questions.map((q: any, i: number) => ({
+          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, sort_order: appQuestions.length + i,
+        })));
+      }
+
+      toast.success(`Adicionadas ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} de aplicação!`);
+      setShowAiImportDialog(false); setAiImportFile(null);
+      const [{ data: qData }, { data: aData }] = await Promise.all([
+        supabase.from('questions').select('*').eq('quiz_id', selectedQuiz.id).order('sort_order'),
+        supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz.id).order('sort_order'),
+      ]);
+      setQuestions((qData as Question[]) || []);
+      setAppQuestions(aData || []);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Falha ao gerar questões com IA');
+    } finally { setAiImportLoading(false); }
   };
 
   // Chart data
@@ -789,7 +905,14 @@ export default function TeacherDashboard() {
         <h2 className="text-2xl font-heading font-bold">Meus Questionários</h2>
         <Badge variant="outline" className="text-lg font-heading">{quizzes.length}</Badge>
       </div>
-      <Button variant="link" className="text-primary px-0" onClick={() => setActiveView('create-quiz')}>Novo Questionário</Button>
+      <div className="flex gap-3">
+        <Button variant="link" className="text-primary px-0" onClick={() => setActiveView('create-quiz')}>
+          <Plus className="w-4 h-4 mr-1" /> Novo Questionário
+        </Button>
+        <Button variant="link" className="px-0" onClick={() => { setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true); }}>
+          <Sparkles className="w-4 h-4 mr-1" /> Criar com IA
+        </Button>
+      </div>
       <div className="flex gap-2 max-w-lg">
         <Input value={quizSearch} onChange={e => setQuizSearch(e.target.value)} placeholder="Buscar Questionário" />
         <Button size="icon" variant="default"><Search className="w-4 h-4" /></Button>
@@ -856,19 +979,19 @@ export default function TeacherDashboard() {
 
         {/* Type Choice Dialog */}
         <Dialog open={showTypeChoice} onOpenChange={setShowTypeChoice}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="text-center text-lg font-heading">Tipo de Questão</DialogTitle>
               <DialogDescription className="text-center">Selecione o tipo de questão que deseja criar</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="grid grid-cols-3 gap-4 py-4">
               <button
                 onClick={() => { setShowTypeChoice(false); setAddQOpen(true); }}
                 className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all"
               >
                 <BookOpen className="w-10 h-10 text-primary" />
                 <span className="font-semibold text-sm">iRAT / tRAT</span>
-                <span className="text-xs text-muted-foreground text-center">Questão com gabarito para avaliação individual e em equipe</span>
+                <span className="text-xs text-muted-foreground text-center">Questão manual com gabarito</span>
               </button>
               <button
                 onClick={() => { setShowTypeChoice(false); setAddAppQOpen(true); }}
@@ -876,7 +999,15 @@ export default function TeacherDashboard() {
               >
                 <FileQuestion className="w-10 h-10 text-orange-500" />
                 <span className="font-semibold text-sm">Aplicação</span>
-                <span className="text-xs text-muted-foreground text-center">Questão para a fase de aplicação dos conceitos</span>
+                <span className="text-xs text-muted-foreground text-center">Questão V/F para aplicação</span>
+              </button>
+              <button
+                onClick={() => { setShowTypeChoice(false); setAiImportFile(null); setShowAiImportDialog(true); }}
+                className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-purple-300/40 hover:border-purple-400 hover:bg-purple-50 transition-all"
+              >
+                <Sparkles className="w-10 h-10 text-purple-500" />
+                <span className="font-semibold text-sm">Criar com IA</span>
+                <span className="text-xs text-muted-foreground text-center">Gerar questões a partir de material</span>
               </button>
             </div>
           </DialogContent>
@@ -1179,6 +1310,7 @@ export default function TeacherDashboard() {
   // ==================== SIDEBAR & LAYOUT ====================
 
   return (
+    <>
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <Sidebar className="border-r border-sidebar-border">
@@ -1336,5 +1468,102 @@ export default function TeacherDashboard() {
         </div>
       </div>
     </SidebarProvider>
+
+    {/* AI Create New Quiz Dialog */}
+    <Dialog open={showAiDialog} onOpenChange={v => { if (!aiLoading) setShowAiDialog(v); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" /> Criar Questionário com IA
+          </DialogTitle>
+          <DialogDescription>
+            Envie um material de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Nome do Questionário</Label>
+            <Input value={aiQuizTitle} onChange={e => setAiQuizTitle(e.target.value)} placeholder="Ex: Farmacologia - Antibióticos" disabled={aiLoading} />
+          </div>
+          <div className="space-y-2">
+            <Label>Material de Apoio</Label>
+            <input ref={aiFileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => setAiFile(e.target.files?.[0] || null)} />
+            <div onClick={() => !aiLoading && aiFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${aiFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+              {aiFile ? (
+                <div className="flex flex-col items-center gap-2">
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                  <p className="font-medium">{aiFile.name}</p>
+                  <p className="text-sm text-muted-foreground">{(aiFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
+                  <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
+                </div>
+              )}
+            </div>
+          </div>
+          {aiLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 1 minuto.
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowAiDialog(false)} disabled={aiLoading}>Cancelar</Button>
+          <Button onClick={generateWithAI} disabled={aiLoading || !aiFile || !aiQuizTitle.trim()}>
+            {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Questões</>}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* AI Import into Existing Quiz Dialog */}
+    <Dialog open={showAiImportDialog} onOpenChange={v => { if (!aiImportLoading) setShowAiImportDialog(v); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-purple-500" /> Gerar Questões com IA
+          </DialogTitle>
+          <DialogDescription>
+            Envie um material de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Material de Apoio</Label>
+            <input ref={aiImportFileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => setAiImportFile(e.target.files?.[0] || null)} />
+            <div onClick={() => !aiImportLoading && aiImportFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${aiImportFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+              {aiImportFile ? (
+                <div className="flex flex-col items-center gap-2">
+                  <CheckCircle2 className="w-8 h-8 text-primary" />
+                  <p className="font-medium">{aiImportFile.name}</p>
+                  <p className="text-sm text-muted-foreground">{(aiImportFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
+                  <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
+                </div>
+              )}
+            </div>
+          </div>
+          {aiImportLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 1 minuto.
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowAiImportDialog(false)} disabled={aiImportLoading}>Cancelar</Button>
+          <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || !aiImportFile}>
+            {aiImportLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Questões</>}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
