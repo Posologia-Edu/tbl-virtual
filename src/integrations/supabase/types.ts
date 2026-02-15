@@ -442,16 +442,19 @@ export type Database = {
           id: string
           name: string
           room_id: string
+          trat_started_at: string | null
         }
         Insert: {
           id?: string
           name: string
           room_id: string
+          trat_started_at?: string | null
         }
         Update: {
           id?: string
           name?: string
           room_id?: string
+          trat_started_at?: string | null
         }
         Relationships: [
           {

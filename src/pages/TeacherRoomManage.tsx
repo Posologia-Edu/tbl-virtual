@@ -64,7 +64,7 @@ export default function TeacherRoomManage() {
 
     const { data: teamsData } = await supabase
       .from('teams')
-      .select('id, name, team_members(user_id, profiles:user_id(full_name))')
+      .select('id, name, trat_started_at, team_members(user_id, profiles:user_id(full_name))')
       .eq('room_id', roomId!)
       .order('name');
     // Filter out empty teams (teams with no members)
@@ -571,6 +571,7 @@ export default function TeacherRoomManage() {
                   <TableHead>Código Equipe</TableHead>
                   <TableHead>Nome Equipe</TableHead>
                   <TableHead>Integrantes</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -579,6 +580,13 @@ export default function TeacherRoomManage() {
                     <TableCell className="font-mono">{t.id.slice(0, 5)}</TableCell>
                     <TableCell className="text-primary font-medium">{t.name}</TableCell>
                     <TableCell>{(t.team_members || []).map((m: any) => m.profiles?.full_name).filter(Boolean).join(', ')}</TableCell>
+                    <TableCell className="text-center">
+                      {t.trat_started_at ? (
+                        <Badge className="bg-success/20 text-success border-success/30">Respondendo</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Aguardando</Badge>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
