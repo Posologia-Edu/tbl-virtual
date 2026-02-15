@@ -9,11 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash2, Zap, BookOpen, UsersRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import heroTeam from '@/assets/hero-team.png';
 
 type Question = {
   id: string;
@@ -55,6 +54,76 @@ const TRAT_SCORES = [4, 2, 1, 0];
 
 type TratStep = 'team_name' | 'add_members' | 'waiting' | 'answering';
 
+// ===== Creative Waiting Animation =====
+const WaitingAnimation = () => (
+  <div className="flex flex-col items-center gap-6">
+    <div className="relative w-28 h-28">
+      {/* Orbiting rings */}
+      {[0, 1, 2].map(i => (
+        <motion.div
+          key={`ring-${i}`}
+          className="absolute rounded-full border-2"
+          style={{
+            width: `${50 + i * 26}px`,
+            height: `${50 + i * 26}px`,
+            left: `${14 - i * 13}px`,
+            top: `${14 - i * 13}px`,
+            borderColor: `hsl(var(--primary) / ${0.15 + i * 0.1})`,
+          }}
+          animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
+          transition={{ duration: 4 + i * 2, repeat: Infinity, ease: 'linear' }}
+        />
+      ))}
+      {/* Orbiting dots */}
+      {[0, 1, 2, 3, 4, 5].map(i => {
+        const angle = (i * 60 * Math.PI) / 180;
+        const radius = 42;
+        return (
+          <motion.div
+            key={`dot-${i}`}
+            className="absolute w-2.5 h-2.5 rounded-full bg-primary"
+            style={{ left: 'calc(50% - 5px)', top: 'calc(50% - 5px)' }}
+            animate={{
+              x: [Math.cos(angle) * radius, Math.cos(angle + Math.PI) * radius, Math.cos(angle + Math.PI * 2) * radius],
+              y: [Math.sin(angle) * radius, Math.sin(angle + Math.PI) * radius, Math.sin(angle + Math.PI * 2) * radius],
+              opacity: [0.3, 1, 0.3],
+              scale: [0.8, 1.2, 0.8],
+            }}
+            transition={{ duration: 4, repeat: Infinity, delay: i * 0.3, ease: 'easeInOut' }}
+          />
+        );
+      })}
+      {/* Central pulse */}
+      <motion.div
+        className="absolute w-6 h-6 rounded-full bg-primary/40"
+        style={{ left: 'calc(50% - 12px)', top: 'calc(50% - 12px)' }}
+        animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0.8, 0.4] }}
+        transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </div>
+    {/* Wave bars */}
+    <div className="flex items-center gap-1">
+      {Array.from({ length: 20 }).map((_, i) => (
+        <motion.div
+          key={`bar-${i}`}
+          className="w-1 rounded-full bg-primary/60"
+          animate={{ height: ['6px', '24px', '6px'] }}
+          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.06, ease: 'easeInOut' }}
+        />
+      ))}
+    </div>
+  </div>
+);
+
+const TBLVirtualLogo = () => (
+  <div className="flex items-center gap-2.5">
+    <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+      <Zap className="w-6 h-6 text-primary-foreground" />
+    </div>
+    <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Virtual</span>
+  </div>
+);
+
 export default function StudentRoomView() {
   const { roomId } = useParams<{ roomId: string }>();
   const { user, profile } = useAuth();
@@ -82,6 +151,7 @@ export default function StudentRoomView() {
   const [tratStep, setTratStep] = useState<TratStep>('team_name');
   const [newGroupName, setNewGroupName] = useState('');
   const [tratSelectedOption, setTratSelectedOption] = useState<string | null>(null);
+  const [tratReady, setTratReady] = useState(false); // Whether student clicked "Iniciar aplicação em equipe"
 
   // tRAT score
   const [tratTotalScore, setTratTotalScore] = useState(0);
@@ -186,7 +256,6 @@ export default function StudentRoomView() {
     const rMap: Record<string, string> = {};
     (rs || []).forEach((r: any) => { rMap[r.question_id] = r.selected_option; });
     setAppResponses(rMap);
-    // If we already have responses, we're not waiting
     if (rs && rs.length > 0) setAppWaiting(false);
   }, [roomId, membership]);
 
@@ -232,9 +301,11 @@ export default function StudentRoomView() {
         () => { loadMembership(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` },
         () => { loadAppData(); })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` },
+        () => { loadParticipants(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadTratAttempts, loadMembership, loadAppData]);
+  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -358,24 +429,9 @@ export default function StudentRoomView() {
   // ===== RENDER: WAITING =====
   const renderWaiting = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-      <div className="flex items-center gap-2.5">
-        <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-          <Sparkles className="w-6 h-6 text-primary-foreground" />
-        </div>
-        <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-      </div>
+      <TBLVirtualLogo />
       <p className="text-lg text-muted-foreground">Aguarde a liberação do professor para início da Aplicação.</p>
-      <div className="flex gap-3 mt-8">
-        {[0, 1, 2, 3, 4].map(i => (
-          <motion.div
-            key={i}
-            className="w-8 h-8 rounded-full"
-            style={{ backgroundColor: `hsl(${30 + i * 15}, ${80 - i * 5}%, ${60 + i * 5}%)` }}
-            animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-            transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
-          />
-        ))}
-      </div>
+      <WaitingAnimation />
     </div>
   );
 
@@ -384,18 +440,10 @@ export default function StudentRoomView() {
     if (allIratAnswered) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
+          <TBLVirtualLogo />
           <p className="text-lg text-primary font-semibold">Aplicação individual concluída com sucesso!</p>
           <p className="text-muted-foreground">Aguarde orientações do professor, permaneça na tela.</p>
-          <div className="border rounded-xl p-6 mt-4 cursor-pointer hover:shadow-md transition-shadow">
-            <img src={heroTeam} alt="Equipe" className="w-48 h-auto mx-auto" />
-            <p className="text-primary font-medium mt-2">Iniciar aplicação em equipe</p>
-          </div>
+          <WaitingAnimation />
         </div>
       );
     }
@@ -410,8 +458,8 @@ export default function StudentRoomView() {
       <div className="space-y-4">
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <span className="text-lg font-heading font-bold text-primary">TBL Active</span>
+            <Zap className="w-5 h-5 text-primary" />
+            <span className="text-lg font-heading font-bold text-primary">TBL Virtual</span>
           </div>
           <p className="text-lg">
             Você está na sala de número <Badge variant="outline" className="text-primary font-bold text-base ml-1">{room.code}</Badge>
@@ -503,147 +551,196 @@ export default function StudentRoomView() {
 
   // ===== RENDER: tRAT =====
   const renderTrat = () => {
-    // Step 1: Create team (enter team name)
-    if (!membership) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
-          <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5">
-            <p className="text-center text-muted-foreground">
-              Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
-            </p>
-            <div className="space-y-2 text-left">
-              <Label className="font-semibold">Nome da equipe</Label>
-              <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Nome Equipe" />
-            </div>
-            <Button onClick={createGroup} className="w-full py-5 text-base">Entrar</Button>
-          </div>
-        </div>
-      );
-    }
-
-    // Step 2: Add members
-    if (tratStep === 'add_members' || tratStep === 'team_name') {
+    // If student was added to a team by someone else (via realtime), go straight to answering
+    if (membership) {
       const hasStarted = tratAttempts.length > 0;
       if (hasStarted) return renderTratAnswering();
 
+      // Show add members UI only if this student created the team (tratReady)
+      if (tratReady) {
+        return renderTratAddMembers();
+      }
+
+      // Student was added by someone else - show waiting for team leader
       return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
-          <div className="flex items-center gap-2.5 mb-8">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
-          <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5">
-            <p className="text-center text-muted-foreground">
-              Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
-            </p>
-            <div className="space-y-2 text-left">
-              <Label className="font-semibold">Informe os membros da equipe:</Label>
-              <div className="flex gap-2">
-                <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Registro Acadêmico ou CPF ou RG" className="flex-1" />
-                <Button size="icon" variant="outline" onClick={() => setAddMemberOpen(true)}>
-                  <UserPlus className="w-4 h-4" />
-                </Button>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
+          <TBLVirtualLogo />
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6 pb-6 space-y-4 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <UsersRound className="w-8 h-8 text-primary" />
               </div>
-            </div>
-            <Button onClick={() => { searchParticipants(); setAddMemberOpen(true); }} className="w-full py-4">
-              <Search className="w-4 h-4 mr-2" /> Localizar Estudante
-            </Button>
-
-            {teamMembers.length > 0 && (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Número de Registro</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead className="text-right">Excluir</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {teamMembers.map((m: any) => {
-                    const participant = allParticipants.find((p: any) => p.user_id === m.user_id);
-                    return (
-                      <TableRow key={m.user_id}>
-                        <TableCell className="font-mono">{participant?.participant_code || '—'}</TableCell>
-                        <TableCell>{m.profiles?.full_name || 'Aluno'}</TableCell>
-                        <TableCell className="text-right">
-                          {m.user_id !== user!.id && (
-                            <Button size="icon" variant="ghost" onClick={() => removeMember(m.user_id)}>
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-
-            <Button onClick={() => setTratStep('waiting')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
-              Iniciar Aplicação Em Equipe
-            </Button>
-          </div>
-
-          {/* Search dialog */}
-          <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Localizar Estudantes na sala</DialogTitle>
-                <DialogDescription>Selecione os alunos para adicionar à equipe.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 pt-2">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nº de Registro</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {searchResults.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-destructive/70">Registro de Aluno não encontrado!</TableCell>
-                      </TableRow>
-                    ) : (
-                      searchResults.map((p: any) => (
-                        <TableRow key={p.user_id}>
-                          <TableCell className="font-mono">{p.participant_code}</TableCell>
-                          <TableCell>{p.profiles?.full_name || 'Aluno'}</TableCell>
-                          <TableCell>
-                            <Button size="sm" onClick={() => { addMemberToTeam(p.user_id); searchParticipants(); }}>
-                              Selecionar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-                <div className="flex justify-end">
-                  <Button variant="outline" onClick={() => setAddMemberOpen(false)}>Fechar</Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              <h3 className="text-lg font-heading font-bold">Você está na equipe: {membership.teams.name}</h3>
+              <p className="text-sm text-muted-foreground">Aguarde o líder da equipe finalizar a formação do grupo para iniciar.</p>
+              <WaitingAnimation />
+            </CardContent>
+          </Card>
         </div>
       );
     }
 
-    // Step 3: Waiting for teacher
-    if (tratStep === 'waiting') {
-      return renderTratAnswering();
+    // No membership - show "Iniciar aplicação em equipe" screen
+    if (!tratReady) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 space-y-6">
+          <TBLVirtualLogo />
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-8 pb-8 space-y-6">
+              <div className="text-center space-y-3">
+                <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <UsersRound className="w-10 h-10 text-primary" />
+                </div>
+                <h2 className="text-xl font-heading font-bold">Fase em Equipe</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  A fase individual foi concluída! Agora é hora de trabalhar em equipe.
+                  Clique abaixo para criar sua equipe e adicionar os membros.
+                </p>
+              </div>
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">1</div>
+                  <span>Defina o nome da equipe</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">2</div>
+                  <span>Adicione os membros</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">3</div>
+                  <span>Responda em equipe</span>
+                </div>
+              </div>
+              <Button onClick={() => setTratReady(true)} className="w-full py-5 text-base">
+                <UsersRound className="w-5 h-5 mr-2" /> Iniciar Aplicação em Equipe
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
     }
 
-    return renderTratAnswering();
+    // tratReady but no membership - show team name creation
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+        <TBLVirtualLogo />
+        <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5 mt-6">
+          <p className="text-center text-muted-foreground">
+            Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
+          </p>
+          <div className="space-y-2 text-left">
+            <Label className="font-semibold">Nome da equipe</Label>
+            <Input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Nome Equipe" />
+          </div>
+          <Button onClick={createGroup} className="w-full py-5 text-base">Criar Equipe</Button>
+        </div>
+      </div>
+    );
+  };
+
+  // ===== tRAT: Add Members Step =====
+  const renderTratAddMembers = () => {
+    const hasStarted = tratAttempts.length > 0;
+    if (hasStarted) return renderTratAnswering();
+
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4">
+        <TBLVirtualLogo />
+        <div className="w-full max-w-md bg-card rounded-2xl border shadow-lg p-8 space-y-5 mt-6">
+          <p className="text-center text-muted-foreground">
+            Você está na sala de nº <span className="text-primary font-bold text-lg">{room.code}</span>
+          </p>
+          <div className="space-y-2 text-left">
+            <Label className="font-semibold">Informe os membros da equipe:</Label>
+            <div className="flex gap-2">
+              <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Registro Acadêmico ou CPF ou RG" className="flex-1" />
+              <Button size="icon" variant="outline" onClick={() => setAddMemberOpen(true)}>
+                <UserPlus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <Button onClick={() => { searchParticipants(); setAddMemberOpen(true); }} className="w-full py-4">
+            <Search className="w-4 h-4 mr-2" /> Localizar Estudante
+          </Button>
+
+          {teamMembers.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Número de Registro</TableHead>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="text-right">Excluir</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {teamMembers.map((m: any) => {
+                  const participant = allParticipants.find((p: any) => p.user_id === m.user_id);
+                  return (
+                    <TableRow key={m.user_id}>
+                      <TableCell className="font-mono">{participant?.participant_code || '—'}</TableCell>
+                      <TableCell>{m.profiles?.full_name || 'Aluno'}</TableCell>
+                      <TableCell className="text-right">
+                        {m.user_id !== user!.id && (
+                          <Button size="icon" variant="ghost" onClick={() => removeMember(m.user_id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+
+          <Button onClick={() => setTratStep('waiting')} className="w-full py-5 text-base" disabled={teamMembers.length === 0}>
+            Iniciar Aplicação Em Equipe
+          </Button>
+        </div>
+
+        {/* Search dialog */}
+        <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Localizar Estudantes na sala</DialogTitle>
+              <DialogDescription>Selecione os alunos para adicionar à equipe.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 pt-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nº de Registro</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {searchResults.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-destructive/70">Registro de Aluno não encontrado!</TableCell>
+                    </TableRow>
+                  ) : (
+                    searchResults.map((p: any) => (
+                      <TableRow key={p.user_id}>
+                        <TableCell className="font-mono">{p.participant_code}</TableCell>
+                        <TableCell>{p.profiles?.full_name || 'Aluno'}</TableCell>
+                        <TableCell>
+                          <Button size="sm" onClick={() => { addMemberToTeam(p.user_id); searchParticipants(); }}>
+                            Selecionar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setAddMemberOpen(false)}>Fechar</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
   };
 
   // ===== RENDER: tRAT ANSWERING (IF-AT) =====
@@ -658,16 +755,12 @@ export default function StudentRoomView() {
     if (allTratDone) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
+          <TBLVirtualLogo />
           <p className="text-lg text-primary font-semibold">Aplicação em Equipe concluída com sucesso!</p>
           <p className="text-muted-foreground">
             Aguarde o professor finalizar a aplicação, para que seja gerado o acompanhamento de seu desempenho, permanecendo na tela.
           </p>
+          <WaitingAnimation />
         </div>
       );
     }
@@ -683,8 +776,8 @@ export default function StudentRoomView() {
         {/* Header */}
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <span className="text-lg font-heading font-bold text-primary">TBL Active</span>
+            <Zap className="w-5 h-5 text-primary" />
+            <span className="text-lg font-heading font-bold text-primary">TBL Virtual</span>
           </div>
           <p className="text-lg">
             Você está na sala de número <span className="text-primary font-bold">{room.code}</span>
@@ -751,7 +844,6 @@ export default function StudentRoomView() {
                 {(['A', 'B', 'C', 'D'] as const).map(opt => {
                   const isDisabled = disabledOpts.has(opt);
                   const isSelected = tratSelectedOption === opt;
-                  // Check if this option was attempted and was wrong
                   const wasWrong = qAttempts.some(a => a.selected_option === opt && !a.is_correct);
                   return (
                     <button key={opt} onClick={() => !isDisabled && setTratSelectedOption(opt)} disabled={isDisabled}
@@ -837,24 +929,11 @@ export default function StudentRoomView() {
   // ===== RENDER: APPLICATION (V/F) =====
   const renderApplication = () => {
     if (!membership) {
-      // Team already exists from tRAT - waiting for teacher to release
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
+          <TBLVirtualLogo />
           <p className="text-lg text-muted-foreground">Aguardando liberação da atividade pelo professor...</p>
-          <div className="flex gap-3 mt-4">
-            {[0, 1, 2, 3, 4].map(i => (
-              <motion.div key={i} className="w-6 h-6 rounded-full"
-                style={{ backgroundColor: `hsl(${200 + i * 20}, 70%, 55%)` }}
-                animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} />
-            ))}
-          </div>
+          <WaitingAnimation />
         </div>
       );
     }
@@ -862,21 +941,9 @@ export default function StudentRoomView() {
     if (appQuestions.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
+          <TBLVirtualLogo />
           <p className="text-muted-foreground">Aguardando o professor liberar as questões de aplicação...</p>
-          <div className="flex gap-3 mt-4">
-            {[0, 1, 2, 3, 4].map(i => (
-              <motion.div key={i} className="w-6 h-6 rounded-full"
-                style={{ backgroundColor: `hsl(${200 + i * 20}, 70%, 55%)` }}
-                animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} />
-            ))}
-          </div>
+          <WaitingAnimation />
         </div>
       );
     }
@@ -887,16 +954,12 @@ export default function StudentRoomView() {
     if (allAppDone) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-heading font-bold tracking-tight text-primary">TBL Active</span>
-          </div>
+          <TBLVirtualLogo />
           <p className="text-lg text-primary font-semibold">Aplicação de Conceitos concluída com sucesso!</p>
           <p className="text-muted-foreground">
             Aguarde o professor finalizar a aplicação, permanecendo na tela.
           </p>
+          <WaitingAnimation />
         </div>
       );
     }
@@ -909,8 +972,8 @@ export default function StudentRoomView() {
       <div className="space-y-4">
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            <span className="text-lg font-heading font-bold text-primary">TBL Active</span>
+            <Zap className="w-5 h-5 text-primary" />
+            <span className="text-lg font-heading font-bold text-primary">TBL Virtual</span>
           </div>
           <p className="text-lg">
             Você está na sala de número <span className="text-primary font-bold">{room.code}</span>
