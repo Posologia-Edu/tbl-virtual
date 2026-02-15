@@ -20,7 +20,7 @@ function DashboardRouter() {
   const { user, role, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
   if (!user) return <Navigate to="/" replace />;
-  if (role === 'teacher') return <TeacherDashboard />;
+  if (role === 'teacher' || role === 'admin') return <TeacherDashboard />;
   return <StudentDashboard />;
 }
 
