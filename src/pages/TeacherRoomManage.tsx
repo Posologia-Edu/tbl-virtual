@@ -172,7 +172,7 @@ export default function TeacherRoomManage() {
         if (!existingRoomQs || existingRoomQs.length === 0) {
           const { data: quizAppQs } = await supabase
             .from('application_questions')
-            .select('question_text, option_a, option_b, option_c, option_d, sort_order')
+            .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer')
             .eq('quiz_id', room.quiz_id)
             .order('sort_order');
 
@@ -185,6 +185,7 @@ export default function TeacherRoomManage() {
               option_c: q.option_c,
               option_d: q.option_d,
               sort_order: q.sort_order,
+              correct_answer: q.correct_answer,
             }));
             await supabase.from('application_questions').insert(toInsert);
           }
@@ -721,7 +722,6 @@ export default function TeacherRoomManage() {
 
   // ============ APPLICATION MONITORING ============
   const renderAppMonitoring = () => {
-    // Count teams that answered each question
     const teamsAnsweredAll = teams.filter((t: any) => {
       return appQuestions.every(q => appResponses.some((r: any) => r.question_id === q.id && r.team_id === t.id));
     }).length;
@@ -730,68 +730,64 @@ export default function TeacherRoomManage() {
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-        <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
+          <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
             <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
-        </div>
+          </div>
         </div>
 
         <hr className="border-primary/30" />
 
-        {/* Add app questions */}
+        {/* Team responses table with colors */}
         <Card>
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-heading flex items-center gap-2">
-                <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
-              </CardTitle>
-              <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
-                    <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3 pt-2">
-                    <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
-                      <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
-                    </div>
-                    <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
+            <CardTitle className="text-base font-heading flex items-center gap-2">
+              <Badge className="phase-app">Aplicação de Conceitos</Badge> Respostas por Equipe
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {appQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda</p>
+              <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação</p>
             ) : (
-              <div className="space-y-4">
-                {appQuestions.map((q: any, i: number) => (
-                  <div key={q.id} className="p-3 rounded-lg border">
-                    <p className="text-sm font-medium mb-2">Q{i + 1}. {q.question_text}</p>
-                    {appDistribution[q.id] && (
-                      <div className="flex gap-2">
-                        {(['A', 'B'] as const).map(opt => {
-                          const count = appDistribution[q.id]?.[opt] || 0;
-                          const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
+              <ScrollArea className="w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[120px]">Equipe</TableHead>
+                      {appQuestions.map((_: any, i: number) => (
+                        <TableHead key={i} className="text-center min-w-[80px]">Q{i + 1}</TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {teams.map((t: any) => (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-medium text-primary">{t.name}</TableCell>
+                        {appQuestions.map((q: any) => {
+                          const response = appResponses.find((r: any) => r.question_id === q.id && r.team_id === t.id);
+                          if (!response) return <TableCell key={q.id} className="text-center text-muted-foreground text-xs">—</TableCell>;
+                          const selectedOpt = response.selected_option;
+                          const correctAnswer = q.correct_answer;
+                          const optLabel = selectedOpt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
+                          const isCorrect = correctAnswer && ((correctAnswer === 'V' && selectedOpt === 'A') || (correctAnswer === 'F' && selectedOpt === 'B'));
                           return (
-                            <div key={opt} className="flex items-center gap-1">
-                              <Badge variant="outline">{label}: {count} equipe(s)</Badge>
-                            </div>
+                            <TableCell key={q.id} className="text-center">
+                              <span className={`font-bold text-sm px-2 py-1 rounded ${
+                                isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {optLabel}
+                              </span>
+                            </TableCell>
                           );
                         })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
             )}
           </CardContent>
         </Card>

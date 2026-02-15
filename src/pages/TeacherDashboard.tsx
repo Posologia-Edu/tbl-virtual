@@ -72,7 +72,8 @@ type ProfileData = {
 
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
-  | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config';
+  | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
+  | 'admin-teachers';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -86,7 +87,7 @@ const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finish
 const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 export default function TeacherDashboard() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
@@ -133,10 +134,10 @@ export default function TeacherDashboard() {
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [addAppQOpen, setAddAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
-  const [appOptA, setAppOptA] = useState('');
-  const [appOptB, setAppOptB] = useState('');
-  const [appOptC, setAppOptC] = useState('');
-  const [appOptD, setAppOptD] = useState('');
+  const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+
+  // Admin state
+  const [allTeachers, setAllTeachers] = useState<any[]>([]);
 
   // Question type choice dialog
   const [showTypeChoice, setShowTypeChoice] = useState(false);
@@ -156,6 +157,7 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
+    if (user && activeView === 'admin-teachers' && isAdmin) loadTeachers();
   }, [user, activeView]);
 
   const loadData = async () => {
@@ -210,6 +212,39 @@ export default function TeacherDashboard() {
     if (error) { toast.error(error.message); return; }
     toast.success('Senha alterada com sucesso!');
     setOldPassword(''); setNewPassword(''); setConfirmPassword('');
+  };
+
+  const loadTeachers = async () => {
+    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
+    if (!roles) return;
+    const teacherRoles = roles.filter((r: any) => r.role === 'teacher' || r.role === 'admin');
+    const userIds = teacherRoles.map((r: any) => r.user_id);
+    if (userIds.length === 0) { setAllTeachers([]); return; }
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, is_approved, is_blocked, institution, created_at').in('id', userIds);
+    const merged = (profiles || []).map((p: any) => {
+      const r = teacherRoles.find((r: any) => r.user_id === p.id);
+      return { ...p, role: r?.role || 'teacher' };
+    });
+    setAllTeachers(merged);
+  };
+
+  const approveTeacher = async (id: string) => {
+    await supabase.from('profiles').update({ is_approved: true } as any).eq('id', id);
+    toast.success('Professor aprovado!');
+    loadTeachers();
+  };
+
+  const blockTeacher = async (id: string, block: boolean) => {
+    await supabase.from('profiles').update({ is_blocked: block } as any).eq('id', id);
+    toast.success(block ? 'Professor bloqueado' : 'Professor desbloqueado');
+    loadTeachers();
+  };
+
+  const deleteTeacher = async (id: string) => {
+    await supabase.from('user_roles').delete().eq('user_id', id);
+    await supabase.from('profiles').delete().eq('id', id);
+    toast.success('Professor excluído');
+    loadTeachers();
   };
 
   const sendContact = () => {
@@ -327,15 +362,16 @@ export default function TeacherDashboard() {
   };
 
   const addAppQuestionToQuiz = async () => {
-    if (!appQText.trim() || !appOptA || !appOptB || !appOptC || !appOptD) { toast.error('Preencha todos os campos'); return; }
+    if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
     const { error } = await supabase.from('application_questions').insert({
       quiz_id: selectedQuiz!.id, question_text: appQText.trim(),
-      option_a: appOptA, option_b: appOptB, option_c: appOptC, option_d: appOptD,
+      option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+      correct_answer: appCorrectAnswer,
       sort_order: appQuestions.length,
     });
     if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
     toast.success('Questão de aplicação adicionada!');
-    setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
+    setAppQText(''); setAppCorrectAnswer('V');
     setAddAppQOpen(false);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
     setAppQuestions(data || []);
@@ -874,20 +910,31 @@ export default function TeacherDashboard() {
         {/* Application Question Dialog */}
         <Dialog open={addAppQOpen} onOpenChange={setAddAppQOpen}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão de Aplicação</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
                 <Label>Questão</Label>
                 <Input value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação..." />
               </div>
-              {(['A', 'B', 'C', 'D'] as const).map((opt) => (
-                <div key={opt} className="space-y-1">
-                  <Label>Opção {opt}</Label>
-                  <Input value={opt === 'A' ? appOptA : opt === 'B' ? appOptB : opt === 'C' ? appOptC : appOptD}
-                    onChange={e => { const v = e.target.value; if (opt === 'A') setAppOptA(v); else if (opt === 'B') setAppOptB(v); else if (opt === 'C') setAppOptC(v); else setAppOptD(v); }}
-                    placeholder={`Opção ${opt}`} />
+              <div className="space-y-2">
+                <Label className="font-semibold">Gabarito: Resposta correta</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['V', 'F'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setAppCorrectAnswer(opt)}
+                      className={`p-4 rounded-lg border-2 text-center font-bold transition-all ${
+                        appCorrectAnswer === opt
+                          ? opt === 'V' ? 'border-green-500 bg-green-50 text-green-700' : 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-border hover:border-muted-foreground'
+                      }`}
+                    >
+                      {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
               <Button onClick={addAppQuestionToQuiz} className="w-full">Adicionar Questão</Button>
             </div>
           </DialogContent>
@@ -944,13 +991,12 @@ export default function TeacherDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">A{i + 1}.</span>{q.question_text}</p>
-                        <div className="grid grid-cols-2 gap-1 text-sm text-muted-foreground">
-                          {(['A', 'B', 'C', 'D'] as const).map(opt => (
-                            <span key={opt} className="px-2 py-1">
-                              {opt}. {q[`option_${opt.toLowerCase()}`] || ''}
-                            </span>
-                          ))}
-                        </div>
+                        <p className="text-sm">
+                          <span className="font-semibold">Gabarito: </span>
+                          <span className={`font-bold ${q.correct_answer === 'V' ? 'text-green-600' : q.correct_answer === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                            {q.correct_answer === 'V' ? 'Verdadeiro' : q.correct_answer === 'F' ? 'Falso' : 'Não definido'}
+                          </span>
+                        </p>
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                     </div>
@@ -999,6 +1045,73 @@ export default function TeacherDashboard() {
                   </TableRow>
                 );
               })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderAdminTeachers = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-heading font-bold">Gerenciar Professores</h2>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-primary/10">
+                <TableHead>Nome</TableHead>
+                <TableHead>Instituição</TableHead>
+                <TableHead>Cadastro</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-center">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {allTeachers.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum professor cadastrado.</TableCell></TableRow>
+              ) : allTeachers.map((t: any) => (
+                <TableRow key={t.id} className={t.is_blocked ? 'opacity-50' : ''}>
+                  <TableCell className="font-medium">
+                    {t.full_name}
+                    {t.role === 'admin' && <Badge className="ml-2 bg-primary text-primary-foreground text-xs">Admin</Badge>}
+                  </TableCell>
+                  <TableCell className="text-sm">{t.institution || '—'}</TableCell>
+                  <TableCell className="text-sm">{new Date(t.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                  <TableCell className="text-center">
+                    {t.is_blocked ? (
+                      <Badge variant="destructive">Bloqueado</Badge>
+                    ) : t.is_approved ? (
+                      <Badge className="bg-green-100 text-green-800 border-green-300">Aprovado</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-orange-600 border-orange-300">Pendente</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {t.id !== user!.id && (
+                      <div className="flex items-center justify-center gap-1">
+                        {!t.is_approved && !t.is_blocked && (
+                          <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50" onClick={() => approveTeacher(t.id)}>
+                            Aprovar
+                          </Button>
+                        )}
+                        {!t.is_blocked ? (
+                          <Button size="sm" variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => blockTeacher(t.id, true)}>
+                            Bloquear
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50" onClick={() => blockTeacher(t.id, false)}>
+                            Desbloquear
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => deleteTeacher(t.id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </CardContent>
@@ -1156,7 +1269,22 @@ export default function TeacherDashboard() {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            {/* Conta */}
+            {/* Admin */}
+            {isAdmin && (
+              <SidebarGroup>
+                <SidebarGroupLabel>Administração</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton onClick={() => setActiveView('admin-teachers')} isActive={activeView === 'admin-teachers'} className="cursor-pointer">
+                        <Users className="w-4 h-4" /><span>Professores</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
+
             <SidebarGroup>
               <SidebarGroupLabel>Conta</SidebarGroupLabel>
               <SidebarGroupContent>
@@ -1198,6 +1326,7 @@ export default function TeacherDashboard() {
                 {activeView === 'edit-quiz' && renderEditQuiz()}
                 {activeView === 'reports' && renderReports()}
                 {activeView === 'quiz-config' && renderQuizConfig()}
+                {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
               </>
             )}
           </main>

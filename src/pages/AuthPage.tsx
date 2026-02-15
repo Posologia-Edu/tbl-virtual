@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,9 +26,23 @@ export default function AuthPage() {
     try {
       if (isSignUp) {
         await signUp(email, password, fullName, 'teacher');
-        toast.success('Conta criada! Verifique seu e-mail se necessário.');
+        toast.success('Conta criada! Aguarde a aprovação do administrador.');
       } else {
         await signIn(email, password);
+        // Check if blocked or not approved
+        const { data: prof } = await supabase.from('profiles').select('is_blocked, is_approved').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+        if (prof?.is_blocked) {
+          await supabase.auth.signOut();
+          toast.error('Sua conta foi bloqueada. Entre em contato com o administrador.');
+          setIsLoading(false);
+          return;
+        }
+        if (!prof?.is_approved) {
+          await supabase.auth.signOut();
+          toast.error('Sua conta ainda não foi aprovada pelo administrador.');
+          setIsLoading(false);
+          return;
+        }
         toast.success('Bem-vindo de volta!');
       }
       navigate('/dashboard');

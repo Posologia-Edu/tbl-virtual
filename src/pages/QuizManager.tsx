@@ -32,6 +32,7 @@ type AppQuestion = {
   option_d: string | null;
   sort_order: number;
   quiz_id: string | null;
+  correct_answer: string | null;
 };
 
 type Quiz = {
@@ -76,6 +77,7 @@ export default function QuizManager() {
   const [appOptC, setAppOptC] = useState('');
   const [appOptD, setAppOptD] = useState('');
   const [editingAppQuestion, setEditingAppQuestion] = useState<AppQuestion | null>(null);
+  const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
 
   useEffect(() => {
     if (user) loadQuizzes();
@@ -122,7 +124,7 @@ export default function QuizManager() {
 
   const resetAppQuestionForm = () => {
     setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
-    setEditingAppQuestion(null);
+    setEditingAppQuestion(null); setAppCorrectAnswer('V');
   };
 
   const saveQuestion = async () => {
@@ -155,14 +157,15 @@ export default function QuizManager() {
   };
 
   const saveAppQuestion = async () => {
-    if (!appQText.trim() || !appOptA || !appOptB || !appOptC || !appOptD) {
-      toast.error('Preencha todos os campos');
+    if (!appQText.trim()) {
+      toast.error('Preencha o enunciado');
       return;
     }
     if (editingAppQuestion) {
       const { error } = await supabase.from('application_questions').update({
         question_text: appQText.trim(),
-        option_a: appOptA, option_b: appOptB, option_c: appOptC, option_d: appOptD,
+        option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+        correct_answer: appCorrectAnswer,
       }).eq('id', editingAppQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão de aplicação atualizada!');
@@ -170,7 +173,8 @@ export default function QuizManager() {
       const { error } = await supabase.from('application_questions').insert({
         quiz_id: selectedQuiz!.id,
         question_text: appQText.trim(),
-        option_a: appOptA, option_b: appOptB, option_c: appOptC, option_d: appOptD,
+        option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+        correct_answer: appCorrectAnswer,
         sort_order: appQuestions.length,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
@@ -193,6 +197,7 @@ export default function QuizManager() {
     setEditingAppQuestion(q);
     setAppQText(q.question_text);
     setAppOptA(q.option_a || ''); setAppOptB(q.option_b || ''); setAppOptC(q.option_c || ''); setAppOptD(q.option_d || '');
+    setAppCorrectAnswer((q.correct_answer as 'V' | 'F') || 'V');
     setViewMode('edit-app-question');
   };
 
@@ -343,32 +348,29 @@ export default function QuizManager() {
               <Textarea
                 value={appQText}
                 onChange={e => setAppQText(e.target.value)}
-                placeholder="Informe o enunciado da questão de aplicação."
+                placeholder="Informe o enunciado da questão de aplicação (V ou F)."
                 className="min-h-[150px]"
               />
             </div>
 
-            {optionLabels.map((opt) => {
-              const value = opt === 'A' ? appOptA : opt === 'B' ? appOptB : opt === 'C' ? appOptC : appOptD;
-              const setter = opt === 'A' ? setAppOptA : opt === 'B' ? setAppOptB : opt === 'C' ? setAppOptC : setAppOptD;
-
-              return (
-                <div
-                  key={opt}
-                  className="border-l-4 border-l-orange-300 rounded-lg p-4 space-y-2 bg-card"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Alternativa {opt})</span>
-                  </div>
-                  <Textarea
-                    value={value}
-                    onChange={e => setter(e.target.value)}
-                    placeholder="Digite a alternativa"
-                    className="min-h-[60px]"
-                  />
-                </div>
-              );
-            })}
+            <div className="space-y-3">
+              <Label className="font-semibold">Gabarito: Resposta correta é</Label>
+              <div className="grid grid-cols-2 gap-4">
+                {(['V', 'F'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    onClick={() => setAppCorrectAnswer(opt)}
+                    className={`p-6 rounded-xl border-2 text-center text-2xl font-bold transition-all ${
+                      appCorrectAnswer === opt
+                        ? opt === 'V' ? 'border-green-500 bg-green-50 text-green-700' : 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-border hover:border-orange-300'
+                    }`}
+                  >
+                    {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </main>
 
           <aside className="w-56 bg-orange-100/60 border-l min-h-screen p-0">
@@ -499,6 +501,7 @@ export default function QuizManager() {
                           <tr className="bg-orange-100/60">
                             <th className="text-left px-4 py-2 w-16">Nº</th>
                             <th className="text-left px-4 py-2">Questão</th>
+                            <th className="text-center px-4 py-2 w-24">Gabarito</th>
                             <th className="text-center px-4 py-2 w-32">Ações</th>
                           </tr>
                         </thead>
@@ -507,6 +510,11 @@ export default function QuizManager() {
                             <tr key={q.id} className="border-t hover:bg-muted/30">
                               <td className="px-4 py-2">{i + 1}</td>
                               <td className="px-4 py-2">{q.question_text}</td>
+                              <td className="px-4 py-2 text-center">
+                                <span className={`font-bold ${q.correct_answer === 'V' ? 'text-green-600' : 'text-red-600'}`}>
+                                  {q.correct_answer === 'V' ? 'Verdadeiro' : q.correct_answer === 'F' ? 'Falso' : '—'}
+                                </span>
+                              </td>
                               <td className="px-4 py-2 text-center">
                                 <div className="flex justify-center gap-2">
                                   <button onClick={() => startEditAppQuestion(q)} className="hover:text-primary">
