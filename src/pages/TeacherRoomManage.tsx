@@ -1003,7 +1003,11 @@ export default function TeacherRoomManage() {
                     const res = await supabase.functions.invoke('send-report-email', { body: { roomId } });
                     if (res.error) throw res.error;
                     const data = res.data as any;
-                    toast.success(`Relatórios enviados para ${data.sent} aluno(s)!`);
+                    if (data.sent === 0) {
+                      toast.warning('Nenhum aluno possui e-mail real cadastrado. Alunos que entraram com contas temporárias não recebem relatórios por e-mail.');
+                    } else {
+                      toast.success(`Relatórios enviados para ${data.sent} aluno(s)!`);
+                    }
                   } catch (err: any) {
                     toast.error('Erro ao enviar relatórios: ' + (err.message || 'Erro desconhecido'));
                   } finally {
