@@ -404,6 +404,15 @@ export default function TeacherDashboard() {
   };
 
   // AI helper functions
+  const getMimeType = (name: string): string => {
+    if (name.endsWith('.pdf')) return 'application/pdf';
+    if (name.endsWith('.doc')) return 'application/msword';
+    if (name.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (name.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (name.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    return 'text/plain';
+  };
+
   const readFileAsText = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -425,16 +434,20 @@ export default function TeacherDashboard() {
     });
   };
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
   const generateWithAI = async () => {
     if (!aiFile || !aiQuizTitle.trim()) return;
+    if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
     setAiLoading(true);
     try {
-      let fileContent: string;
       const isText = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md');
+      const mimeType = getMimeType(aiFile.name);
+      let fileContent: string;
       if (isText) { fileContent = await readFileAsText(aiFile); }
-      else { const b64 = await readFileAsBase64(aiFile); fileContent = `[Arquivo: ${aiFile.name}]\n${b64}`; }
+      else { fileContent = await readFileAsBase64(aiFile); }
 
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiFile.name } });
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiFile.name, mimeType: isText ? undefined : mimeType } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
@@ -472,14 +485,16 @@ export default function TeacherDashboard() {
 
   const generateForExistingQuiz = async () => {
     if (!aiImportFile || !selectedQuiz) return;
+    if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
     setAiImportLoading(true);
     try {
-      let fileContent: string;
       const isText = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md');
+      const mimeType = getMimeType(aiImportFile.name);
+      let fileContent: string;
       if (isText) { fileContent = await readFileAsText(aiImportFile); }
-      else { const b64 = await readFileAsBase64(aiImportFile); fileContent = `[Arquivo: ${aiImportFile.name}]\n${b64}`; }
+      else { fileContent = await readFileAsBase64(aiImportFile); }
 
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiImportFile.name } });
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiImportFile.name, mimeType: isText ? undefined : mimeType } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
