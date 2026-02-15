@@ -295,6 +295,50 @@ export default function TeacherRoomManage() {
           </Table>
         )}
       </div>
+      {/* Application Questions Management */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-heading flex items-center gap-2">
+              <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
+            </CardTitle>
+            <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
+                  <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
+                    <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
+                  </div>
+                  <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {appQuestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda. Adicione antes de iniciar a fase de aplicação.</p>
+          ) : (
+            <div className="space-y-2">
+              {appQuestions.map((q: any, i: number) => (
+                <div key={q.id} className="p-3 rounded-lg border">
+                  <p className="text-sm font-medium">Q{i + 1}. {q.question_text}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg" disabled={!room.quiz_id}>
         Iniciar Aplicação
       </Button>
