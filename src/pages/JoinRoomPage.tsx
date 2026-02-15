@@ -153,6 +153,7 @@ export default function JoinRoomPage() {
     await supabase.from('profiles').update({
       full_name: studentName.trim(),
       cpf: studentRegistration.trim() || null,
+      email: studentEmail.trim().toLowerCase() || null,
     } as any).eq('id', userId);
 
     const { data: existing } = await supabase

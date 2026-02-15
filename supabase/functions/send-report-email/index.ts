@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     const { data: room } = await supabase.from("rooms").select("*").eq("id", roomId).single();
     if (!room) return new Response(JSON.stringify({ error: "Room not found" }), { status: 404, headers: corsHeaders });
 
-    const { data: participants } = await supabase.from("room_participants").select("user_id, participant_code, profiles:user_id(full_name)").eq("room_id", roomId);
+    const { data: participants } = await supabase.from("room_participants").select("user_id, participant_code, profiles:user_id(full_name, email)").eq("room_id", roomId);
     const { data: questions } = await supabase.from("questions").select("*").eq("quiz_id", room.quiz_id).order("sort_order");
     const { data: iratResponses } = await supabase.from("irat_responses").select("*").eq("room_id", roomId);
     const { data: teams } = await supabase.from("teams").select("id, name, team_members(user_id)").eq("room_id", roomId);
@@ -36,16 +36,23 @@ Deno.serve(async (req) => {
     const maxTrat = (questions?.length || 1) * 4;
     const maxApp = (appQuestions?.length || 1);
 
+    console.log(`Processing ${(participants || []).length} participants for room ${roomId}`);
+
     const emails: string[] = [];
     for (const p of (participants || [])) {
       const studentId = p.user_id;
-      const name = (p as any).profiles?.full_name || "Aluno";
+      const profile = (p as any).profiles;
+      const name = profile?.full_name || "Aluno";
       const ra = p.participant_code || "—";
 
-      // Get student email from auth
-      const { data: userData } = await supabase.auth.admin.getUserById(studentId);
-      const email = userData?.user?.email;
-      if (!email || email.includes("@student.tbl")) continue;
+      // Use email from profiles first, fall back to auth email
+      let email = profile?.email;
+      if (!email) {
+        const { data: userData } = await supabase.auth.admin.getUserById(studentId);
+        email = userData?.user?.email;
+      }
+      console.log(`Student ${name}: email=${email}`);
+      if (!email || email.endsWith("@student.tbl")) continue;
 
       const studentIrat = (iratResponses || []).filter((r: any) => r.student_id === studentId);
       const iratRaw = studentIrat.reduce((s: number, r: any) => s + r.score, 0);
