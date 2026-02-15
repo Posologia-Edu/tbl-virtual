@@ -255,6 +255,15 @@ export default function QuizManager() {
     }
   };
 
+  const getMimeType = (name: string): string => {
+    if (name.endsWith('.pdf')) return 'application/pdf';
+    if (name.endsWith('.doc')) return 'application/msword';
+    if (name.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    if (name.endsWith('.ppt')) return 'application/vnd.ms-powerpoint';
+    if (name.endsWith('.pptx')) return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    return 'text/plain';
+  };
+
   const readFileAsText = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -269,31 +278,30 @@ export default function QuizManager() {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
-        resolve(result.split(',')[1]); // Remove data:...;base64, prefix
+        resolve(result.split(',')[1]);
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
   };
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
   const generateWithAI = async () => {
     if (!aiFile) { toast.error('Selecione um arquivo'); return; }
     if (!aiQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
+    if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
 
     setAiLoading(true);
     try {
-      let fileContent: string;
       const isTextFile = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md') || aiFile.name.endsWith('.csv');
-      
-      if (isTextFile) {
-        fileContent = await readFileAsText(aiFile);
-      } else {
-        const base64 = await readFileAsBase64(aiFile);
-        fileContent = `[Arquivo binário codificado em base64: ${aiFile.name}]\n${base64}`;
-      }
+      const mimeType = getMimeType(aiFile.name);
+      let fileContent: string;
+      if (isTextFile) { fileContent = await readFileAsText(aiFile); }
+      else { fileContent = await readFileAsBase64(aiFile); }
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiFile.name },
+        body: { fileContent, fileName: aiFile.name, mimeType: isTextFile ? undefined : mimeType },
       });
 
       if (error) throw error;
@@ -356,19 +364,17 @@ export default function QuizManager() {
 
   const generateForExistingQuiz = async () => {
     if (!aiImportFile || !selectedQuiz) return;
+    if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
     setAiImportLoading(true);
     try {
-      let fileContent: string;
       const isTextFile = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md') || aiImportFile.name.endsWith('.csv');
-      if (isTextFile) {
-        fileContent = await readFileAsText(aiImportFile);
-      } else {
-        const base64 = await readFileAsBase64(aiImportFile);
-        fileContent = `[Arquivo binário codificado em base64: ${aiImportFile.name}]\n${base64}`;
-      }
+      const mimeType = getMimeType(aiImportFile.name);
+      let fileContent: string;
+      if (isTextFile) { fileContent = await readFileAsText(aiImportFile); }
+      else { fileContent = await readFileAsBase64(aiImportFile); }
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiImportFile.name },
+        body: { fileContent, fileName: aiImportFile.name, mimeType: isTextFile ? undefined : mimeType },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
