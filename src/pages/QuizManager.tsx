@@ -68,6 +68,10 @@ export default function QuizManager() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiQuizTitle, setAiQuizTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const [showAiImportDialog, setShowAiImportDialog] = useState(false);
+  const [aiImportFile, setAiImportFile] = useState<File | null>(null);
+  const [aiImportLoading, setAiImportLoading] = useState(false);
 
   // iRAT/tRAT Question form state
   const [qText, setQText] = useState('');
@@ -347,6 +351,59 @@ export default function QuizManager() {
       toast.error(err.message || 'Falha ao gerar questões com IA');
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const generateForExistingQuiz = async () => {
+    if (!aiImportFile || !selectedQuiz) return;
+    setAiImportLoading(true);
+    try {
+      let fileContent: string;
+      const isTextFile = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md') || aiImportFile.name.endsWith('.csv');
+      if (isTextFile) {
+        fileContent = await readFileAsText(aiImportFile);
+      } else {
+        const base64 = await readFileAsBase64(aiImportFile);
+        fileContent = `[Arquivo binário codificado em base64: ${aiImportFile.name}]\n${base64}`;
+      }
+
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
+        body: { fileContent, fileName: aiImportFile.name },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      if (data.irat_questions?.length) {
+        const iratInserts = data.irat_questions.map((q: any, i: number) => ({
+          quiz_id: selectedQuiz.id,
+          question_text: q.question_text,
+          option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d,
+          correct_option: q.correct_option,
+          sort_order: questions.length + i,
+        }));
+        await supabase.from('questions').insert(iratInserts);
+      }
+      if (data.application_questions?.length) {
+        const appInserts = data.application_questions.map((q: any, i: number) => ({
+          quiz_id: selectedQuiz.id,
+          question_text: q.question_text,
+          option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+          correct_answer: q.correct_answer,
+          sort_order: appQuestions.length + i,
+        }));
+        await supabase.from('application_questions').insert(appInserts);
+      }
+
+      toast.success(`Adicionadas ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} de aplicação!`);
+      setShowAiImportDialog(false);
+      setAiImportFile(null);
+      await loadQuestions(selectedQuiz.id);
+      await loadAppQuestions(selectedQuiz.id);
+    } catch (err: any) {
+      console.error('AI import error:', err);
+      toast.error(err.message || 'Falha ao gerar questões com IA');
+    } finally {
+      setAiImportLoading(false);
     }
   };
 
@@ -704,19 +761,19 @@ export default function QuizManager() {
 
         {/* Question Type Choice Dialog */}
         <Dialog open={showTypeDialog} onOpenChange={setShowTypeDialog}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="text-center text-lg">Tipo de Questão</DialogTitle>
               <DialogDescription className="text-center">Selecione o tipo de questão que deseja criar</DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="grid grid-cols-3 gap-4 py-4">
               <button
                 onClick={() => handleChooseQuestionType('irat')}
                 className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-primary/20 hover:border-primary hover:bg-primary/5 transition-all"
               >
                 <BookOpen className="w-10 h-10 text-primary" />
                 <span className="font-semibold text-sm">iRAT / tRAT</span>
-                <span className="text-xs text-muted-foreground text-center">Questão com gabarito para avaliação individual e em equipe</span>
+                <span className="text-xs text-muted-foreground text-center">Questão manual com gabarito</span>
               </button>
               <button
                 onClick={() => handleChooseQuestionType('application')}
@@ -724,7 +781,15 @@ export default function QuizManager() {
               >
                 <FileQuestion className="w-10 h-10 text-orange-500" />
                 <span className="font-semibold text-sm">Aplicação</span>
-                <span className="text-xs text-muted-foreground text-center">Questão para a fase de aplicação dos conceitos</span>
+                <span className="text-xs text-muted-foreground text-center">Questão V/F para aplicação</span>
+              </button>
+              <button
+                onClick={() => { setShowTypeDialog(false); setAiFile(null); setShowAiImportDialog(true); }}
+                className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-purple-300/40 hover:border-purple-400 hover:bg-purple-50 transition-all"
+              >
+                <Sparkles className="w-10 h-10 text-purple-500" />
+                <span className="font-semibold text-sm">Criar com IA</span>
+                <span className="text-xs text-muted-foreground text-center">Gerar questões a partir de material</span>
               </button>
             </div>
           </DialogContent>
@@ -740,6 +805,77 @@ export default function QuizManager() {
               <h2 className="text-2xl font-bold">Sucesso</h2>
               <p className="text-muted-foreground">Questionário criado com sucesso!</p>
               <Button onClick={handleSuccessOk} className="bg-primary">Ok</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* AI Import Dialog (for existing quiz) */}
+        <Dialog open={showAiImportDialog} onOpenChange={v => { if (!aiImportLoading) setShowAiImportDialog(v); }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-purple-500" />
+                Gerar Questões com IA
+              </DialogTitle>
+              <DialogDescription>
+                Envie um material de apoio (PDF, Word, PowerPoint ou TXT) e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação baseados no conteúdo.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Material de Apoio</Label>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
+                  className="hidden"
+                  onChange={e => setAiImportFile(e.target.files?.[0] || null)}
+                />
+                <div
+                  onClick={() => !aiImportLoading && importFileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                    aiImportFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
+                  } ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}
+                >
+                  {aiImportFile ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <CheckCircle2 className="w-8 h-8 text-primary" />
+                      <p className="font-medium">{aiImportFile.name}</p>
+                      <p className="text-sm text-muted-foreground">{(aiImportFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="w-8 h-8 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
+                      <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {aiImportLoading && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analisando material e gerando questões... Isso pode levar até 1 minuto.
+                  </div>
+                  <Progress value={undefined} className="animate-pulse" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAiImportDialog(false)} disabled={aiImportLoading}>
+                Cancelar
+              </Button>
+              <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || !aiImportFile}>
+                {aiImportLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</>
+                ) : (
+                  <><Sparkles className="w-4 h-4 mr-1" /> Gerar Questões</>
+                )}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
