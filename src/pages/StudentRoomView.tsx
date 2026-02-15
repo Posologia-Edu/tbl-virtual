@@ -167,6 +167,7 @@ export default function StudentRoomView() {
   // Application phase
   const [appCurrentQ, setAppCurrentQ] = useState(0);
   const [appWaiting, setAppWaiting] = useState(true);
+  const [isTeamLeader, setIsTeamLeader] = useState(false);
 
   const loadRoom = useCallback(async () => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
@@ -193,14 +194,20 @@ export default function StudentRoomView() {
       }
       const { data: members } = await supabase
         .from('team_members')
-        .select('user_id, profiles:user_id(full_name)')
-        .eq('team_id', (data as any).team_id);
+        .select('user_id, joined_at, profiles:user_id(full_name)')
+        .eq('team_id', (data as any).team_id)
+        .order('joined_at', { ascending: true });
       setTeamMembers(members || []);
       setMyTeam(data);
+      // Leader is the first member (earliest joined_at)
+      if (members && members.length > 0) {
+        setIsTeamLeader(members[0].user_id === user!.id);
+      }
     } else {
       setMembership(null);
       setMyTeam(null);
       setTeamMembers([]);
+      setIsTeamLeader(false);
     }
   }, [user, roomId]);
 
@@ -998,6 +1005,27 @@ export default function StudentRoomView() {
           <TBLVirtualLogo />
           <p className="text-lg text-muted-foreground">Aguardando liberação da atividade pelo professor...</p>
           <WaitingAnimation />
+        </div>
+      );
+    }
+
+    // Only the team leader sees and answers application questions
+    if (!isTeamLeader) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
+          <TBLVirtualLogo />
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6 pb-6 space-y-4 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <UsersRound className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-heading font-bold">Equipe: {membership.teams.name}</h3>
+              <p className="text-sm text-muted-foreground">
+                O líder da equipe está respondendo as questões de aplicação. Aguarde a conclusão.
+              </p>
+              <WaitingAnimation />
+            </CardContent>
+          </Card>
         </div>
       );
     }
