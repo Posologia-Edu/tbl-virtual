@@ -209,7 +209,7 @@ export default function QuizManager() {
     setEditingAppQuestion(q);
     setAppQText(q.question_text);
     setAppOptA(q.option_a || ''); setAppOptB(q.option_b || ''); setAppOptC(q.option_c || ''); setAppOptD(q.option_d || '');
-    setAppCorrectAnswer((q.correct_answer as 'V' | 'F') || 'V');
+    setAppCorrectAnswer((q.correct_answer?.trim() as 'V' | 'F') || 'V');
     setViewMode('edit-app-question');
   };
 
@@ -686,8 +686,8 @@ export default function QuizManager() {
                               <td className="px-4 py-2">{i + 1}</td>
                               <td className="px-4 py-2">{q.question_text}</td>
                               <td className="px-4 py-2 text-center">
-                                <span className={`font-bold ${q.correct_answer === 'V' ? 'text-green-600' : 'text-red-600'}`}>
-                                  {q.correct_answer === 'V' ? 'Verdadeiro' : q.correct_answer === 'F' ? 'Falso' : '—'}
+                                <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-green-600' : q.correct_answer?.trim() === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                                  {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : '—'}
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-center">

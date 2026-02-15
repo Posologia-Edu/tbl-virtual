@@ -1142,8 +1142,8 @@ export default function TeacherDashboard() {
                         <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">A{i + 1}.</span>{q.question_text}</p>
                         <p className="text-sm">
                           <span className="font-semibold">Gabarito: </span>
-                          <span className={`font-bold ${q.correct_answer === 'V' ? 'text-green-600' : q.correct_answer === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                            {q.correct_answer === 'V' ? 'Verdadeiro' : q.correct_answer === 'F' ? 'Falso' : 'Não definido'}
+                          <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-green-600' : q.correct_answer?.trim() === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                            {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : 'Não definido'}
                           </span>
                         </p>
                       </div>
