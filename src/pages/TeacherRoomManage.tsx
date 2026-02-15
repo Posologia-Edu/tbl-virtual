@@ -770,7 +770,7 @@ export default function TeacherRoomManage() {
                           const response = appResponses.find((r: any) => r.question_id === q.id && r.team_id === t.id);
                           if (!response) return <TableCell key={q.id} className="text-center text-muted-foreground text-xs">—</TableCell>;
                           const selectedOpt = response.selected_option;
-                          const correctAnswer = q.correct_answer;
+                          const correctAnswer = q.correct_answer?.trim();
                           const optLabel = selectedOpt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
                           const isCorrect = correctAnswer && ((correctAnswer === 'V' && selectedOpt === 'A') || (correctAnswer === 'F' && selectedOpt === 'B'));
                           return (
