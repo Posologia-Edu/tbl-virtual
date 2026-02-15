@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       application_questions: {
         Row: {
+          correct_answer: string | null
           id: string
           option_a: string | null
           option_b: string | null
@@ -27,6 +28,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          correct_answer?: string | null
           id?: string
           option_a?: string | null
           option_b?: string | null
@@ -38,6 +40,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
+          correct_answer?: string | null
           id?: string
           option_a?: string | null
           option_b?: string | null
@@ -187,6 +190,8 @@ export type Database = {
           id: string
           institution: string | null
           institution_city: string | null
+          is_approved: boolean
+          is_blocked: boolean
           neighborhood: string | null
           nickname: string | null
           street: string | null
@@ -202,6 +207,8 @@ export type Database = {
           id: string
           institution?: string | null
           institution_city?: string | null
+          is_approved?: boolean
+          is_blocked?: boolean
           neighborhood?: string | null
           nickname?: string | null
           street?: string | null
@@ -217,6 +224,8 @@ export type Database = {
           id?: string
           institution?: string | null
           institution_city?: string | null
+          is_approved?: boolean
+          is_blocked?: boolean
           neighborhood?: string | null
           nickname?: string | null
           street?: string | null
@@ -559,6 +568,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_room_participant: {
         Args: { p_room_id: string; p_user_id: string }
         Returns: boolean
