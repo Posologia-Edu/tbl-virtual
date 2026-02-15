@@ -340,12 +340,37 @@ export default function TeacherDashboard() {
   };
 
   const deleteQuiz = async (id: string) => {
-    await supabase.from('application_questions').delete().eq('quiz_id', id);
-    await supabase.from('questions').delete().eq('quiz_id', id);
-    const { error } = await supabase.from('quizzes').delete().eq('id', id);
-    if (error) { toast.error('Falha ao excluir questionário'); return; }
-    loadData();
-    toast.success('Questionário excluído');
+    try {
+      // 1. Get question IDs to clean up responses
+      const { data: qIds } = await supabase.from('questions').select('id').eq('quiz_id', id);
+      const { data: aqIds } = await supabase.from('application_questions').select('id').eq('quiz_id', id);
+
+      // 2. Delete responses referencing these questions
+      if (qIds && qIds.length > 0) {
+        const ids = qIds.map(q => q.id);
+        await supabase.from('irat_responses').delete().in('question_id', ids);
+        await supabase.from('trat_attempts').delete().in('question_id', ids);
+      }
+      if (aqIds && aqIds.length > 0) {
+        const ids = aqIds.map(q => q.id);
+        await supabase.from('application_responses').delete().in('question_id', ids);
+      }
+
+      // 3. Delete questions themselves
+      await supabase.from('application_questions').delete().eq('quiz_id', id);
+      await supabase.from('questions').delete().eq('quiz_id', id);
+
+      // 4. Nullify quiz_id in rooms that reference this quiz
+      await supabase.from('rooms').update({ quiz_id: null }).eq('quiz_id', id);
+
+      // 5. Delete the quiz
+      const { error } = await supabase.from('quizzes').delete().eq('id', id);
+      if (error) { toast.error('Falha ao excluir questionário'); return; }
+      loadData();
+      toast.success('Questionário excluído');
+    } catch (err: any) {
+      toast.error('Erro ao excluir questionário: ' + (err.message || ''));
+    }
   };
 
   const openEditQuiz = async (quiz: Quiz) => {
