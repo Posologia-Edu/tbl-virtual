@@ -10,7 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X, BarChart3, TrendingUp, TrendingDown, MessageSquarePlus, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -52,7 +53,9 @@ export default function TeacherRoomManage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [sendingEmails, setSendingEmails] = useState(false);
-
+  const [appeals, setAppeals] = useState<any[]>([]);
+  const [appealResponse, setAppealResponse] = useState('');
+  const [reviewingAppeal, setReviewingAppeal] = useState<any>(null);
   const loadAll = useCallback(async () => {
     const { data: roomData } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
     if (roomData) setRoom(roomData);
@@ -89,7 +92,14 @@ export default function TeacherRoomManage() {
       setTratAttemptsAll(tratData || []);
       const scores = nonEmptyTeams.map((t: any) => {
         const teamAttempts = (tratData || []).filter((a: any) => a.team_id === t.id && a.is_correct);
-        const score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
+        let score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
+        // Add bonus for accepted appeals
+        const accepted = (appealsData || []).filter((ap: any) => ap.team_id === t.id && ap.status === 'accepted');
+        accepted.forEach((ap: any) => {
+          const existing = teamAttempts.find((a: any) => a.question_id === ap.question_id);
+          const existingScore = existing ? [4, 2, 1, 0][existing.attempt_number - 1] : 0;
+          score += (4 - existingScore);
+        });
         return { teamId: t.id, teamName: t.name, score };
       });
       setTratStats(scores);
@@ -111,6 +121,14 @@ export default function TeacherRoomManage() {
 
     const { data: quizzesData } = await supabase.from('quizzes').select('*, questions(id)').eq('teacher_id', user!.id).order('created_at', { ascending: false });
     setQuizzes(quizzesData || []);
+
+    // Load appeals
+    const { data: appealsData } = await supabase
+      .from('appeals')
+      .select('*, teams(name)')
+      .eq('room_id', roomId!)
+      .order('submitted_at', { ascending: false });
+    setAppeals(appealsData || []);
   }, [roomId, user]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -143,6 +161,7 @@ export default function TeacherRoomManage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` }, () => loadAllRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [roomId]);
@@ -243,6 +262,27 @@ export default function TeacherRoomManage() {
     if (room) { navigator.clipboard.writeText(room.code); toast.success('Código copiado!'); }
   };
 
+  const reviewAppeal = async (appealId: string, status: 'accepted' | 'rejected') => {
+    // Update appeal status
+    await supabase.from('appeals').update({
+      status,
+      teacher_response: appealResponse || null,
+      reviewed_at: new Date().toISOString(),
+    }).eq('id', appealId);
+
+    // If accepted, recalculate: grant full points (4) by inserting a correct attempt at attempt 1
+    // We achieve this by updating trat_attempts - but since we can't update, we'll just mark the appeal
+    // and adjust scoring in the report computation
+    if (status === 'accepted') {
+      toast.success('Apelação aceita! A pontuação será recalculada.');
+    } else {
+      toast.info('Apelação rejeitada.');
+    }
+    setReviewingAppeal(null);
+    setAppealResponse('');
+    loadAll();
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -288,6 +328,64 @@ export default function TeacherRoomManage() {
   };
 
   const joinUrl = `${window.location.origin}/join`;
+
+  const pendingAppeals = appeals.filter((a: any) => a.status === 'pending');
+
+  // Appeals Card (reusable)
+  const renderAppealsCard = () => {
+    if (appeals.length === 0) return null;
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-heading flex items-center gap-2">
+            <MessageSquarePlus className="w-4 h-4 text-primary" />
+            Apelações {pendingAppeals.length > 0 && (
+              <Badge className="bg-warning text-warning-foreground">{pendingAppeals.length} pendente(s)</Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {appeals.map((a: any) => {
+            const q = questions.find((q: any) => q.id === a.question_id);
+            const qIdx = q ? questions.indexOf(q) + 1 : '?';
+            return (
+              <div key={a.id} className={`p-3 rounded-lg border space-y-2 ${a.status === 'pending' ? 'border-warning/50 bg-warning/5' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">Q{qIdx}</Badge>
+                    <span className="text-sm font-medium">{a.teams?.name || 'Equipe'}</span>
+                  </div>
+                  <Badge variant="outline" className={
+                    a.status === 'accepted' ? 'text-success border-success/30' :
+                    a.status === 'rejected' ? 'text-destructive border-destructive/30' :
+                    'text-warning border-warning/30'
+                  }>
+                    {a.status === 'pending' ? 'Pendente' : a.status === 'accepted' ? 'Aceita' : 'Rejeitada'}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">{a.justification}</p>
+                {a.teacher_response && (
+                  <p className="text-xs text-primary">Sua resposta: {a.teacher_response}</p>
+                )}
+                {a.status === 'pending' && (
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" variant="outline" className="flex-1 text-success border-success/30 hover:bg-success/10"
+                      onClick={() => setReviewingAppeal({ ...a, action: 'accepted' })}>
+                      <ThumbsUp className="w-3 h-3 mr-1" /> Aceitar
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => setReviewingAppeal({ ...a, action: 'rejected' })}>
+                      <ThumbsDown className="w-3 h-3 mr-1" /> Rejeitar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Application Questions Management Card (reusable across stages)
   const renderAppQuestionsCard = () => (
@@ -712,6 +810,9 @@ export default function TeacherRoomManage() {
         </div>
       </div>
 
+      {/* Appeals */}
+      {renderAppealsCard()}
+
       {/* Application questions management during tRAT monitoring */}
       {renderAppQuestionsCard()}
 
@@ -833,6 +934,14 @@ export default function TeacherRoomManage() {
       if (teamId) {
         const teamAttempts = tratAttemptsAll.filter((a: any) => a.team_id === teamId && a.is_correct);
         tratRawScore = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
+        
+        // Add bonus for accepted appeals: grant full points (4) minus what they already got
+        const acceptedAppeals = appeals.filter((ap: any) => ap.team_id === teamId && ap.status === 'accepted');
+        acceptedAppeals.forEach((ap: any) => {
+          const existingAttempt = tratAttemptsAll.find((a: any) => a.team_id === teamId && a.question_id === ap.question_id && a.is_correct);
+          const existingScore = existingAttempt ? [4, 2, 1, 0][existingAttempt.attempt_number - 1] : 0;
+          tratRawScore += (4 - existingScore); // Grant full marks minus what was already awarded
+        });
       }
 
       let appRawScore = 0;
@@ -991,6 +1100,9 @@ export default function TeacherRoomManage() {
               </Table>
               <ScrollBar orientation="horizontal" />
             </ScrollArea>
+
+            {/* Appeals in final report */}
+            {renderAppealsCard()}
 
             <div className="flex gap-3">
               <Button onClick={() => navigate('/dashboard')} variant="outline" className="flex-1">Voltar ao Dashboard</Button>
@@ -1214,6 +1326,46 @@ export default function TeacherRoomManage() {
               Confirmar e Avançar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Appeal review dialog */}
+      <Dialog open={!!reviewingAppeal} onOpenChange={(open) => { if (!open) { setReviewingAppeal(null); setAppealResponse(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-heading">
+              {reviewingAppeal?.action === 'accepted' ? 'Aceitar' : 'Rejeitar'} Apelação
+            </DialogTitle>
+            <DialogDescription>
+              {reviewingAppeal?.action === 'accepted'
+                ? 'Ao aceitar, a equipe receberá pontuação máxima (4 pontos) nesta questão.'
+                : 'Informe o motivo da rejeição (opcional).'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {reviewingAppeal && (
+              <div className="p-3 rounded-lg bg-muted/50 text-sm space-y-2">
+                <p className="font-medium">Equipe: {reviewingAppeal.teams?.name}</p>
+                <p>Q{questions.findIndex((q: any) => q.id === reviewingAppeal.question_id) + 1}: {questions.find((q: any) => q.id === reviewingAppeal.question_id)?.question_text?.substring(0, 100)}</p>
+                <p className="text-muted-foreground italic">"{reviewingAppeal.justification}"</p>
+              </div>
+            )}
+            <div>
+              <Label>Resposta do Professor (opcional)</Label>
+              <Textarea
+                value={appealResponse}
+                onChange={e => setAppealResponse(e.target.value)}
+                placeholder="Feedback para a equipe..."
+                rows={3}
+              />
+            </div>
+            <Button
+              onClick={() => reviewingAppeal && reviewAppeal(reviewingAppeal.id, reviewingAppeal.action)}
+              className={`w-full ${reviewingAppeal?.action === 'accepted' ? 'bg-success hover:bg-success/90' : 'bg-destructive hover:bg-destructive/90'}`}
+            >
+              {reviewingAppeal?.action === 'accepted' ? 'Confirmar Aceitação' : 'Confirmar Rejeição'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

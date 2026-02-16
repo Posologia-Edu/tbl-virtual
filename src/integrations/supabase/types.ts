@@ -14,6 +14,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      appeals: {
+        Row: {
+          id: string
+          justification: string
+          question_id: string
+          reviewed_at: string | null
+          room_id: string
+          status: string
+          submitted_at: string
+          submitted_by: string
+          teacher_response: string | null
+          team_id: string
+        }
+        Insert: {
+          id?: string
+          justification: string
+          question_id: string
+          reviewed_at?: string | null
+          room_id: string
+          status?: string
+          submitted_at?: string
+          submitted_by: string
+          teacher_response?: string | null
+          team_id: string
+        }
+        Update: {
+          id?: string
+          justification?: string
+          question_id?: string
+          reviewed_at?: string | null
+          room_id?: string
+          status?: string
+          submitted_at?: string
+          submitted_by?: string
+          teacher_response?: string | null
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appeals_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appeals_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appeals_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       application_questions: {
         Row: {
           correct_answer: string | null
