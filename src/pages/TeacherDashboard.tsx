@@ -21,12 +21,13 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2,
+  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 
 type Room = {
   id: string;
@@ -73,7 +74,7 @@ type ProfileData = {
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
-  | 'admin-teachers';
+  | 'admin-teachers' | 'analytics';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -1446,6 +1447,11 @@ export default function TeacherDashboard() {
                       <BarChart3 className="w-4 h-4" /><span>Relatórios</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => setActiveView('analytics')} isActive={activeView === 'analytics'} className="cursor-pointer">
+                      <TrendingUp className="w-4 h-4" /><span>Analytics</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -1507,6 +1513,7 @@ export default function TeacherDashboard() {
                 {activeView === 'edit-quiz' && renderEditQuiz()}
                 {activeView === 'reports' && renderReports()}
                 {activeView === 'quiz-config' && renderQuizConfig()}
+                {activeView === 'analytics' && user && <AnalyticsDashboard userId={user.id} />}
                 {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
               </>
             )}
