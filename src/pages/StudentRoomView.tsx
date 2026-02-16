@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash2, Zap, BookOpen, UsersRound } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash2, Zap, BookOpen, UsersRound, MessageSquarePlus, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -164,6 +165,12 @@ export default function StudentRoomView() {
   // iRAT individual responses for team members (show_individual_in_team)
   const [memberIratResponses, setMemberIratResponses] = useState<any[]>([]);
 
+  // Appeals
+  const [appeals, setAppeals] = useState<any[]>([]);
+  const [appealQuestion, setAppealQuestion] = useState<string | null>(null);
+  const [appealJustification, setAppealJustification] = useState('');
+  const [submittingAppeal, setSubmittingAppeal] = useState(false);
+
   // Application phase
   const [appCurrentQ, setAppCurrentQ] = useState(0);
   const [appWaiting, setAppWaiting] = useState(true);
@@ -275,11 +282,21 @@ export default function StudentRoomView() {
     if (rs && rs.length > 0) setAppWaiting(false);
   }, [roomId, membership]);
 
+  const loadAppeals = useCallback(async () => {
+    if (!membership) return;
+    const { data } = await supabase
+      .from('appeals')
+      .select('*')
+      .eq('team_id', membership.team_id)
+      .eq('room_id', roomId!);
+    setAppeals(data || []);
+  }, [membership, roomId]);
+
   useEffect(() => { loadRoom(); loadMembership(); loadParticipants(); }, [loadRoom, loadMembership, loadParticipants]);
   useEffect(() => { if (room?.quiz_id && room?.current_stage !== 'waiting') loadQuestions(room.quiz_id); }, [room?.quiz_id, room?.current_stage, loadQuestions]);
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
-    if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); } }
+    if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); loadAppeals(); } }
     if (room?.current_stage === 'application_open') { loadMembership(); loadAppData(); }
   }, [room?.current_stage, membership]);
 
@@ -335,6 +352,8 @@ export default function StudentRoomView() {
         () => { loadAppData(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` },
         () => { loadParticipants(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` },
+        () => { loadAppeals(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants]);
@@ -393,6 +412,25 @@ export default function StudentRoomView() {
     setTratFeedback({ correct: isCorrect, option, points });
     setTratSelectedOption(null);
     loadTratAttempts();
+  };
+
+  const submitAppeal = async (questionId: string) => {
+    if (!membership || !appealJustification.trim()) return;
+    setSubmittingAppeal(true);
+    const { error } = await supabase.from('appeals').insert({
+      room_id: roomId!, team_id: membership.team_id, question_id: questionId,
+      justification: appealJustification.trim(), submitted_by: user!.id,
+    });
+    setSubmittingAppeal(false);
+    if (error) {
+      if (error.code === '23505') toast.error('Apelação já enviada para esta questão');
+      else toast.error('Falha ao enviar apelação');
+      return;
+    }
+    toast.success('Apelação enviada com sucesso!');
+    setAppealJustification('');
+    setAppealQuestion(null);
+    loadAppeals();
   };
 
   const submitApp = async (questionId: string, option: string) => {
@@ -811,14 +849,122 @@ export default function StudentRoomView() {
     });
 
     if (allTratDone) {
+      // Questions where the team didn't get full marks and no appeal submitted yet
+      const appealableQuestions = questions.filter(q => {
+        const qA = tratAttempts.filter(a => a.question_id === q.id);
+        const gotCorrectFirst = qA.some(a => a.is_correct && a.attempt_number === 1);
+        const alreadyAppealed = appeals.some(a => a.question_id === q.id);
+        return !gotCorrectFirst && !alreadyAppealed;
+      });
+
       return (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
-          <TBLVirtualLogo />
-          <p className="text-lg text-primary font-semibold">Aplicação em Equipe concluída com sucesso!</p>
-          <p className="text-muted-foreground">
-            Aguarde o professor finalizar a aplicação, para que seja gerado o acompanhamento de seu desempenho, permanecendo na tela.
-          </p>
+        <div className="space-y-6">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <TBLVirtualLogo />
+            <p className="text-lg text-primary font-semibold">Aplicação em Equipe concluída com sucesso!</p>
+            <p className="text-muted-foreground">
+              Aguarde o professor finalizar a aplicação, permanecendo na tela.
+            </p>
+          </div>
+
+          {/* Appeals Section */}
+          {appealableQuestions.length > 0 && (
+            <Card>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <MessageSquarePlus className="w-5 h-5 text-primary" />
+                  <h3 className="font-heading font-bold text-base">Recurso de Apelação</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Sua equipe pode contestar questões com justificativa fundamentada.
+                </p>
+                <div className="space-y-3">
+                  {appealableQuestions.map((q, i) => {
+                    const qIdx = questions.indexOf(q) + 1;
+                    return (
+                      <div key={q.id} className="p-3 rounded-lg border space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">Q{qIdx}. {q.question_text.substring(0, 60)}...</span>
+                          <Button size="sm" variant="outline" onClick={() => setAppealQuestion(q.id)}>
+                            <MessageSquarePlus className="w-3 h-3 mr-1" /> Apelar
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Submitted appeals */}
+          {appeals.length > 0 && (
+            <Card>
+              <CardContent className="pt-6 space-y-3">
+                <h3 className="font-heading font-bold text-base">Apelações Enviadas</h3>
+                {appeals.map(a => {
+                  const q = questions.find(q => q.id === a.question_id);
+                  const qIdx = q ? questions.indexOf(q) + 1 : '?';
+                  return (
+                    <div key={a.id} className="p-3 rounded-lg border space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Q{qIdx}</span>
+                        <Badge variant="outline" className={
+                          a.status === 'accepted' ? 'text-success border-success/30' :
+                          a.status === 'rejected' ? 'text-destructive border-destructive/30' :
+                          'text-warning border-warning/30'
+                        }>
+                          {a.status === 'pending' ? 'Pendente' : a.status === 'accepted' ? 'Aceita' : 'Rejeitada'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{a.justification}</p>
+                      {a.teacher_response && (
+                        <p className="text-xs text-primary mt-1">Resposta: {a.teacher_response}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           <WaitingAnimation />
+
+          {/* Appeal dialog */}
+          <Dialog open={!!appealQuestion} onOpenChange={(open) => { if (!open) { setAppealQuestion(null); setAppealJustification(''); } }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-heading">Recurso de Apelação</DialogTitle>
+                <DialogDescription>
+                  Justifique por que sua equipe acredita que a resposta deveria ser considerada correta.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                {appealQuestion && (
+                  <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                    <p className="font-medium">{questions.find(q => q.id === appealQuestion)?.question_text}</p>
+                  </div>
+                )}
+                <div>
+                  <Label>Justificativa</Label>
+                  <Textarea
+                    value={appealJustification}
+                    onChange={e => setAppealJustification(e.target.value)}
+                    placeholder="Apresente sua justificativa com base teórica ou referências..."
+                    rows={5}
+                  />
+                </div>
+                <Button
+                  onClick={() => appealQuestion && submitAppeal(appealQuestion)}
+                  disabled={!appealJustification.trim() || submittingAppeal}
+                  className="w-full"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {submittingAppeal ? 'Enviando...' : 'Enviar Apelação'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       );
     }
