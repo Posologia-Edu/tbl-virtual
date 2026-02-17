@@ -16,6 +16,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import TratFeedbackAnimation from '@/components/TratFeedbackAnimation';
 import AchievementToast, { triggerAchievement } from '@/components/AchievementToast';
+import { useOfflineSync } from '@/hooks/useOfflineSync';
+import ConnectionStatus, { ConnectionDot } from '@/components/ConnectionStatus';
 
 type Question = {
   id: string;
@@ -134,6 +136,7 @@ export default function StudentRoomView() {
   const { roomId } = useParams<{ roomId: string }>();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { isOnline, pendingCount, syncing, resilientSubmit } = useOfflineSync();
   const [room, setRoom] = useState<Room | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [membership, setMembership] = useState<TeamMember | null>(null);
@@ -463,12 +466,14 @@ export default function StudentRoomView() {
     const question = questions.find(q => q.id === questionId);
     const correctOpt = question?.correct_option?.toUpperCase() as keyof IratPointDistribution;
     const score = correctOpt ? distribution[correctOpt] : 0;
-    const { error } = await supabase.from('irat_responses').insert({
+    const data = {
       student_id: user!.id, question_id: questionId, room_id: roomId!,
       points_a: distribution.A, points_b: distribution.B, points_c: distribution.C, points_d: distribution.D,
       score, is_correct: score > 0,
-    });
-    if (error) { toast.error('Falha ao enviar'); return; }
+    };
+    const result = await resilientSubmit('irat_responses', 'insert', data);
+    if (!result.success) { toast.error('Falha ao enviar'); return; }
+    if (result.offline) { toast.info('Resposta salva localmente — será enviada quando a conexão voltar'); }
     setIratDistributions(prev => ({ ...prev, [questionId]: distribution }));
     setIratScores(prev => ({ ...prev, [questionId]: score }));
     setIratSubmitted(prev => new Set(prev).add(questionId));
@@ -498,11 +503,12 @@ export default function StudentRoomView() {
     if (existingAttempts.length >= 4) return;
     const attemptNumber = existingAttempts.length + 1;
     const isCorrect = question?.correct_option === option;
-    const { error } = await supabase.from('trat_attempts').insert({
+    const result = await resilientSubmit('trat_attempts', 'insert', {
       team_id: membership.team_id, question_id: questionId, room_id: roomId!,
       attempt_number: attemptNumber, selected_option: option, is_correct: isCorrect, submitted_by: user!.id,
     });
-    if (error) { if (error.code === '23505') toast.error('Opção já tentada'); else toast.error('Falha ao enviar'); return; }
+    if (!result.success) { if (result.error?.code === '23505') toast.error('Opção já tentada'); else toast.error('Falha ao enviar'); return; }
+    if (result.offline) { toast.info('Resposta salva localmente'); }
     const points = isCorrect ? TRAT_SCORES[attemptNumber - 1] : 0;
     setTratFeedback({ correct: isCorrect, option, points });
     setTratSelectedOption(null);
@@ -542,10 +548,11 @@ export default function StudentRoomView() {
 
   const submitApp = async (questionId: string, option: string) => {
     if (!membership) return;
-    const { error } = await supabase.from('application_responses').upsert({
+    const result = await resilientSubmit('application_responses', 'upsert', {
       question_id: questionId, team_id: membership.team_id, room_id: roomId!, selected_option: option, submitted_by: user!.id,
     });
-    if (error) { toast.error('Falha ao enviar'); return; }
+    if (!result.success) { toast.error('Falha ao enviar'); return; }
+    if (result.offline) { toast.info('Resposta salva localmente'); }
     setAppResponses(prev => ({ ...prev, [questionId]: option }));
     toast.success('Resposta enviada!');
     if (appCurrentQ < appQuestions.length - 1) {
@@ -1359,6 +1366,7 @@ export default function StudentRoomView() {
   return (
     <>
       <AchievementToast />
+      <ConnectionStatus pendingCount={pendingCount} syncing={syncing} />
       <div className="min-h-screen bg-background">
         {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
           <header className="border-b bg-card">
