@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import StudentAchievements from '@/components/StudentAchievements';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
+import { ConnectionDot } from '@/components/ConnectionStatus';
 
 type JoinedRoom = {
   room_id: string;
@@ -133,7 +134,8 @@ export default function StudentDashboard() {
             <h1 className="text-xl font-heading font-bold">TBL Virtual</h1>
             <p className="text-sm text-muted-foreground">{t('student.hello')}, {profile?.full_name}</p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <ConnectionDot />
             <AccessibilityMenu />
             <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/'); }} aria-label={t('common.logout')}>
               <LogOut className="w-4 h-4" />
