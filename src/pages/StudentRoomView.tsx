@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,8 @@ type Room = {
   current_stage: string;
   quiz_id: string | null;
   irat_end_time: string | null;
+  trat_end_time: string | null;
+  app_end_time: string | null;
   show_individual_in_team?: boolean;
 };
 
@@ -126,6 +128,7 @@ const TBLVirtualLogo = () => (
 );
 
 export default function StudentRoomView() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const { roomId } = useParams<{ roomId: string }>();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
@@ -310,9 +313,22 @@ export default function StudentRoomView() {
     }
   }, [membership, room?.current_stage]);
 
-  // tRAT Timer (20 minutes from trat_started_at)
+  // tRAT Timer (from room.trat_end_time set by teacher)
   useEffect(() => {
-    if (!tratStartedAt || room?.current_stage !== 'trat_open') { setTratTimeLeft(null); return; }
+    if (!room?.trat_end_time || room?.current_stage !== 'trat_open') { setTratTimeLeft(null); return; }
+    const updateTimer = () => {
+      const endTime = new Date(room.trat_end_time!).getTime();
+      const diff = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      setTratTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [room?.trat_end_time, room?.current_stage]);
+
+  // Also keep legacy trat_started_at timer as fallback
+  useEffect(() => {
+    if (room?.trat_end_time || !tratStartedAt || room?.current_stage !== 'trat_open') return;
     const updateTimer = () => {
       const startTime = new Date(tratStartedAt).getTime();
       const endTime = startTime + TRAT_DURATION * 1000;
@@ -322,11 +338,25 @@ export default function StudentRoomView() {
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [tratStartedAt, room?.current_stage]);
+  }, [tratStartedAt, room?.current_stage, room?.trat_end_time]);
 
-  // Timer
+  // App Timer
+  const [appTimeLeft, setAppTimeLeft] = useState<number | null>(null);
   useEffect(() => {
-    if (!room?.irat_end_time || room.current_stage !== 'irat_open') { setTimeLeft(null); return; }
+    if (!room?.app_end_time || room?.current_stage !== 'application_open') { setAppTimeLeft(null); return; }
+    const updateTimer = () => {
+      const endTime = new Date(room.app_end_time!).getTime();
+      const diff = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      setAppTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [room?.app_end_time, room?.current_stage]);
+
+  // iRAT Timer
+  useEffect(() => {
+    if (!room?.irat_end_time || room?.current_stage !== 'irat_open') { setTimeLeft(null); return; }
     const updateTimer = () => {
       const diff = Math.max(0, Math.floor((new Date(room.irat_end_time!).getTime() - Date.now()) / 1000));
       setTimeLeft(diff);
@@ -335,6 +365,41 @@ export default function StudentRoomView() {
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [room?.irat_end_time, room?.current_stage]);
+
+  // Audio alert when any timer hits 60 seconds
+  const alertPlayed = useRef(false);
+  useEffect(() => {
+    const activeTimer = timeLeft ?? tratTimeLeft ?? appTimeLeft;
+    if (activeTimer !== null && activeTimer === 60 && !alertPlayed.current) {
+      alertPlayed.current = true;
+      try {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        gain.gain.value = 0.3;
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 500);
+      } catch (e) { /* audio not supported */ }
+    }
+    if (activeTimer !== null && activeTimer > 60) alertPlayed.current = false;
+  }, [timeLeft, tratTimeLeft, appTimeLeft]);
+
+  // Auto-submit iRAT when time expires
+  useEffect(() => {
+    if (timeLeft !== null && timeLeft <= 0 && room?.current_stage === 'irat_open') {
+      // Submit all unanswered iRAT questions with current distributions
+      questions.forEach(q => {
+        if (!iratSubmitted.has(q.id)) {
+          const dist = iratDistributions[q.id] || { A: 0, B: 0, C: 0, D: 0 };
+          const total = dist.A + dist.B + dist.C + dist.D;
+          if (total === 4) submitIrat(q.id, dist);
+        }
+      });
+    }
+  }, [timeLeft]);
 
   // Realtime
   useEffect(() => {
@@ -1219,6 +1284,17 @@ export default function StudentRoomView() {
           <p className="text-sm text-muted-foreground">Equipe: {membership?.teams.name}</p>
         </div>
 
+        {appTimeLeft !== null && (
+          <Card className={appTimeLeft <= 60 ? 'border-destructive' : ''}>
+            <CardContent className="py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className={`w-4 h-4 ${appTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+                <span className="text-sm">Tempo restante</span>
+              </div>
+              <span className={`font-mono text-xl font-bold ${appTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(appTimeLeft)}</span>
+            </CardContent>
+          </Card>
+        )}
         <Card className="overflow-hidden">
           <div className="bg-muted py-3 text-center border-b">
             <p className="font-heading font-semibold">Questão Nº {appCurrentQ + 1}</p>
