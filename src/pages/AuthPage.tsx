@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { GraduationCap, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import AccessibilityMenu from '@/components/AccessibilityMenu';
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -19,6 +20,7 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +28,11 @@ export default function AuthPage() {
     try {
       if (isSignUp) {
         await signUp(email, password, fullName, 'teacher');
-        toast.success('Conta criada! Aguarde a aprovação do administrador.');
+        toast.success(t('auth.accountCreated'));
         return;
       } else {
         await signIn(email, password);
-        toast.success('Bem-vindo de volta!');
+        toast.success(t('auth.welcomeBack'));
       }
       navigate('/dashboard');
     } catch (err: any) {
@@ -42,43 +44,47 @@ export default function AuthPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute top-4 right-4">
+        <AccessibilityMenu />
+      </div>
       <div className="w-full max-w-md space-y-6">
         <div className="space-y-4">
-          <button onClick={() => navigate('/')} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Voltar ao início
+          <button onClick={() => navigate('/')} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" aria-label={t('auth.backToHome')}>
+            <ArrowLeft className="w-4 h-4" aria-hidden="true" /> {t('auth.backToHome')}
           </button>
           <div className="flex flex-col items-center space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary" aria-hidden="true">
               <GraduationCap className="w-8 h-8 text-primary-foreground" />
             </div>
             <h1 className="text-3xl font-heading font-bold tracking-tight">TBL Virtual</h1>
-            <p className="text-muted-foreground">Área do Professor</p>
+            <p className="text-muted-foreground">{t('auth.teacherArea')}</p>
           </div>
         </div>
 
         <Card className="shadow-lg border-0">
           <CardHeader className="pb-4">
-            <CardTitle className="font-heading text-xl">{isSignUp ? 'Criar Conta' : 'Entrar'}</CardTitle>
+            <CardTitle className="font-heading text-xl">{isSignUp ? t('auth.createAccountTitle') : t('auth.signInTitle')}</CardTitle>
             <CardDescription>
-              {isSignUp ? 'Cadastre-se como professor' : 'Bem-vindo de volta ao TBL Virtual'}
+              {isSignUp ? t('auth.signUpDesc') : t('auth.signInDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" aria-label={isSignUp ? t('auth.createAccountTitle') : t('auth.signInTitle')}>
               {isSignUp && (
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome Completo</Label>
+                  <Label htmlFor="name">{t('auth.fullName')}</Label>
                   <Input
                     id="name"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Seu nome completo"
+                    placeholder={t('auth.fullName')}
                     required
+                    autoComplete="name"
                   />
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
+                <Label htmlFor="email">{t('auth.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -86,10 +92,11 @@ export default function AuthPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="professor@email.com"
                   required
+                  autoComplete="email"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -98,10 +105,11 @@ export default function AuthPage() {
                   placeholder="••••••••"
                   required
                   minLength={6}
+                  autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Carregando...' : isSignUp ? 'Criar Conta' : 'Entrar'}
+                {isLoading ? t('common.loading') : isSignUp ? t('auth.createAccountTitle') : t('auth.signInTitle')}
               </Button>
             </form>
             <div className="mt-4 text-center">
@@ -109,7 +117,7 @@ export default function AuthPage() {
                 onClick={() => setIsSignUp(!isSignUp)}
                 className="text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
+                {isSignUp ? t('auth.hasAccount') : t('auth.noAccount')}
               </button>
             </div>
           </CardContent>
