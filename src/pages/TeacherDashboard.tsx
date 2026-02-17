@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import ClassManagement from '@/components/ClassManagement';
 import QuestionBank from '@/components/QuestionBank';
+import AccessibilityMenu from '@/components/AccessibilityMenu';
 
 type Room = {
   id: string;
@@ -92,6 +94,7 @@ const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', '
 export default function TeacherDashboard() {
   const { user, profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
@@ -1500,16 +1503,17 @@ export default function TeacherDashboard() {
         </Sidebar>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="border-b bg-card h-14 flex items-center px-4 gap-3 shrink-0">
-            <SidebarTrigger />
+          <header className="border-b bg-card h-14 flex items-center px-4 gap-3 shrink-0" role="banner">
+            <SidebarTrigger aria-label={t('a11y.openMenu')} />
             <div className="flex-1" />
             <div className="flex items-center gap-2">
-              <UserCircle className="w-5 h-5 text-muted-foreground" />
+              <AccessibilityMenu />
+              <UserCircle className="w-5 h-5 text-muted-foreground" aria-hidden="true" />
               <span className="text-sm font-medium">{profile?.full_name}</span>
             </div>
           </header>
 
-          <main className="flex-1 p-6 overflow-y-auto">
+          <main id="main-content" className="flex-1 p-6 overflow-y-auto" role="main" aria-label={t('a11y.mainContent')}>
             {loading ? (
               <div className="text-center py-12 text-muted-foreground">Carregando...</div>
             ) : (

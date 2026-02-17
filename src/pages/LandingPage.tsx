@@ -17,6 +17,7 @@ import featureTeams from '@/assets/feature-teams.jpg';
 import tblFlowImage from '@/assets/tbl-flow.png';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import AccessibilityMenu from '@/components/AccessibilityMenu';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 40 },
@@ -198,6 +199,7 @@ export default function LandingPage() {
             </div>
 
             <div className="hidden md:flex items-center gap-2">
+              <AccessibilityMenu />
               <Button variant="ghost" size="sm" onClick={() => navigate('/auth?mode=signin')} className="rounded-xl text-sm">
                 Entrar
               </Button>
