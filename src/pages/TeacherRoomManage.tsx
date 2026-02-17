@@ -52,10 +52,13 @@ export default function TeacherRoomManage() {
   const [selectedQuizId, setSelectedQuizId] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [tratTimeLeft, setTratTimeLeft] = useState<number | null>(null);
+  const [appTimeLeft, setAppTimeLeft] = useState<number | null>(null);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [appeals, setAppeals] = useState<any[]>([]);
   const [appealResponse, setAppealResponse] = useState('');
   const [reviewingAppeal, setReviewingAppeal] = useState<any>(null);
+  const [timerMinutes, setTimerMinutes] = useState('15');
   const loadAll = useCallback(async () => {
     const { data: roomData } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
     if (roomData) setRoom(roomData);
@@ -133,7 +136,7 @@ export default function TeacherRoomManage() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Timer
+  // iRAT Timer
   useEffect(() => {
     if (!room?.irat_end_time || room.current_stage !== 'irat_open') { setTimeLeft(null); return; }
     const updateTimer = () => {
@@ -145,6 +148,32 @@ export default function TeacherRoomManage() {
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [room?.irat_end_time, room?.current_stage]);
+
+  // tRAT Timer
+  useEffect(() => {
+    if (!room?.trat_end_time || room.current_stage !== 'trat_open') { setTratTimeLeft(null); return; }
+    const updateTimer = () => {
+      const end = new Date(room.trat_end_time).getTime();
+      const diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      setTratTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [room?.trat_end_time, room?.current_stage]);
+
+  // App Timer
+  useEffect(() => {
+    if (!room?.app_end_time || room.current_stage !== 'application_open') { setAppTimeLeft(null); return; }
+    const updateTimer = () => {
+      const end = new Date(room.app_end_time).getTime();
+      const diff = Math.max(0, Math.floor((end - Date.now()) / 1000));
+      setAppTimeLeft(diff);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [room?.app_end_time, room?.current_stage]);
 
   // Realtime - using ref to avoid stale closure
   const loadAllRef = useRef(loadAll);
@@ -177,12 +206,16 @@ export default function TeacherRoomManage() {
     if (!room) return;
     const currentIdx = stages.indexOf(room.current_stage);
     const nextStage = stages[currentIdx + 1];
+    const minutes = parseInt(timerMinutes) || 15;
+    const endTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+
     if (nextStage === 'irat_open') {
-      const endTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: endTime } as any).eq('id', roomId!);
-    } else {
-      // When advancing to application_open, copy quiz-linked app questions to the room if needed
-      if (nextStage === 'application_open' && room.quiz_id) {
+    } else if (nextStage === 'trat_open') {
+      await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: null, trat_end_time: endTime } as any).eq('id', roomId!);
+    } else if (nextStage === 'application_open') {
+      // Copy quiz app questions if needed
+      if (room.quiz_id) {
         const { data: existingRoomQs } = await supabase
           .from('application_questions')
           .select('id')
@@ -211,9 +244,12 @@ export default function TeacherRoomManage() {
           }
         }
       }
-      await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: null } as any).eq('id', roomId!);
+      await supabase.from('rooms').update({ current_stage: nextStage, trat_end_time: null, app_end_time: endTime } as any).eq('id', roomId!);
+    } else {
+      await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null } as any).eq('id', roomId!);
     }
     setConfirmOpen(false);
+    setTimerMinutes('15');
     loadAll();
     toast.success(`Avançou para ${stageLabels[nextStage].label}`);
   };
@@ -224,10 +260,13 @@ export default function TeacherRoomManage() {
     navigate('/dashboard');
   };
 
-  const extendTimer = async (minutes: number) => {
-    if (!room?.irat_end_time) return;
-    const newEnd = new Date(new Date(room.irat_end_time).getTime() + minutes * 60 * 1000).toISOString();
-    await supabase.from('rooms').update({ irat_end_time: newEnd } as any).eq('id', roomId!);
+  const extendTimer = async (minutes: number, phase: 'irat' | 'trat' | 'app') => {
+    const fieldMap = { irat: 'irat_end_time', trat: 'trat_end_time', app: 'app_end_time' };
+    const field = fieldMap[phase];
+    const current = room?.[field];
+    if (!current) return;
+    const newEnd = new Date(new Date(current).getTime() + minutes * 60 * 1000).toISOString();
+    await supabase.from('rooms').update({ [field]: newEnd } as any).eq('id', roomId!);
     toast.success(`Timer estendido em ${minutes} minutos`);
     loadAll();
   };
@@ -575,9 +614,9 @@ export default function TeacherRoomManage() {
               <span className={`font-mono text-2xl font-bold ${timeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(timeLeft)}</span>
             </div>
             <div className="flex gap-2 mt-3">
-              <Button size="sm" variant="outline" onClick={() => extendTimer(5)} className="flex-1">+5 min</Button>
-              <Button size="sm" variant="outline" onClick={() => extendTimer(10)} className="flex-1">+10 min</Button>
-              <Button size="sm" variant="outline" onClick={() => extendTimer(15)} className="flex-1">+15 min</Button>
+              <Button size="sm" variant="outline" onClick={() => extendTimer(5, 'irat')} className="flex-1">+5 min</Button>
+              <Button size="sm" variant="outline" onClick={() => extendTimer(10, 'irat')} className="flex-1">+10 min</Button>
+              <Button size="sm" variant="outline" onClick={() => extendTimer(15, 'irat')} className="flex-1">+15 min</Button>
             </div>
           </CardContent>
         </Card>
@@ -738,6 +777,24 @@ export default function TeacherRoomManage() {
   // ============ TRAT MONITORING ============
   const renderTratMonitoring = () => (
     <div className="space-y-6">
+      {tratTimeLeft !== null && (
+        <Card className={tratTimeLeft <= 60 ? 'border-destructive' : ''}>
+          <CardContent className="pt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className={`w-5 h-5 ${tratTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+                <span className="text-sm font-medium">Tempo restante do tRAT</span>
+              </div>
+              <span className={`font-mono text-2xl font-bold ${tratTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(tratTimeLeft)}</span>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" variant="outline" onClick={() => extendTimer(5, 'trat')} className="flex-1">+5 min</Button>
+              <Button size="sm" variant="outline" onClick={() => extendTimer(10, 'trat')} className="flex-1">+10 min</Button>
+              <Button size="sm" variant="outline" onClick={() => extendTimer(15, 'trat')} className="flex-1">+15 min</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="text-center">
         <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
         <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
@@ -830,6 +887,24 @@ export default function TeacherRoomManage() {
 
     return (
       <div className="space-y-6">
+        {appTimeLeft !== null && (
+          <Card className={appTimeLeft <= 60 ? 'border-destructive' : ''}>
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className={`w-5 h-5 ${appTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
+                  <span className="text-sm font-medium">Tempo restante da Aplicação</span>
+                </div>
+                <span className={`font-mono text-2xl font-bold ${appTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(appTimeLeft)}</span>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <Button size="sm" variant="outline" onClick={() => extendTimer(5, 'app')} className="flex-1">+5 min</Button>
+                <Button size="sm" variant="outline" onClick={() => extendTimer(10, 'app')} className="flex-1">+10 min</Button>
+                <Button size="sm" variant="outline" onClick={() => extendTimer(15, 'app')} className="flex-1">+15 min</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <div className="text-center">
           <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
           <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
@@ -1312,6 +1387,22 @@ export default function TeacherRoomManage() {
                 {teams.length > 0 && <p className="text-sm text-muted-foreground">{teams.length} equipe(s) formadas</p>}
               </div>
             </div>
+            {stages[stages.indexOf(room.current_stage) + 1] !== 'finished' && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" /> Tempo da fase (minutos)
+                </Label>
+                <Input
+                  type="number"
+                  value={timerMinutes}
+                  onChange={e => setTimerMinutes(e.target.value)}
+                  min="1"
+                  max="120"
+                  placeholder="15"
+                />
+                <p className="text-xs text-muted-foreground">O professor poderá estender o tempo durante a fase.</p>
+              </div>
+            )}
             {!room.quiz_id && stages[stages.indexOf(room.current_stage) + 1] === 'irat_open' && (
               <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />

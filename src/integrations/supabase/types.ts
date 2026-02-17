@@ -463,6 +463,7 @@ export type Database = {
       }
       rooms: {
         Row: {
+          app_end_time: string | null
           application_pct: number | null
           class_id: string | null
           code: string
@@ -479,8 +480,10 @@ export type Database = {
           show_individual_in_team: boolean | null
           teacher_id: string
           team_pct: number | null
+          trat_end_time: string | null
         }
         Insert: {
+          app_end_time?: string | null
           application_pct?: number | null
           class_id?: string | null
           code: string
@@ -497,8 +500,10 @@ export type Database = {
           show_individual_in_team?: boolean | null
           teacher_id: string
           team_pct?: number | null
+          trat_end_time?: string | null
         }
         Update: {
+          app_end_time?: string | null
           application_pct?: number | null
           class_id?: string | null
           code?: string
@@ -515,6 +520,7 @@ export type Database = {
           show_individual_in_team?: boolean | null
           teacher_id?: string
           team_pct?: number | null
+          trat_end_time?: string | null
         }
         Relationships: [
           {
