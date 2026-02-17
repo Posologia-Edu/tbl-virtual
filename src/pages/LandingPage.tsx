@@ -261,7 +261,7 @@ export default function LandingPage() {
               <motion.h1 variants={fadeUp} custom={1} className="text-4xl sm:text-5xl lg:text-6xl xl:text-[4.5rem] font-heading font-bold leading-[1.05] tracking-tight">
                 Transforme suas aulas com o{' '}
                 <span className="relative inline-block">
-                  <span className="relative z-10 bg-gradient-to-r from-primary to-[hsl(var(--phase-app))] bg-clip-text text-transparent">TBL Digital</span>
+                   <span className="relative z-10 bg-gradient-to-r from-primary to-[hsl(var(--phase-app))] bg-clip-text text-transparent">Virtual</span>
                   <span className="absolute bottom-1 left-0 right-0 h-3 bg-[hsl(var(--phase-trat))]/25 rounded-sm -z-0" />
                 </span>
               </motion.h1>
