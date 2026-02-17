@@ -181,6 +181,65 @@ export type Database = {
           },
         ]
       }
+      class_students: {
+        Row: {
+          class_id: string
+          enrolled_at: string
+          id: string
+          student_id: string
+        }
+        Insert: {
+          class_id: string
+          enrolled_at?: string
+          id?: string
+          student_id: string
+        }
+        Update: {
+          class_id?: string
+          enrolled_at?: string
+          id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_students_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classes: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          semester: string | null
+          teacher_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          semester?: string | null
+          teacher_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          semester?: string | null
+          teacher_id?: string
+        }
+        Relationships: []
+      }
       irat_responses: {
         Row: {
           id: string
@@ -405,6 +464,7 @@ export type Database = {
       rooms: {
         Row: {
           application_pct: number | null
+          class_id: string | null
           code: string
           created_at: string
           current_stage: Database["public"]["Enums"]["room_stage"]
@@ -422,6 +482,7 @@ export type Database = {
         }
         Insert: {
           application_pct?: number | null
+          class_id?: string | null
           code: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
@@ -439,6 +500,7 @@ export type Database = {
         }
         Update: {
           application_pct?: number | null
+          class_id?: string | null
           code?: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
@@ -455,6 +517,13 @@ export type Database = {
           team_pct?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "rooms_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rooms_quiz_id_fkey"
             columns: ["quiz_id"]
