@@ -15,6 +15,7 @@ import JoinRoomPage from "./pages/JoinRoomPage";
 import StudentRoomView from "./pages/StudentRoomView";
 import TeacherRoomManage from "./pages/TeacherRoomManage";
 import NotFound from "./pages/NotFound";
+import DocumentationPage from "./pages/DocumentationPage";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,7 @@ const App = () => (
               <Route path="/room/:roomId/join" element={<ProtectedRoute><JoinRoomPage /></ProtectedRoute>} />
               <Route path="/room/:roomId" element={<ProtectedRoute><StudentRoomView /></ProtectedRoute>} />
               <Route path="/room/:roomId/manage" element={<ProtectedRoute><TeacherRoomManage /></ProtectedRoute>} />
+              <Route path="/docs" element={<DocumentationPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

@@ -174,6 +174,7 @@ export default function LandingPage() {
                 { label: 'Recursos', action: () => document.getElementById('recursos')?.scrollIntoView({ behavior: 'smooth' }) },
                 { label: 'Como Funciona', action: () => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }) },
                 { label: 'Diferenciais', action: () => document.getElementById('diferenciais')?.scrollIntoView({ behavior: 'smooth' }) },
+                { label: 'Documentação', action: () => navigate('/docs') },
               ].map(item => (
                 <button
                   key={item.label}
@@ -603,6 +604,7 @@ export default function LandingPage() {
             <div className="flex gap-4 md:justify-end text-sm text-muted-foreground">
               <button onClick={() => navigate('/auth?mode=signin')} className="hover:text-foreground transition-colors">Login Professor</button>
               <button onClick={() => navigate('/join')} className="hover:text-foreground transition-colors">Acesso Estudante</button>
+              <button onClick={() => navigate('/docs')} className="hover:text-foreground transition-colors">Documentação</button>
             </div>
           </div>
         </div>
