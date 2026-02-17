@@ -551,6 +551,47 @@ export type Database = {
           },
         ]
       }
+      student_achievements: {
+        Row: {
+          achievement_description: string
+          achievement_key: string
+          achievement_name: string
+          earned_at: string
+          icon: string
+          id: string
+          room_id: string | null
+          user_id: string
+        }
+        Insert: {
+          achievement_description: string
+          achievement_key: string
+          achievement_name: string
+          earned_at?: string
+          icon?: string
+          id?: string
+          room_id?: string | null
+          user_id: string
+        }
+        Update: {
+          achievement_description?: string
+          achievement_key?: string
+          achievement_name?: string
+          earned_at?: string
+          icon?: string
+          id?: string
+          room_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_achievements_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_members: {
         Row: {
           id: string

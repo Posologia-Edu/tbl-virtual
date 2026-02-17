@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import TeamLeaderboard from '@/components/TeamLeaderboard';
 
 const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
@@ -872,6 +873,9 @@ export default function TeacherRoomManage() {
 
       {/* Application questions management during tRAT monitoring */}
       {renderAppQuestionsCard()}
+
+      {/* Real-time Team Leaderboard */}
+      <TeamLeaderboard teams={tratStats} title="Ranking em Tempo Real" />
 
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
         Finalizar Aplicação → Avançar para {nextStageName}

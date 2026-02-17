@@ -14,6 +14,8 @@ import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import TratFeedbackAnimation from '@/components/TratFeedbackAnimation';
+import AchievementToast, { triggerAchievement } from '@/components/AchievementToast';
 
 type Question = {
   id: string;
@@ -179,6 +181,21 @@ export default function StudentRoomView() {
   const [appWaiting, setAppWaiting] = useState(true);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
 
+  // Achievement granting
+  const grantAchievement = async (key: string, name: string, description: string, icon: string) => {
+    if (!user) return;
+    const { error } = await supabase.from('student_achievements').insert({
+      user_id: user.id,
+      achievement_key: key,
+      achievement_name: name,
+      achievement_description: description,
+      icon,
+      room_id: roomId!,
+    } as any);
+    if (!error) {
+      triggerAchievement({ icon, name, description });
+    }
+  };
   const loadRoom = useCallback(async () => {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId!).single();
     if (data) setRoom(data as any);
@@ -456,6 +473,19 @@ export default function StudentRoomView() {
     setIratScores(prev => ({ ...prev, [questionId]: score }));
     setIratSubmitted(prev => new Set(prev).add(questionId));
     toast.success('Resposta registrada!');
+
+    // Check if all iRAT done with perfect scores
+    const allSubmitted = questions.every(q => q.id === questionId || iratSubmitted.has(q.id));
+    if (allSubmitted) {
+      const allScores = questions.reduce((s, q) => s + (q.id === questionId ? score : (iratScores[q.id] || 0)), 0);
+      const maxPossible = questions.length * 4;
+      if (allScores === maxPossible) {
+        grantAchievement('perfect_irat', 'Mestre Individual', 'Acertou tudo no iRAT', '🎯');
+      }
+      // First activity achievement
+      grantAchievement('first_activity', 'Primeira Atividade', 'Participou da primeira atividade', '🚀');
+    }
+
     if (currentQ < questions.length - 1) setTimeout(() => setCurrentQ(prev => prev + 1), 300);
   };
 
@@ -477,6 +507,18 @@ export default function StudentRoomView() {
     setTratFeedback({ correct: isCorrect, option, points });
     setTratSelectedOption(null);
     loadTratAttempts();
+
+    // Achievement: team_perfect if first attempt correct on all questions
+    if (isCorrect && attemptNumber === 1) {
+      const otherQs = questions.filter(oq => oq.id !== questionId);
+      const allOthersFirstAttempt = otherQs.every(oq => {
+        const oqA = tratAttempts.filter(a => a.question_id === oq.id);
+        return oqA.some(a => a.is_correct && a.attempt_number === 1);
+      });
+      if (allOthersFirstAttempt && otherQs.length === questions.length - 1) {
+        grantAchievement('team_perfect', 'Equipe Perfeita', 'Acertou tudo no tRAT de primeira', '💎');
+      }
+    }
   };
 
   const submitAppeal = async (questionId: string) => {
@@ -1161,37 +1203,13 @@ export default function StudentRoomView() {
           </Card>
         )}
 
-        {/* Feedback dialog */}
-        {tratFeedback && (
-          <Dialog open={!!tratFeedback} onOpenChange={() => setTratFeedback(null)}>
-            <DialogContent className="text-center max-w-sm">
-              <div className="flex flex-col items-center py-4">
-                {tratFeedback.correct ? (
-                  <>
-                    <div className="w-20 h-20 rounded-full border-4 border-success/30 flex items-center justify-center mb-4">
-                      <CheckCircle2 className="w-12 h-12 text-success" />
-                    </div>
-                    <h3 className="text-2xl font-heading font-bold">Correto</h3>
-                    <p className="text-muted-foreground mt-2">
-                      Resposta Correta! Sua equipe ganhou {tratFeedback.points} pontos! Clique em Avançar!
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-20 h-20 rounded-full border-4 border-destructive/30 flex items-center justify-center mb-4">
-                      <XCircle className="w-12 h-12 text-destructive" />
-                    </div>
-                    <h3 className="text-2xl font-heading font-bold">Errado</h3>
-                    <p className="text-muted-foreground mt-2">
-                      Resposta Incorreta! Tente novamente.
-                    </p>
-                  </>
-                )}
-                <Button onClick={() => setTratFeedback(null)} className="mt-4 px-8">Ok</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
+        {/* Feedback animation */}
+        <TratFeedbackAnimation
+          show={!!tratFeedback}
+          correct={tratFeedback?.correct || false}
+          points={tratFeedback?.points || 0}
+          onClose={() => setTratFeedback(null)}
+        />
 
         {/* Question dots */}
         <div className="flex justify-center gap-1.5 pt-2">
@@ -1339,26 +1357,29 @@ export default function StudentRoomView() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
-        <header className="border-b bg-card">
-          <div className="container mx-auto px-4 py-3 flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-heading font-bold">{room.name}</h1>
+    <>
+      <AchievementToast />
+      <div className="min-h-screen bg-background">
+        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
+          <header className="border-b bg-card">
+            <div className="container mx-auto px-4 py-3 flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <div>
+                <h1 className="text-lg font-heading font-bold">{room.name}</h1>
+              </div>
             </div>
-          </div>
-        </header>
-      )}
-      <main className="container mx-auto px-4 py-6 max-w-lg">
-        {room.current_stage === 'waiting' && renderWaiting()}
-        {room.current_stage === 'irat_open' && renderIrat()}
-        {room.current_stage === 'trat_open' && renderTrat()}
-        {room.current_stage === 'application_open' && renderApplication()}
-        {room.current_stage === 'finished' && renderFinished()}
-      </main>
-    </div>
+          </header>
+        )}
+        <main className="container mx-auto px-4 py-6 max-w-lg">
+          {room.current_stage === 'waiting' && renderWaiting()}
+          {room.current_stage === 'irat_open' && renderIrat()}
+          {room.current_stage === 'trat_open' && renderTrat()}
+          {room.current_stage === 'application_open' && renderApplication()}
+          {room.current_stage === 'finished' && renderFinished()}
+        </main>
+      </div>
+    </>
   );
 }

@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LogOut, DoorOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import StudentAchievements from '@/components/StudentAchievements';
 
 type JoinedRoom = {
   room_id: string;
@@ -73,7 +75,6 @@ export default function StudentDashboard() {
         return;
       }
 
-      // Check if already in room
       const { data: existing } = await supabase
         .from('room_participants')
         .select('id')
@@ -86,11 +87,9 @@ export default function StudentDashboard() {
         return;
       }
 
-      // Generate participant code
       const { data: codeData } = await supabase.rpc('generate_participant_code', { p_room_id: room.id });
       const participantCode = codeData as string;
 
-      // Join room
       const { error } = await supabase.from('room_participants').insert({
         room_id: room.id,
         user_id: user!.id,
@@ -148,32 +147,42 @@ export default function StudentDashboard() {
           </CardContent>
         </Card>
 
-        <div>
-          <h2 className="text-lg font-heading font-semibold mb-3">Suas Salas</h2>
-          {joinedRooms.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">Nenhuma sala ainda. Informe o código para entrar!</p>
-          ) : (
-            <div className="space-y-2">
-              {joinedRooms.map(room => (
-                <Card
-                  key={room.room_id}
-                  className="cursor-pointer hover:shadow-md transition-all"
-                  onClick={() => navigate(`/room/${room.room_id}`)}
-                >
-                  <CardContent className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{room.room_name}</p>
-                      <p className="text-sm text-muted-foreground font-mono">Código: #{room.participant_code}</p>
-                    </div>
-                    <Badge className={stageLabels[room.current_stage]?.className || ''}>
-                      {stageLabels[room.current_stage]?.label || room.current_stage}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+        <Tabs defaultValue="rooms">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="rooms">Suas Salas</TabsTrigger>
+            <TabsTrigger value="achievements">Conquistas</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="rooms">
+            {joinedRooms.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Nenhuma sala ainda. Informe o código para entrar!</p>
+            ) : (
+              <div className="space-y-2">
+                {joinedRooms.map(room => (
+                  <Card
+                    key={room.room_id}
+                    className="cursor-pointer hover:shadow-md transition-all"
+                    onClick={() => navigate(`/room/${room.room_id}`)}
+                  >
+                    <CardContent className="py-3 flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{room.room_name}</p>
+                        <p className="text-sm text-muted-foreground font-mono">Código: #{room.participant_code}</p>
+                      </div>
+                      <Badge className={stageLabels[room.current_stage]?.className || ''}>
+                        {stageLabels[room.current_stage]?.label || room.current_stage}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="achievements">
+            <StudentAchievements />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
