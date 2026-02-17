@@ -21,7 +21,7 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap,
+  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import ClassManagement from '@/components/ClassManagement';
+import QuestionBank from '@/components/QuestionBank';
 
 type Room = {
   id: string;
@@ -75,7 +76,7 @@ type ProfileData = {
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
-  | 'admin-teachers' | 'analytics' | 'classes';
+  | 'admin-teachers' | 'analytics' | 'classes' | 'question-bank';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -1458,6 +1459,11 @@ export default function TeacherDashboard() {
                       <GraduationCap className="w-4 h-4" /><span>Turmas</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => setActiveView('question-bank')} isActive={activeView === 'question-bank'} className="cursor-pointer">
+                      <Globe className="w-4 h-4" /><span>Banco de Questões</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -1521,6 +1527,7 @@ export default function TeacherDashboard() {
                 {activeView === 'quiz-config' && renderQuizConfig()}
                 {activeView === 'analytics' && user && <AnalyticsDashboard userId={user.id} />}
                 {activeView === 'classes' && user && <ClassManagement userId={user.id} />}
+                {activeView === 'question-bank' && user && <QuestionBank userId={user.id} />}
                 {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
               </>
             )}

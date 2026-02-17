@@ -404,20 +404,32 @@ export type Database = {
       quizzes: {
         Row: {
           created_at: string
+          difficulty_level: string | null
+          discipline: string | null
           id: string
+          is_shared: boolean
           teacher_id: string
+          theme: string | null
           title: string
         }
         Insert: {
           created_at?: string
+          difficulty_level?: string | null
+          discipline?: string | null
           id?: string
+          is_shared?: boolean
           teacher_id: string
+          theme?: string | null
           title: string
         }
         Update: {
           created_at?: string
+          difficulty_level?: string | null
+          discipline?: string | null
           id?: string
+          is_shared?: boolean
           teacher_id?: string
+          theme?: string | null
           title?: string
         }
         Relationships: []
