@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import AuthDialog from '@/components/AuthDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -35,6 +36,13 @@ export default function LandingPage() {
   const [studentName, setStudentName] = useState('');
   const [joining, setJoining] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+
+  const openAuth = (mode: 'signin' | 'signup') => {
+    setAuthMode(mode);
+    setAuthDialogOpen(true);
+  };
 
   const handleStudentJoin = async () => {
     if (!roomCode.trim() || roomCode.trim().length !== 6) {
@@ -189,10 +197,10 @@ export default function LandingPage() {
                   Professor <ChevronDown className="w-3 h-3" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48 rounded-xl">
-                  <DropdownMenuItem onClick={() => navigate('/auth?mode=signup')}>
+                   <DropdownMenuItem onClick={() => openAuth('signup')}>
                     <UserPlus className="w-4 h-4 mr-2" /> Criar Conta
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate('/auth?mode=signin')}>
+                  <DropdownMenuItem onClick={() => openAuth('signin')}>
                     <LogIn className="w-4 h-4 mr-2" /> Entrar
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -201,10 +209,10 @@ export default function LandingPage() {
 
             <div className="hidden md:flex items-center gap-2">
               <AccessibilityMenu />
-              <Button variant="ghost" size="sm" onClick={() => navigate('/auth?mode=signin')} className="rounded-xl text-sm">
+              <Button variant="ghost" size="sm" onClick={() => openAuth('signin')} className="rounded-xl text-sm">
                 Entrar
               </Button>
-              <Button size="sm" onClick={() => navigate('/auth?mode=signup')} className="rounded-xl text-sm shadow-md shadow-primary/20">
+              <Button size="sm" onClick={() => openAuth('signup')} className="rounded-xl text-sm shadow-md shadow-primary/20">
                 Começar Grátis
               </Button>
             </div>
@@ -227,8 +235,8 @@ export default function LandingPage() {
                   <button onClick={() => { document.getElementById('recursos')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Recursos</button>
                   <button onClick={() => { document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Como Funciona</button>
                   <button onClick={() => { navigate('/join'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Estudante</button>
-                  <button onClick={() => navigate('/auth?mode=signup')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Criar Conta</button>
-                  <button onClick={() => navigate('/auth?mode=signin')} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Entrar</button>
+                  <button onClick={() => { openAuth('signup'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Criar Conta</button>
+                  <button onClick={() => { openAuth('signin'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Entrar</button>
                 </div>
               </motion.div>
             )}
@@ -271,7 +279,7 @@ export default function LandingPage() {
               </motion.p>
 
               <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3">
-                <Button size="lg" onClick={() => navigate('/auth?mode=signup')} className="text-base px-8 h-14 rounded-2xl shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300 text-base">
+                <Button size="lg" onClick={() => openAuth('signup')} className="text-base px-8 h-14 rounded-2xl shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:scale-[1.02] transition-all duration-300 text-base">
                   Começar Agora — É Grátis <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
                 <Button size="lg" variant="outline" onClick={() => navigate('/join')} className="text-base px-8 h-14 rounded-2xl border-border/60 hover:bg-accent/40">
@@ -383,7 +391,7 @@ export default function LandingPage() {
                   </span>
                   <h3 className="text-2xl md:text-3xl font-heading font-bold leading-snug">{h.title}</h3>
                   <p className="text-muted-foreground text-base md:text-lg leading-relaxed">{h.desc}</p>
-                  <Button variant="ghost" className="group text-primary px-0 hover:bg-transparent" onClick={() => navigate('/auth?mode=signup')}>
+                  <Button variant="ghost" className="group text-primary px-0 hover:bg-transparent" onClick={() => openAuth('signup')}>
                     Comece agora <ArrowRight className="w-4 h-4 ml-1.5 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </div>
@@ -568,7 +576,7 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Button
                 size="lg"
-                onClick={() => navigate('/auth?mode=signup')}
+                onClick={() => openAuth('signup')}
                 className="text-base px-10 h-14 rounded-2xl bg-primary-foreground text-primary hover:bg-primary-foreground/90 shadow-xl font-semibold"
               >
                 Criar Conta Gratuita <ArrowRight className="w-5 h-5 ml-2" />
@@ -602,7 +610,7 @@ export default function LandingPage() {
               <p>Desenvolvido por Sérgio Araújo. Posologia Produções.</p>
             </div>
             <div className="flex gap-4 md:justify-end text-sm text-muted-foreground">
-              <button onClick={() => navigate('/auth?mode=signin')} className="hover:text-foreground transition-colors">Login Professor</button>
+              <button onClick={() => openAuth('signin')} className="hover:text-foreground transition-colors">Login Professor</button>
               <button onClick={() => navigate('/join')} className="hover:text-foreground transition-colors">Acesso Estudante</button>
               <button onClick={() => navigate('/docs')} className="hover:text-foreground transition-colors">Documentação</button>
             </div>
@@ -645,6 +653,9 @@ export default function LandingPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Auth Dialog */}
+      <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} defaultMode={authMode} />
     </div>
   );
 }
