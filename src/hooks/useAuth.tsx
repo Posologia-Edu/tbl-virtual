@@ -1,8 +1,15 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { getPlanByProductId, PlanKey } from '@/lib/stripe-plans';
 
 type AppRole = 'teacher' | 'student' | 'admin';
+
+interface SubscriptionState {
+  subscribed: boolean;
+  plan: PlanKey | null;
+  subscriptionEnd: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -11,6 +18,8 @@ interface AuthContextType {
   profile: { full_name: string; is_approved?: boolean; is_blocked?: boolean } | null;
   isAdmin: boolean;
   loading: boolean;
+  subscription: SubscriptionState;
+  checkSubscription: () => Promise<void>;
   signUp: (email: string, password: string, fullName: string, role: AppRole) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -24,6 +33,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<{ full_name: string; is_approved?: boolean; is_blocked?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [subscription, setSubscription] = useState<SubscriptionState>({
+    subscribed: false,
+    plan: null,
+    subscriptionEnd: null,
+  });
+
+  const checkSubscription = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('check-subscription');
+      if (error) return;
+      if (data) {
+        setSubscription({
+          subscribed: data.subscribed ?? false,
+          plan: data.product_id ? getPlanByProductId(data.product_id) : null,
+          subscriptionEnd: data.subscription_end ?? null,
+        });
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
 
   const fetchUserData = async (userId: string) => {
     const [{ data: roleData }, { data: profileData }] = await Promise.all([
@@ -40,9 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         setTimeout(() => fetchUserData(session.user.id), 0);
+        setTimeout(() => checkSubscription(), 100);
       } else {
         setRole(null);
         setProfile(null);
+        setSubscription({ subscribed: false, plan: null, subscriptionEnd: null });
       }
       setLoading(false);
     });
@@ -52,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserData(session.user.id);
+        checkSubscription();
       }
       setLoading(false);
     });
@@ -89,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, session, role, profile, isAdmin, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, profile, isAdmin, loading, subscription, checkSubscription, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

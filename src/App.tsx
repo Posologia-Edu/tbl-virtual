@@ -16,6 +16,7 @@ import StudentRoomView from "./pages/StudentRoomView";
 import TeacherRoomManage from "./pages/TeacherRoomManage";
 import NotFound from "./pages/NotFound";
 import DocumentationPage from "./pages/DocumentationPage";
+import PricingPage from "./pages/PricingPage";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/room/:roomId" element={<ProtectedRoute><StudentRoomView /></ProtectedRoute>} />
               <Route path="/room/:roomId/manage" element={<ProtectedRoute><TeacherRoomManage /></ProtectedRoute>} />
               <Route path="/docs" element={<DocumentationPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>

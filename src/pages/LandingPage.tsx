@@ -182,7 +182,7 @@ export default function LandingPage() {
                 { label: 'Recursos', action: () => document.getElementById('recursos')?.scrollIntoView({ behavior: 'smooth' }) },
                 { label: 'Como Funciona', action: () => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }) },
                 { label: 'Diferenciais', action: () => document.getElementById('diferenciais')?.scrollIntoView({ behavior: 'smooth' }) },
-                { label: 'Documentação', action: () => navigate('/docs') },
+                { label: 'Preços', action: () => navigate('/pricing') },
               ].map(item => (
                 <button
                   key={item.label}
