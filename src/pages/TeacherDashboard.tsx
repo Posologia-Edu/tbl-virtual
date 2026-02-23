@@ -22,7 +22,7 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe,
+  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -1397,6 +1397,11 @@ export default function TeacherDashboard() {
                   <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => { setActiveView('my-plan'); loadProfile(); }} isActive={activeView === 'my-plan'} className="cursor-pointer">
                       <CreditCard className="w-4 h-4" /><span>Meu Plano</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => navigate('/pricing')} className="cursor-pointer">
+                      <Crown className="w-4 h-4" /><span>Planos</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
