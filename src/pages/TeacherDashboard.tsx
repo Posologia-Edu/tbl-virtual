@@ -1395,13 +1395,8 @@ export default function TeacherDashboard() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => { setActiveView('my-plan'); loadProfile(); }} isActive={activeView === 'my-plan'} className="cursor-pointer">
-                      <CreditCard className="w-4 h-4" /><span>Meu Plano</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => navigate('/pricing')} className="cursor-pointer">
-                      <Crown className="w-4 h-4" /><span>Planos</span>
+                      <Crown className="w-4 h-4" /><span>Meu Plano</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>

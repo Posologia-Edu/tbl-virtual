@@ -218,10 +218,17 @@ export default function JoinRoomPage() {
             </Button>
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground mb-2">Já participou anteriormente?</p>
-              <Button variant="outline" size="sm" onClick={() => {
+              <Button variant="outline" size="sm" onClick={async () => {
                 if (!roomCode.trim()) { toast.error('Informe o número da sala primeiro'); return; }
-                handleCodeSubmit().then(() => {}).catch(() => {});
-                // Will check reconnection first via handleCodeSubmit
+                const { data: room, error } = await supabase
+                  .from('rooms')
+                  .select('id')
+                  .eq('code', roomCode.trim())
+                  .eq('is_active', true)
+                  .single();
+                if (error || !room) { toast.error('Sala não encontrada ou inativa'); return; }
+                setRoomId(room.id);
+                setStep('reconnect');
               }} className="text-xs">
                 Reconectar com código de participante
               </Button>

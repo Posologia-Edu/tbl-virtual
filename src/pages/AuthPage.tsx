@@ -32,6 +32,7 @@ export default function AuthPage() {
       if (isSignUp) {
         await signUp(email, password, fullName, 'teacher');
         toast.success(t('auth.accountCreated'));
+        navigate('/dashboard');
         return;
       } else {
         await signIn(email, password);
@@ -52,6 +53,7 @@ export default function AuthPage() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
+          queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       });
       if (error) throw error;
@@ -154,13 +156,21 @@ export default function AuthPage() {
                 {isLoading ? t('common.loading') : isSignUp ? t('auth.createAccountTitle') : t('auth.signInTitle')}
               </Button>
             </form>
-            <div className="text-center">
+            <div className="text-center space-y-1">
               <button
                 onClick={() => setIsSignUp(!isSignUp)}
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors block mx-auto"
               >
                 {isSignUp ? t('auth.hasAccount') : t('auth.noAccount')}
               </button>
+              {!isSignUp && (
+                <button
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors block mx-auto"
+                >
+                  Esqueci minha senha
+                </button>
+              )}
             </div>
           </CardContent>
         </Card>

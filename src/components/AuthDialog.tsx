@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Separator } from '@/components/ui/separator';
 import { GraduationCap } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 interface AuthDialogProps {
   open: boolean;
@@ -36,6 +36,7 @@ export default function AuthDialog({ open, onOpenChange, defaultMode = 'signin' 
         await signUp(email, password, fullName, 'teacher');
         toast.success(t('auth.accountCreated'));
         onOpenChange(false);
+        navigate('/dashboard');
         return;
       } else {
         await signIn(email, password);
@@ -57,6 +58,7 @@ export default function AuthDialog({ open, onOpenChange, defaultMode = 'signin' 
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
+          queryParams: { access_type: 'offline', prompt: 'consent' },
         },
       });
       if (error) throw error;
@@ -162,13 +164,24 @@ export default function AuthDialog({ open, onOpenChange, defaultMode = 'signin' 
             </Button>
           </form>
 
-          <div className="text-center pt-1">
+          <div className="text-center pt-1 space-y-1">
             <button
               onClick={toggleMode}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              className="text-sm text-muted-foreground hover:text-primary transition-colors block mx-auto"
             >
               {isSignUp ? t('auth.hasAccount') : t('auth.noAccount')}
             </button>
+            {!isSignUp && (
+              <button
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate('/forgot-password');
+                }}
+                className="text-xs text-muted-foreground hover:text-primary transition-colors block mx-auto"
+              >
+                Esqueci minha senha
+              </button>
+            )}
           </div>
         </div>
       </DialogContent>
