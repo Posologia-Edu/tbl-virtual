@@ -10,8 +10,9 @@ import { toast } from 'sonner';
 
 export default function PricingPage() {
   const navigate = useNavigate();
-  const { user, session } = useAuth();
+  const { user, session, subscription } = useAuth();
   const [loading, setLoading] = useState<PlanKey | null>(null);
+  const currentPlan = subscription.plan || 'free';
 
   const handleCheckout = async (planKey: PlanKey) => {
     if (!user || !session) {
@@ -33,7 +34,7 @@ export default function PricingPage() {
 
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
       }
     } catch (err: any) {
       toast.error(err.message || 'Erro ao iniciar checkout');
@@ -80,9 +81,11 @@ export default function PricingPage() {
                 initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.1 }}
-                className={`relative rounded-3xl border p-8 flex flex-col ${
-                  meta.highlight
-                    ? 'border-primary bg-primary/[0.03] shadow-xl shadow-primary/10 scale-[1.02]'
+               className={`relative rounded-3xl border p-8 flex flex-col ${
+                  currentPlan === key
+                    ? 'border-primary ring-2 ring-primary/30 bg-primary/[0.03] shadow-xl shadow-primary/10 scale-[1.02]'
+                    : meta.highlight
+                    ? 'border-primary/50 bg-primary/[0.02] shadow-lg shadow-primary/5'
                     : 'border-border bg-card'
                 }`}
               >
@@ -118,16 +121,16 @@ export default function PricingPage() {
 
                 <Button
                   onClick={() => handleCheckout(key)}
-                  disabled={isLoading || loading !== null}
-                  variant={meta.highlight ? 'default' : 'outline'}
+                  disabled={isLoading || loading !== null || currentPlan === key}
+                  variant={currentPlan === key ? 'secondary' : meta.highlight ? 'default' : 'outline'}
                   className={`w-full rounded-2xl h-12 ${
-                    meta.highlight ? 'shadow-lg shadow-primary/20' : ''
+                    meta.highlight && currentPlan !== key ? 'shadow-lg shadow-primary/20' : ''
                   }`}
                 >
                   {isLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
-                  {key === 'free' ? 'Plano Atual' : 'Assinar Agora'}
+                  {currentPlan === key ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
                 </Button>
               </motion.div>
             );

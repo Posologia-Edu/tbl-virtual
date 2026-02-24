@@ -1,23 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import AuthDialog from '@/components/AuthDialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  GraduationCap, Users, BookOpen, ArrowRight, ChevronDown, Zap, Target, BarChart3,
-  CheckCircle2, UserPlus, LogIn, Menu, X, Sparkles, Brain, Layers, ArrowUpRight,
-  FileText, Shield, Clock, Star, TrendingUp, Award, MessageSquare
+  GraduationCap, Users, BookOpen, ArrowRight, Zap, Target, BarChart3,
+  CheckCircle2, Menu, X, Sparkles, Brain, Layers,
+  Shield, Clock, Star, TrendingUp, Award, MessageSquare
 } from 'lucide-react';
 import heroImage from '@/assets/hero-landing.jpg';
 import featureAi from '@/assets/feature-ai.jpg';
 import featureReports from '@/assets/feature-reports.jpg';
 import featureTeams from '@/assets/feature-teams.jpg';
 import tblFlowImage from '@/assets/tbl-flow.png';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 
 const fadeUp = {
@@ -31,10 +26,6 @@ const stagger = {
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [studentDialogOpen, setStudentDialogOpen] = useState(false);
-  const [roomCode, setRoomCode] = useState('');
-  const [studentName, setStudentName] = useState('');
-  const [joining, setJoining] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -42,59 +33,6 @@ export default function LandingPage() {
   const openAuth = (mode: 'signin' | 'signup') => {
     setAuthMode(mode);
     setAuthDialogOpen(true);
-  };
-
-  const handleStudentJoin = async () => {
-    if (!roomCode.trim() || roomCode.trim().length !== 6) {
-      toast.error('Informe um código de 6 caracteres');
-      return;
-    }
-    if (!studentName.trim()) {
-      toast.error('Informe seu nome');
-      return;
-    }
-    setJoining(true);
-    try {
-      const email = `${roomCode.trim().toLowerCase()}_${Date.now()}@student.tbl`;
-      const password = `student_${roomCode.trim()}_${Date.now()}`;
-
-      const { data: room, error: roomError } = await supabase
-        .from('rooms')
-        .select('id')
-        .eq('code', roomCode.trim().toUpperCase())
-        .eq('is_active', true)
-        .single();
-
-      if (roomError || !room) {
-        toast.error('Sala não encontrada ou inativa');
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin,
-          data: { full_name: studentName.trim(), role: 'student' },
-        },
-      });
-      if (error) throw error;
-      if (data.user) {
-        const { data: codeData } = await supabase.rpc('generate_participant_code', { p_room_id: room.id });
-        await supabase.from('room_participants').insert({
-          room_id: room.id,
-          user_id: data.user.id,
-          participant_code: codeData as string,
-        });
-
-        toast.success(`Entrou na sala! Seu código: ${codeData}`);
-        navigate(`/room/${room.id}`);
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao entrar na sala');
-    } finally {
-      setJoining(false);
-    }
   };
 
   const highlights = [
@@ -192,19 +130,6 @@ export default function LandingPage() {
                   {item.label}
                 </button>
               ))}
-              <DropdownMenu>
-                <DropdownMenuTrigger className="flex items-center gap-1 px-4 py-2 text-sm text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent/60 transition-all duration-200">
-                  Professor <ChevronDown className="w-3 h-3" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 rounded-xl">
-                   <DropdownMenuItem onClick={() => openAuth('signup')}>
-                    <UserPlus className="w-4 h-4 mr-2" /> Criar Conta
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => openAuth('signin')}>
-                    <LogIn className="w-4 h-4 mr-2" /> Entrar
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
 
             <div className="hidden md:flex items-center gap-2">
@@ -234,7 +159,7 @@ export default function LandingPage() {
                 <div className="px-4 py-3 space-y-1">
                   <button onClick={() => { document.getElementById('recursos')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Recursos</button>
                   <button onClick={() => { document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' }); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Como Funciona</button>
-                  <button onClick={() => { navigate('/join'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Estudante</button>
+                  <button onClick={() => { navigate('/join'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Sou Estudante</button>
                   <button onClick={() => { openAuth('signup'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Criar Conta</button>
                   <button onClick={() => { openAuth('signin'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm font-medium py-2.5 px-3 rounded-xl hover:bg-accent/60">Professor - Entrar</button>
                 </div>
@@ -617,42 +542,6 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-
-      {/* Student Dialog */}
-      <Dialog open={studentDialogOpen} onOpenChange={setStudentDialogOpen}>
-        <DialogContent className="max-w-sm rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="font-heading text-xl flex items-center gap-2">
-              <GraduationCap className="w-5 h-5 text-primary" /> Entrar na Sala
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Seu Nome</label>
-              <Input
-                value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                placeholder="Nome completo"
-                className="rounded-xl"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Código da Sala</label>
-              <Input
-                value={roomCode}
-                onChange={e => setRoomCode(e.target.value.toUpperCase())}
-                placeholder="Ex: ABC123"
-                maxLength={6}
-                className="font-mono text-xl tracking-[0.3em] text-center rounded-xl"
-              />
-            </div>
-            <Button onClick={handleStudentJoin} disabled={joining} className="w-full rounded-xl" size="lg">
-              {joining ? 'Entrando...' : 'Entrar na Sala'}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Auth Dialog */}
       <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} defaultMode={authMode} />
