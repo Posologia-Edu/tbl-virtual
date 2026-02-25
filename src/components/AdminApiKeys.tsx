@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { Key, Eye, EyeOff, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { Key, Eye, EyeOff, Trash2, ExternalLink, Loader2, CheckCircle2, Circle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 type Provider = {
   id: string;
@@ -121,12 +122,23 @@ export default function AdminApiKeys() {
           const isSaving = saving[p.id];
 
           return (
-            <Card key={p.id} className={`transition-colors ${stored ? 'border-primary/30' : ''}`}>
+            <Card key={p.id} className={`transition-colors ${stored ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
               <CardContent className="pt-5 pb-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Key className="w-4 h-4 text-muted-foreground" />
                     <span className="font-semibold">{p.label}</span>
+                    {stored ? (
+                      <Badge variant="default" className="gap-1 text-xs">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Configurada
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
+                        <Circle className="w-3 h-3" />
+                        Não configurada
+                      </Badge>
+                    )}
                   </div>
                   <a
                     href={p.docsUrl}
@@ -134,7 +146,7 @@ export default function AdminApiKeys() {
                     rel="noopener noreferrer"
                     className="text-sm text-primary hover:underline flex items-center gap-1"
                   >
-                    Adquira sua chave de API <ExternalLink className="w-3 h-3" />
+                    Obter chave <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
 
