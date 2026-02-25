@@ -22,7 +22,7 @@ import {
 import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
-  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown,
+  BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown, Key,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -32,6 +32,7 @@ import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import ClassManagement from '@/components/ClassManagement';
 import QuestionBank from '@/components/QuestionBank';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
+import AdminApiKeys from '@/components/AdminApiKeys';
 
 type Room = {
   id: string;
@@ -78,7 +79,7 @@ type ProfileData = {
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
-  | 'admin-teachers' | 'analytics' | 'classes' | 'question-bank';
+  | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -1478,11 +1479,16 @@ export default function TeacherDashboard() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                      <SidebarMenuButton onClick={() => setActiveView('admin-teachers')} isActive={activeView === 'admin-teachers'} className="cursor-pointer">
-                        <Users className="w-4 h-4" /><span>Professores</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
+                       <SidebarMenuButton onClick={() => setActiveView('admin-teachers')} isActive={activeView === 'admin-teachers'} className="cursor-pointer">
+                         <Users className="w-4 h-4" /><span>Professores</span>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
+                     <SidebarMenuItem>
+                       <SidebarMenuButton onClick={() => setActiveView('admin-api-keys')} isActive={activeView === 'admin-api-keys'} className="cursor-pointer">
+                         <Key className="w-4 h-4" /><span>API Keys IA</span>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
+                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
             )}
@@ -1533,6 +1539,7 @@ export default function TeacherDashboard() {
                 {activeView === 'classes' && user && <ClassManagement userId={user.id} />}
                 {activeView === 'question-bank' && user && <QuestionBank userId={user.id} />}
                 {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
+                {activeView === 'admin-api-keys' && isAdmin && <AdminApiKeys />}
               </>
             )}
           </main>
