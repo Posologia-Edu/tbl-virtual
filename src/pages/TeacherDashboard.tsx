@@ -21,6 +21,10 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
   BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown, Key,
@@ -160,8 +164,9 @@ export default function TeacherDashboard() {
   const [invitePlan, setInvitePlan] = useState('free');
   const [inviteLoading, setInviteLoading] = useState(false);
 
-  // Question type choice dialog
   const [showTypeChoice, setShowTypeChoice] = useState(false);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
 
   // AI generation state
   const [showAiDialog, setShowAiDialog] = useState(false);
@@ -248,7 +253,10 @@ export default function TeacherDashboard() {
   };
 
   const loadTeachers = async () => {
-    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
+    const [{ data: roles }, { data: manualSubs }] = await Promise.all([
+      supabase.from('user_roles').select('user_id, role'),
+      supabase.from('manual_subscriptions').select('*'),
+    ]);
     if (!roles) return;
     const teacherRoles = roles.filter((r: any) => r.role === 'teacher' || r.role === 'admin');
     const userIds = teacherRoles.map((r: any) => r.user_id);
@@ -256,7 +264,8 @@ export default function TeacherDashboard() {
     const { data: profiles } = await supabase.from('profiles').select('id, full_name, is_approved, is_blocked, institution, created_at').in('id', userIds);
     const merged = (profiles || []).map((p: any) => {
       const r = teacherRoles.find((r: any) => r.user_id === p.id);
-      return { ...p, role: r?.role || 'teacher' };
+      const ms = (manualSubs || []).find((s: any) => s.user_id === p.id);
+      return { ...p, role: r?.role || 'teacher', manualPlan: ms?.plan || null, grantedBy: ms?.granted_by || null };
     });
     setAllTeachers(merged);
   };
@@ -306,6 +315,23 @@ export default function TeacherDashboard() {
     await supabase.from('profiles').delete().eq('id', id);
     toast.success('Professor excluído');
     loadTeachers();
+  };
+
+  const deleteFullUser = async (userId: string) => {
+    setDeleteUserLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('Usuário excluído com sucesso!');
+      setDeleteUserTarget(null);
+      loadAdminSubscribers();
+      if (activeView === 'admin-teachers') loadTeachers();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir usuário');
+    } finally { setDeleteUserLoading(false); }
   };
 
   const inviteTeacher = async () => {
@@ -1377,47 +1403,12 @@ export default function TeacherDashboard() {
     </div>
   );
 
-  const renderAdminTeachers = () => (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-heading font-bold">Gerenciar Professores</h2>
-        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-          <DialogTrigger asChild>
-            <Button><Mail className="w-4 h-4 mr-2" /> Enviar Convite</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="font-heading">Convidar Professor</DialogTitle>
-              <DialogDescription>O convidado receberá um e-mail com link para cadastrar sua senha.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <Label>Nome Completo</Label>
-                <Input value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Nome do professor" />
-              </div>
-              <div className="space-y-2">
-                <Label>E-mail</Label>
-                <Input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" />
-              </div>
-              <div className="space-y-2">
-                <Label>Plano</Label>
-                <Select value={invitePlan} onValueChange={setInvitePlan}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="free">Gratuito</SelectItem>
-                    <SelectItem value="pro">Pro</SelectItem>
-                    <SelectItem value="institutional">Institucional</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button onClick={inviteTeacher} disabled={inviteLoading} className="w-full">
-                {inviteLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                Enviar Convite
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
+  const renderAdminTeachers = () => {
+    const admins = allTeachers.filter((t: any) => t.role === 'admin');
+    const invited = allTeachers.filter((t: any) => t.role !== 'admin' && t.grantedBy);
+    const selfRegistered = allTeachers.filter((t: any) => t.role !== 'admin' && !t.grantedBy);
+
+    const renderTeacherTable = (list: any[], emptyMsg: string) => (
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -1431,13 +1422,18 @@ export default function TeacherDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allTeachers.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nenhum professor cadastrado.</TableCell></TableRow>
-              ) : allTeachers.map((t: any) => (
+              {list.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{emptyMsg}</TableCell></TableRow>
+              ) : list.map((t: any) => (
                 <TableRow key={t.id} className={t.is_blocked ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">
                     {t.full_name}
                     {t.role === 'admin' && <Badge className="ml-2 bg-primary text-primary-foreground text-xs">Admin</Badge>}
+                    {t.manualPlan && t.manualPlan !== 'free' && (
+                      <Badge variant="secondary" className="ml-2 text-xs">
+                        {t.manualPlan === 'institutional' ? 'Institucional' : 'Pro'}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm">{t.institution || '—'}</TableCell>
                   <TableCell className="text-sm">{new Date(t.created_at).toLocaleDateString('pt-BR')}</TableCell>
@@ -1491,8 +1487,83 @@ export default function TeacherDashboard() {
           </Table>
         </CardContent>
       </Card>
-    </div>
-  );
+    );
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-heading font-bold">Gerenciar Professores</h2>
+          <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+            <DialogTrigger asChild>
+              <Button><Mail className="w-4 h-4 mr-2" /> Enviar Convite</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-heading">Convidar Professor</DialogTitle>
+                <DialogDescription>O convidado receberá um e-mail com link para cadastrar sua senha.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Nome Completo</Label>
+                  <Input value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Nome do professor" />
+                </div>
+                <div className="space-y-2">
+                  <Label>E-mail</Label>
+                  <Input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Plano</Label>
+                  <Select value={invitePlan} onValueChange={setInvitePlan}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="free">Gratuito</SelectItem>
+                      <SelectItem value="pro">Pro</SelectItem>
+                      <SelectItem value="institutional">Institucional</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button onClick={inviteTeacher} disabled={inviteLoading} className="w-full">
+                  {inviteLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Enviar Convite
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Administradores */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+            <Crown className="w-5 h-5 text-primary" /> Administradores do Sistema
+            <Badge variant="secondary" className="ml-1">{admins.length}</Badge>
+          </h3>
+          {renderTeacherTable(admins, 'Nenhum administrador encontrado.')}
+        </div>
+
+        <Separator />
+
+        {/* Professores Convidados */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+            <Mail className="w-5 h-5 text-primary" /> Professores Convidados
+            <Badge variant="secondary" className="ml-1">{invited.length}</Badge>
+          </h3>
+          {renderTeacherTable(invited, 'Nenhum professor convidado.')}
+        </div>
+
+        <Separator />
+
+        {/* Professores Pagantes / Auto-cadastrados */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" /> Professores Pagantes / Auto-cadastrados
+            <Badge variant="secondary" className="ml-1">{selfRegistered.length}</Badge>
+          </h3>
+          {renderTeacherTable(selfRegistered, 'Nenhum professor pagante/auto-cadastrado.')}
+        </div>
+      </div>
+    );
+  };
 
   const renderAdminSubscribers = () => (
     <div className="space-y-6">
@@ -1545,25 +1616,37 @@ export default function TeacherDashboard() {
                   </TableCell>
                   <TableCell className="text-sm">{new Date(s.created_at).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell className="text-center">
-                    <Select
-                      value={s.manualPlan}
-                      onValueChange={async (val) => {
-                        await supabase.from('manual_subscriptions').upsert({
-                          user_id: s.id, plan: val, granted_by: user!.id,
-                        } as any, { onConflict: 'user_id' });
-                        toast.success('Plano atualizado!');
-                        loadAdminSubscribers();
-                      }}
-                    >
-                      <SelectTrigger className="w-[120px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="free">Gratuito</SelectItem>
-                        <SelectItem value="pro">Pro</SelectItem>
-                        <SelectItem value="institutional">Institucional</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center justify-center gap-1">
+                      <Select
+                        value={s.manualPlan}
+                        onValueChange={async (val) => {
+                          await supabase.from('manual_subscriptions').upsert({
+                            user_id: s.id, plan: val, granted_by: user!.id,
+                          } as any, { onConflict: 'user_id' });
+                          toast.success('Plano atualizado!');
+                          loadAdminSubscribers();
+                        }}
+                      >
+                        <SelectTrigger className="w-[120px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="free">Gratuito</SelectItem>
+                          <SelectItem value="pro">Pro</SelectItem>
+                          <SelectItem value="institutional">Institucional</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {s.id !== user!.id && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                          onClick={() => setDeleteUserTarget({ id: s.id, name: s.full_name })}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1571,6 +1654,29 @@ export default function TeacherDashboard() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog open={!!deleteUserTarget} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir <strong>{deleteUserTarget?.name}</strong>? Esta ação é irreversível e removerá todas as informações deste usuário do sistema (respostas, participações, salas, questionários, etc).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteUserLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteUserLoading}
+              onClick={() => deleteUserTarget && deleteFullUser(deleteUserTarget.id)}
+            >
+              {deleteUserLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Excluir Permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 
