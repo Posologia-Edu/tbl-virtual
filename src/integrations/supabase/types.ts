@@ -38,6 +38,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_log: {
+        Row: {
+          id: string
+          provider: string | null
+          tokens_used: number | null
+          used_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          provider?: string | null
+          tokens_used?: number | null
+          used_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          provider?: string | null
+          tokens_used?: number | null
+          used_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       appeals: {
         Row: {
           id: string
@@ -323,6 +347,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      manual_subscriptions: {
+        Row: {
+          expires_at: string | null
+          granted_at: string
+          granted_by: string | null
+          id: string
+          plan: string
+          user_id: string
+        }
+        Insert: {
+          expires_at?: string | null
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          plan?: string
+          user_id: string
+        }
+        Update: {
+          expires_at?: string | null
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          plan?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
