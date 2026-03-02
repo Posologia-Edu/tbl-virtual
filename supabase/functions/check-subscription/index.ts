@@ -39,41 +39,77 @@ serve(async (req) => {
     if (!user?.email) throw new Error("User not authenticated");
     logStep("User authenticated", { email: user.email });
 
+    // Count AI usage this month
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const { count: aiUsedThisMonth } = await supabaseClient
+      .from("ai_usage_log")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("used_at", firstOfMonth);
+    logStep("AI usage this month", { aiUsedThisMonth });
+
+    // Check Stripe subscription first
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
 
-    if (customers.data.length === 0) {
-      logStep("No Stripe customer found");
-      return new Response(JSON.stringify({ subscribed: false }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    const customerId = customers.data[0].id;
-    logStep("Found customer", { customerId });
-
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 1,
-    });
-
-    const hasActiveSub = subscriptions.data.length > 0;
+    let subscribed = false;
     let productId = null;
     let subscriptionEnd = null;
 
-    if (hasActiveSub) {
-      const subscription = subscriptions.data[0];
-      subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-      productId = subscription.items.data[0].price.product;
-      logStep("Active subscription found", { productId, subscriptionEnd });
+    if (customers.data.length > 0) {
+      const customerId = customers.data[0].id;
+      logStep("Found customer", { customerId });
+
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "active",
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const subscription = subscriptions.data[0];
+        subscribed = true;
+        subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        productId = subscription.items.data[0].price.product;
+        logStep("Active Stripe subscription", { productId, subscriptionEnd });
+      }
+    }
+
+    // If no Stripe subscription, check manual_subscriptions
+    if (!subscribed) {
+      const { data: manualSub } = await supabaseClient
+        .from("manual_subscriptions")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+      if (manualSub && manualSub.plan !== 'free') {
+        // Check expiry
+        const isExpired = manualSub.expires_at && new Date(manualSub.expires_at) < now;
+        if (!isExpired) {
+          subscribed = true;
+          // Map plan name to product_id
+          const planToProduct: Record<string, string> = {
+            pro: "prod_U1oaz7iVie1pFU",
+            institutional: "prod_U1ob8n7iDfyGLT",
+          };
+          productId = planToProduct[manualSub.plan] || null;
+          subscriptionEnd = manualSub.expires_at;
+          logStep("Active manual subscription", { plan: manualSub.plan, productId });
+        }
+      }
+    }
+
+    if (!subscribed) {
+      logStep("No active subscription (free plan)");
     }
 
     return new Response(JSON.stringify({
-      subscribed: hasActiveSub,
+      subscribed,
       product_id: productId,
       subscription_end: subscriptionEnd,
+      ai_used_this_month: aiUsedThisMonth || 0,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

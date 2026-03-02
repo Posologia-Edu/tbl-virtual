@@ -7,6 +7,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const PLAN_AI_LIMITS: Record<string, number> = {
+  "prod_U1oaoU5nQAqqW3": 0,    // Gratuito
+  "prod_U1oaz7iVie1pFU": 50,   // Pro
+  "prod_U1ob8n7iDfyGLT": Infinity, // Institucional
+};
+
 const PROVIDER_CONFIGS: Record<string, { url: string; model: string; mapBody?: (body: any) => any }> = {
   groq: {
     url: "https://api.groq.com/openai/v1/chat/completions",
@@ -118,12 +124,113 @@ async function tryLovableAI(messages: any[]): Promise<string> {
   return data.choices?.[0]?.message?.content || "";
 }
 
+import Stripe from "https://esm.sh/stripe@18.5.0";
+
+async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: string): Promise<{ limit: number; used: number; productId: string | null }> {
+  // Count usage this month
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const { count: used } = await supabaseClient
+    .from("ai_usage_log")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("used_at", firstOfMonth);
+
+  // Check Stripe subscription
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  let productId: string | null = null;
+
+  if (stripeKey) {
+    try {
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+      const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
+      if (customers.data.length > 0) {
+        const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
+        if (subs.data.length > 0) {
+          productId = subs.data[0].items.data[0].price.product as string;
+        }
+      }
+    } catch (e) {
+      console.error("[AI] Stripe check failed:", e);
+    }
+  }
+
+  // If no Stripe subscription, check manual_subscriptions
+  if (!productId) {
+    const { data: manualSub } = await supabaseClient
+      .from("manual_subscriptions")
+      .select("plan, expires_at")
+      .eq("user_id", userId)
+      .single();
+
+    if (manualSub && manualSub.plan !== 'free') {
+      const isExpired = manualSub.expires_at && new Date(manualSub.expires_at) < now;
+      if (!isExpired) {
+        const planToProduct: Record<string, string> = {
+          pro: "prod_U1oaz7iVie1pFU",
+          institutional: "prod_U1ob8n7iDfyGLT",
+        };
+        productId = planToProduct[manualSub.plan] || null;
+      }
+    }
+  }
+
+  // Default to free plan product if no subscription found
+  if (!productId) productId = "prod_U1oaoU5nQAqqW3";
+
+  const limit = PLAN_AI_LIMITS[productId] ?? 0;
+  return { limit, used: used || 0, productId };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      { auth: { persistSession: false } }
+    );
+
+    // Authenticate user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) throw new Error("Não autorizado");
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await adminClient.auth.getUser(token);
+    if (userError || !userData.user) throw new Error("Não autorizado");
+    const user = userData.user;
+
+    // Check plan limits
+    const { limit, used } = await getUserPlanLimit(adminClient, user.id, user.email!);
+    console.log(`[AI] User ${user.email} plan limit: ${limit}, used: ${used}`);
+
+    if (limit === 0) {
+      return new Response(JSON.stringify({
+        error: "PLAN_LIMIT",
+        message: "Seu plano atual não inclui geração de questões com IA. Faça upgrade para o plano Pro ou Institucional.",
+        used,
+        limit,
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (isFinite(limit) && used >= limit) {
+      return new Response(JSON.stringify({
+        error: "PLAN_LIMIT",
+        message: `Você atingiu o limite de ${limit} gerações de IA este mês (${used}/${limit}). Faça upgrade para continuar.`,
+        used,
+        limit,
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { fileContent, fileName, mimeType } = await req.json();
 
     if (!fileContent) {
@@ -186,23 +293,15 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     let content: string | null = null;
 
     try {
-      const adminClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        { auth: { persistSession: false } }
-      );
-
       const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
 
       if (apiKeys && apiKeys.length > 0) {
-        // Only try text-based providers for non-text content (multimodal may not work everywhere)
         const preferredOrder = ["groq", "openai", "google", "openrouter", "anthropic"];
 
         for (const providerName of preferredOrder) {
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
           if (!keyRow) continue;
 
-          // For non-text content, skip providers that may not support multimodal well
           if (!isTextContent && (providerName === "groq" || providerName === "anthropic")) continue;
 
           content = await tryExternalProvider(providerName, keyRow.api_key, messages);
@@ -245,6 +344,14 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Log AI usage after success
+    await adminClient.from("ai_usage_log").insert({
+      user_id: user.id,
+      provider: "auto",
+      tokens_used: 0,
+    });
+    console.log(`[AI] Usage logged for user ${user.email}`);
 
     // Parse JSON from response
     let jsonStr = content.trim();

@@ -15,7 +15,10 @@ export const STRIPE_PLANS = {
       max_students: 30,
       max_rooms_per_month: 3,
       ai_questions: false,
+      ai_questions_per_month: 0,
       detailed_reports: false,
+      export_csv_pdf: false,
+      admin_panel: false,
     },
   },
   pro: {
@@ -35,7 +38,10 @@ export const STRIPE_PLANS = {
       max_students: Infinity,
       max_rooms_per_month: Infinity,
       ai_questions: true,
+      ai_questions_per_month: 50,
       detailed_reports: true,
+      export_csv_pdf: true,
+      admin_panel: false,
     },
   },
   institutional: {
@@ -56,7 +62,10 @@ export const STRIPE_PLANS = {
       max_students: Infinity,
       max_rooms_per_month: Infinity,
       ai_questions: true,
+      ai_questions_per_month: Infinity,
       detailed_reports: true,
+      export_csv_pdf: true,
+      admin_panel: true,
     },
   },
 } as const;

@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 
 type Props = {
   userId: string;
+  canExport?: boolean;
+  onUpgradeNeeded?: (feature: string) => void;
 };
 
 type RoomData = {
@@ -44,7 +46,7 @@ type QuestionAnalysis = {
   optionDistribution: { A: number; B: number; C: number; D: number };
 };
 
-export default function AnalyticsDashboard({ userId }: Props) {
+export default function AnalyticsDashboard({ userId, canExport = true, onUpgradeNeeded }: Props) {
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<RoomData[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
@@ -224,6 +226,7 @@ export default function AnalyticsDashboard({ userId }: Props) {
 
   // ============ EXPORT FUNCTIONS ============
   const exportCSV = () => {
+    if (!canExport) { onUpgradeNeeded?.('Exportar CSV/PDF'); return; }
     if (!questionAnalysis.length) { toast.error('Sem dados para exportar'); return; }
 
     // Student report CSV
@@ -260,6 +263,7 @@ export default function AnalyticsDashboard({ userId }: Props) {
   };
 
   const exportPDF = () => {
+    if (!canExport) { onUpgradeNeeded?.('Exportar CSV/PDF'); return; }
     window.print();
   };
 
