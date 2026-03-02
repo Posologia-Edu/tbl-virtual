@@ -151,6 +151,14 @@ export default function TeacherDashboard() {
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
   const [approvalPlan, setApprovalPlan] = useState<string>('free');
+  const [inlineCheckoutLoading, setInlineCheckoutLoading] = useState<string | null>(null);
+
+  // Invite state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [invitePlan, setInvitePlan] = useState('free');
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   // Question type choice dialog
   const [showTypeChoice, setShowTypeChoice] = useState(false);
@@ -274,15 +282,15 @@ export default function TeacherDashboard() {
   };
 
   const loadAdminSubscribers = async () => {
-    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
-    if (!roles) return;
-    const teacherIds = roles.filter((r: any) => r.role === 'teacher' || r.role === 'admin').map((r: any) => r.user_id);
-    if (teacherIds.length === 0) { setAdminSubscribers([]); return; }
-    const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, institution, created_at').in('id', teacherIds);
-    const { data: manualSubs } = await supabase.from('manual_subscriptions').select('*');
+    const [{ data: roles }, { data: profiles }, { data: manualSubs }] = await Promise.all([
+      supabase.from('user_roles').select('user_id, role'),
+      supabase.from('profiles').select('id, full_name, email, institution, created_at'),
+      supabase.from('manual_subscriptions').select('*'),
+    ]);
     const merged = (profiles || []).map((p: any) => {
+      const r = (roles || []).find((r: any) => r.user_id === p.id);
       const ms = (manualSubs || []).find((s: any) => s.user_id === p.id);
-      return { ...p, manualPlan: ms?.plan || 'free', grantedAt: ms?.granted_at, expiresAt: ms?.expires_at };
+      return { ...p, role: r?.role || 'student', manualPlan: ms?.plan || 'free', grantedAt: ms?.granted_at, expiresAt: ms?.expires_at };
     });
     setAdminSubscribers(merged);
   };
@@ -298,6 +306,23 @@ export default function TeacherDashboard() {
     await supabase.from('profiles').delete().eq('id', id);
     toast.success('Professor excluído');
     loadTeachers();
+  };
+
+  const inviteTeacher = async () => {
+    if (!inviteEmail.trim() || !inviteName.trim()) { toast.error('Preencha nome e e-mail'); return; }
+    setInviteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-teacher', {
+        body: { email: inviteEmail.trim(), fullName: inviteName.trim(), plan: invitePlan },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Convite enviado para ${inviteEmail}!`);
+      setInviteOpen(false); setInviteEmail(''); setInviteName(''); setInvitePlan('free');
+      loadTeachers();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar convite');
+    } finally { setInviteLoading(false); }
   };
 
   const sendContact = () => {
@@ -860,46 +885,106 @@ export default function TeacherDashboard() {
 
   const renderMyPlan = () => {
     const currentPlanKey = subscription.plan || 'free';
-    const plan = STRIPE_PLANS[currentPlanKey];
+    const planMetaInline: Record<string, { icon: typeof Sparkles; highlight: boolean; badge?: string }> = {
+      free: { icon: Sparkles, highlight: false },
+      pro: { icon: Crown, highlight: true, badge: 'Mais Popular' },
+      institutional: { icon: CreditCard, highlight: false },
+    };
+
+    const handleCheckout = async (planKey: string) => {
+      if (planKey === 'free') { toast.info('Você já está no plano gratuito!'); return; }
+      setInlineCheckoutLoading(planKey);
+      try {
+        const { data, error } = await supabase.functions.invoke('create-checkout', {
+          body: { priceId: STRIPE_PLANS[planKey as keyof typeof STRIPE_PLANS].price_id },
+        });
+        if (error) throw error;
+        if (data?.url) window.location.href = data.url;
+      } catch (err: any) {
+        toast.error(err.message || 'Erro ao iniciar checkout');
+      } finally { setInlineCheckoutLoading(null); }
+    };
+
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-heading font-bold">Informações Professor</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          <Card>
-            <CardHeader className="text-center"><CardTitle>Dados Pessoais</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              <Badge className="bg-success text-success-foreground mx-auto block w-fit mb-3">Situação: Ativo</Badge>
-              <p className="text-sm"><span className="font-semibold">CPF:</span> {profileForm.cpf || '—'}</p>
-              <p className="text-sm"><span className="font-semibold">Apelido:</span> {profileForm.nickname || '—'}</p>
-              <p className="text-sm"><span className="font-semibold text-primary">Nome:</span> {profileForm.full_name}</p>
-              <p className="text-sm"><span className="font-semibold">E-mail:</span> {user?.email}</p>
-              <p className="text-sm"><span className="font-semibold">Instituição:</span> {profileForm.institution || '—'}</p>
-              <p className="text-sm"><span className="font-semibold">Cidade Instituição:</span> {profileForm.institution_city || '—'}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-t-4 border-t-primary">
-            <CardHeader className="text-center"><CardTitle className="text-primary">Meu Plano</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Plano Atual:</span> {plan.name}</span></div>
-              <div className="flex items-center gap-2"><span className="text-muted-foreground text-base">$</span><span><span className="font-semibold">Valor:</span> R${plan.price.toFixed(2).replace('.', ',')}/mês</span></div>
-              {plan.limits.ai_questions && (
+      <div className="space-y-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-heading font-bold mb-2">Escolha o plano ideal</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Comece gratuitamente e faça upgrade quando precisar. Todos os planos incluem as 3 fases completas do TBL.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          {(Object.entries(STRIPE_PLANS) as [string, typeof STRIPE_PLANS[keyof typeof STRIPE_PLANS]][]).map(([key, plan]) => {
+            const meta = planMetaInline[key];
+            const Icon = meta.icon;
+            const isCurrent = currentPlanKey === key;
+            const isLoading = inlineCheckoutLoading === key;
+
+            return (
+              <div
+                key={key}
+                className={`relative rounded-3xl border p-8 flex flex-col ${
+                  isCurrent
+                    ? 'border-primary ring-2 ring-primary/30 bg-primary/[0.03] shadow-xl shadow-primary/10 scale-[1.02]'
+                    : meta.highlight
+                    ? 'border-primary/50 bg-primary/[0.02] shadow-lg shadow-primary/5'
+                    : 'border-border bg-card'
+                }`}
+              >
+                {meta.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                    {meta.badge}
+                  </div>
+                )}
+                <div className="mb-6">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${meta.highlight ? 'bg-primary/15' : 'bg-accent'}`}>
+                    <Icon className={`w-6 h-6 ${meta.highlight ? 'text-primary' : 'text-muted-foreground'}`} />
+                  </div>
+                  <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-heading font-bold">
+                      {plan.price === 0 ? 'Grátis' : `R$${plan.price.toFixed(2).replace('.', ',')}`}
+                    </span>
+                    {plan.price > 0 && <span className="text-muted-foreground text-sm">/mês</span>}
+                  </div>
+                </div>
+                <ul className="space-y-3 mb-8 flex-1">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5 text-sm">
+                      <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${meta.highlight ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  onClick={() => handleCheckout(key)}
+                  disabled={isLoading || inlineCheckoutLoading !== null || isCurrent}
+                  variant={isCurrent ? 'secondary' : meta.highlight ? 'default' : 'outline'}
+                  className={`w-full rounded-2xl h-12 ${meta.highlight && !isCurrent ? 'shadow-lg shadow-primary/20' : ''}`}
+                >
+                  {isLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  {isCurrent ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Plan details for current plan */}
+        {subscription.subscribed && subscription.subscriptionEnd && (
+          <Card className="max-w-md mx-auto border-t-4 border-t-primary">
+            <CardContent className="pt-6 space-y-2 text-sm">
+              <div className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Válido até:</span> {new Date(subscription.subscriptionEnd).toLocaleDateString('pt-BR')}</span></div>
+              {STRIPE_PLANS[currentPlanKey].limits.ai_questions && (
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-muted-foreground" />
-                  <span><span className="font-semibold">IA:</span> {isFinite(plan.limits.ai_questions_per_month) ? `${subscription.aiUsedThisMonth}/${plan.limits.ai_questions_per_month} usados este mês` : 'Ilimitado'}</span>
+                  <span><span className="font-semibold">IA:</span> {isFinite(STRIPE_PLANS[currentPlanKey].limits.ai_questions_per_month) ? `${subscription.aiUsedThisMonth}/${STRIPE_PLANS[currentPlanKey].limits.ai_questions_per_month} usados este mês` : 'Ilimitado'}</span>
                 </div>
-              )}
-              <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Início do plano:</span> {new Date(user?.created_at || '').toLocaleString('pt-BR')}</span></div>
-              {subscription.subscriptionEnd && (
-                <div className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Válido até:</span> {new Date(subscription.subscriptionEnd).toLocaleDateString('pt-BR')}</span></div>
-              )}
-              {!subscription.subscribed && (
-                <Button variant="outline" className="w-full mt-2 gap-1" onClick={() => navigate('/pricing')}>
-                  <Crown className="w-4 h-4" /> Fazer Upgrade
-                </Button>
               )}
             </CardContent>
           </Card>
-        </div>
+        )}
       </div>
     );
   };
@@ -1294,7 +1379,45 @@ export default function TeacherDashboard() {
 
   const renderAdminTeachers = () => (
     <div className="space-y-6">
-      <h2 className="text-2xl font-heading font-bold">Gerenciar Professores</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-heading font-bold">Gerenciar Professores</h2>
+        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          <DialogTrigger asChild>
+            <Button><Mail className="w-4 h-4 mr-2" /> Enviar Convite</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-heading">Convidar Professor</DialogTitle>
+              <DialogDescription>O convidado receberá um e-mail com link para cadastrar sua senha.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>Nome Completo</Label>
+                <Input value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Nome do professor" />
+              </div>
+              <div className="space-y-2">
+                <Label>E-mail</Label>
+                <Input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="email@exemplo.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>Plano</Label>
+                <Select value={invitePlan} onValueChange={setInvitePlan}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">Gratuito</SelectItem>
+                    <SelectItem value="pro">Pro</SelectItem>
+                    <SelectItem value="institutional">Institucional</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button onClick={inviteTeacher} disabled={inviteLoading} className="w-full">
+                {inviteLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Enviar Convite
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -1382,6 +1505,7 @@ export default function TeacherDashboard() {
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Instituição</TableHead>
+                <TableHead className="text-center">Cargo</TableHead>
                 <TableHead className="text-center">Plano</TableHead>
                 <TableHead>Cadastro</TableHead>
                 <TableHead className="text-center">Ações</TableHead>
@@ -1389,12 +1513,31 @@ export default function TeacherDashboard() {
             </TableHeader>
             <TableBody>
               {adminSubscribers.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>
               ) : adminSubscribers.map((s: any) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">{s.full_name}</TableCell>
                   <TableCell className="text-sm">{s.email || '—'}</TableCell>
                   <TableCell className="text-sm">{s.institution || '—'}</TableCell>
+                  <TableCell className="text-center">
+                    <Select
+                      value={s.role}
+                      onValueChange={async (val) => {
+                        await supabase.from('user_roles').update({ role: val } as any).eq('user_id', s.id);
+                        toast.success('Cargo atualizado!');
+                        loadAdminSubscribers();
+                      }}
+                    >
+                      <SelectTrigger className="w-[110px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="student">Aluno</SelectItem>
+                        <SelectItem value="teacher">Professor</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell className="text-center">
                     <Badge variant={s.manualPlan === 'institutional' ? 'default' : s.manualPlan === 'pro' ? 'secondary' : 'outline'}>
                       {s.manualPlan === 'institutional' ? 'Institucional' : s.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
@@ -1521,7 +1664,7 @@ export default function TeacherDashboard() {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton onClick={() => navigate('/pricing')} className="cursor-pointer">
+                    <SidebarMenuButton onClick={() => setActiveView('my-plan')} isActive={activeView === 'my-plan'} className="cursor-pointer">
                       <Crown className="w-4 h-4" /><span>Meu Plano</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
