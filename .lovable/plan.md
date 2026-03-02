@@ -1,127 +1,168 @@
 
-# Revisao Completa de UX e Fluxos do TBL Virtual
+# Implementacao de Travas por Plano, Contadores de IA e Painel Administrativo Completo
 
-## Resumo da Avaliacao
+## Diagnostico Atual
 
-Apos analisar todos os fluxos do sistema, identifiquei **15 problemas** organizados por severidade. A plataforma tem uma base solida, mas existem falhas de UX que podem confundir usuarios e comprometer a experiencia.
+### Stripe - OK
+Os 3 produtos e precos estao corretamente cadastrados no Stripe e coincidem com o codigo (`stripe-plans.ts`):
+- Gratuito: `prod_U1oaoU5nQAqqW3` / `price_1T3kxRH6ld7NmvcD24SoXT0g` (R$0)
+- Pro: `prod_U1oaz7iVie1pFU` / `price_1T3kxkH6ld7NmvcDsA2078YR` (R$49,90/mes)
+- Institucional: `prod_U1ob8n7iDfyGLT` / `price_1T3ky2H6ld7NmvcDoT8qGQfk` (R$149,90/mes)
 
----
+### Problemas Identificados
 
-## PROBLEMAS CRITICOS (Impacto Alto)
-
-### 1. Dois caminhos de entrada para estudantes com comportamentos diferentes
-- A Landing Page tem um dialogo rapido (nome + codigo de 6 caracteres) que cria um email efemero `roomCode_timestamp@student.tbl`
-- A pagina `/join` tem um fluxo completo de 2 etapas (codigo da sala > nome + registro + email real)
-- O dialogo da Landing valida codigo de 6 caracteres alfanumerico, mas o `/join` aceita apenas numeros (`replace(/\D/g, '')`)
-- **Solucao**: Unificar a entrada do estudante. Remover o dialogo da Landing e direcionar sempre para `/join`, que tem o fluxo mais completo e seguro.
-
-### 2. Ausencia de "Esqueci minha senha"
-- Nenhum dos fluxos de autenticacao (AuthDialog, AuthPage) possui opcao de recuperacao de senha
-- Professores que esquecerem a senha ficam sem acesso
-- **Solucao**: Adicionar link "Esqueci minha senha" nos formularios de login, com pagina `/reset-password` dedicada
-
-### 3. Signup nao redireciona para dashboard
-- No `AuthDialog`, apos signup bem-sucedido, o dialogo apenas fecha (`onOpenChange(false)`) sem redirecionar para `/dashboard`
-- No `AuthPage`, apos signup, faz `return` sem navegar
-- O professor cria a conta e fica "perdido" na mesma pagina
-- **Solucao**: Apos signup, exibir mensagem clara sobre aprovacao pendente ou redirecionar para `/dashboard` (que mostrara a tela de "Cadastro em Analise")
-
-### 4. Google OAuth nao atribui role de professor
-- O fluxo de Google Sign-In nao passa `data: { role: 'teacher' }` nos metadados
-- Usuarios que se cadastram via Google podem ficar sem role definido, causando comportamento imprevisivel no `DashboardRouter`
-- **Solucao**: Configurar os metadados do Google OAuth ou criar um trigger no banco que atribui role default
+1. **Nenhuma trava de plano existe** - Qualquer usuario pode usar IA, criar salas ilimitadas, ver analytics, exportar CSV/PDF sem restricao
+2. **Nao ha contador de uso de IA** - Nenhuma tabela rastreia quantas vezes o usuario usou IA
+3. **"Meu Plano" (renderMyPlan) sempre mostra "Gratis"** - Ignora o estado real da subscription do contexto de auth
+4. **Admin nao ve usuarios pagantes** - So ve professores, sem info de plano
+5. **Admin nao pode escolher plano ao aprovar/convidar** - Apenas aprova/bloqueia
+6. **Signup nao atribui plano gratuito automaticamente** - O plano "gratuito" e inferido pela ausencia de subscription no Stripe, o que esta correto, mas nao ha enforcements
 
 ---
 
-## PROBLEMAS MODERADOS (Impacto Medio)
+## Plano de Implementacao
 
-### 5. Pagina /auth duplicada e sem uso claro
-- Existe `AuthPage.tsx` (pagina completa) e `AuthDialog.tsx` (modal na Landing)
-- A rota `/auth` e referenciada na PricingPage para redirecionar usuarios nao logados
-- Mas o fluxo principal da Landing usa o AuthDialog
-- **Solucao**: Decidir por um unico ponto de autenticacao. Recomendo manter o AuthDialog como principal e fazer `/auth` redirecionar para Landing com o dialog aberto
+### 1. Tabela de rastreamento de uso de IA (Migration)
 
-### 6. PricingPage - Botao "Plano Atual" sempre no plano Gratuito
-- O botao do plano gratuito sempre diz "Plano Atual" independentemente do plano real do usuario
-- Nao ha indicacao visual de qual plano o usuario realmente assina
-- **Solucao**: Comparar com `subscription.plan` do contexto de auth e marcar o plano correto como ativo
+Criar tabela `ai_usage_log` para rastrear cada chamada de IA por usuario:
 
-### 7. Checkout abre em nova aba
-- `window.open(data.url, '_blank')` abre o Stripe Checkout em nova aba
-- Isso quebra o fluxo e pode ser bloqueado por pop-up blockers
-- **Solucao**: Usar `window.location.href = data.url` para redirecionar na mesma aba
+```sql
+CREATE TABLE public.ai_usage_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  used_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  provider TEXT,
+  tokens_used INTEGER DEFAULT 0
+);
 
-### 8. Menu lateral - "Meu Plano" e "Planos" sao confusos
-- Ha dois itens consecutivos: "Meu Plano" (view interna) e "Planos" (navega para `/pricing`)
-- O usuario pode nao entender a diferenca
-- **Solucao**: Combinar em uma unica secao "Meu Plano" que mostra o plano atual + link para upgrade, ou renomear "Planos" para "Fazer Upgrade"
+ALTER TABLE public.ai_usage_log ENABLE ROW LEVEL SECURITY;
 
-### 9. Nenhum onboarding pos-cadastro para professor
-- Apos ser aprovado, o professor cai direto no dashboard vazio sem orientacao
-- Nao ha tutorial, wizard, ou dicas contextuais
-- **Solucao**: Adicionar um wizard de boas-vindas com 3-4 passos (criar primeiro questionario, entender as fases, criar sala)
+CREATE POLICY "Users can view own ai usage"
+  ON public.ai_usage_log FOR SELECT
+  USING (user_id = auth.uid());
 
-### 10. TeacherDashboard e um arquivo monolitico de 1645 linhas
-- Toda a logica do dashboard, formularios, estado e renderizacao esta em um unico arquivo
-- Isso nao e diretamente um problema de UX, mas dificulta manutencao e pode causar lentidao
-- **Solucao**: Extrair cada view (renderDashboard, renderRooms, etc.) em componentes separados
+CREATE POLICY "Service role can insert ai usage"
+  ON public.ai_usage_log FOR INSERT
+  WITH CHECK (true);
+```
+
+### 2. Atualizar `stripe-plans.ts` com limites de IA por plano
+
+Adicionar `ai_questions_per_month` aos limites:
+- Gratuito: `0` (IA bloqueada)
+- Pro: `50`
+- Institucional: `Infinity` (ilimitado)
+
+### 3. Atualizar `check-subscription` para retornar uso de IA do mes
+
+A edge function `check-subscription` sera expandida para consultar `ai_usage_log` e retornar `ai_used_this_month` junto com os dados de subscription existentes.
+
+### 4. Atualizar `useAuth` para expor uso de IA
+
+O contexto de auth passara a armazenar e expor `aiUsedThisMonth` alem dos dados de subscription existentes.
+
+### 5. Atualizar `generate-quiz-ai` para registrar uso e validar limites
+
+Antes de processar, a edge function:
+- Verificara o plano do usuario (via check-subscription ou query direta)
+- Contara usos do mes na `ai_usage_log`
+- Rejeitara se exceder o limite
+- Registrara o uso apos sucesso
+
+### 6. Criar hook `usePlanLimits` para travas no frontend
+
+Um hook centralizado que expoe:
+- `canUseAI`: boolean
+- `aiUsed` / `aiLimit`: contadores
+- `canCreateRoom`: boolean (baseado em salas ativas no mes)
+- `canViewDetailedReports`: boolean
+- `canExportCSV`: boolean
+- `showUpgradeDialog()`: funcao para exibir modal de upgrade
+
+### 7. Criar componente `UpgradeDialog`
+
+Modal que aparece quando o usuario tenta acessar uma funcionalidade bloqueada. Mostra os planos com destaque no que desbloqueia a feature tentada.
+
+### 8. Aplicar travas no TeacherDashboard
+
+- **Criar com IA**: verificar `canUseAI`, mostrar contador "X/50 usados este mes" nos botoes de IA, bloquear e mostrar UpgradeDialog se exceder
+- **Criar Sala**: verificar limite de salas (3/mes no gratuito), bloquear se exceder
+- **Analytics**: verificar `canViewDetailedReports`, mostrar UpgradeDialog no plano gratuito
+- **Exportar CSV/PDF**: verificar plano pro+, bloquear no gratuito
+
+### 9. Corrigir `renderMyPlan` para usar dados reais
+
+Usar `subscription.plan`, `subscription.subscriptionEnd` e os dados de `STRIPE_PLANS` para mostrar o plano real, valor, validade, etc.
+
+### 10. Painel Admin - Usuarios pagantes e escolha de plano
+
+- **Nova view `admin-subscribers`**: Lista todos os usuarios com seus planos (query de profiles + subscription via Stripe ou cache local)
+- **Ao aprovar professor**: Permitir ao admin selecionar o acesso (Gratuito/Pro/Institucional). Se Pro ou Institucional, o admin podera conceder acesso manualmente (sem pagamento Stripe) via uma tabela `manual_subscriptions`
+- **Visualizacao**: Nome, email, plano, data de inscricao, ultimo acesso, uso de IA do mes
+
+### 11. Tabela `manual_subscriptions` (Migration)
+
+Para o admin poder conceder planos manualmente a convidados:
+
+```sql
+CREATE TABLE public.manual_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
+  plan TEXT NOT NULL DEFAULT 'free',
+  granted_by UUID REFERENCES auth.users(id),
+  granted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  expires_at TIMESTAMP WITH TIME ZONE
+);
+
+ALTER TABLE public.manual_subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins manage manual subscriptions"
+  ON public.manual_subscriptions FOR ALL
+  USING (is_admin(auth.uid()));
+
+CREATE POLICY "Users view own subscription"
+  ON public.manual_subscriptions FOR SELECT
+  USING (user_id = auth.uid());
+```
+
+### 12. Atualizar `check-subscription` para verificar tambem `manual_subscriptions`
+
+A edge function verificara primeiro o Stripe; se nao encontrar subscription ativa, verificara `manual_subscriptions` para planos concedidos pelo admin.
 
 ---
 
-## PROBLEMAS MENORES (Impacto Baixo)
+## Resumo dos Arquivos a Criar/Editar
 
-### 11. Reconexao de estudante tem fluxo quebrado
-- Na `/join`, o botao "Reconectar com codigo de participante" chama `handleCodeSubmit()` que, se o usuario ja estiver logado, redireciona direto, caso contrario vai para `step='info'` (novo participante), nunca para `step='reconnect'`
-- O step `reconnect` existe no JSX mas nao ha caminho de navegacao que leve ate ele
-- **Solucao**: Corrigir o fluxo para que o botao de reconexao leve ao step correto
+**Novos arquivos:**
+- `src/hooks/usePlanLimits.ts` - Hook de travas por plano
+- `src/components/UpgradeDialog.tsx` - Modal de upgrade
 
-### 12. Falta feedback visual na tela de "Cadastro em Analise"
-- A tela e estatica, sem nenhuma acao alem de "Sair"
-- Nao informa se um email sera enviado ou estimativa de tempo
-- **Solucao**: Adicionar informacoes mais claras, como "Voce recebera um email em seu-email@..." e um botao para verificar status
+**Migrations (2):**
+- Tabela `ai_usage_log`
+- Tabela `manual_subscriptions`
 
-### 13. Loading state generico
-- As telas de loading mostram apenas texto "Carregando..." sem skeleton ou indicador visual
-- **Solucao**: Usar skeleton loaders para uma experiencia mais fluida
-
-### 14. Navbar da Landing tem botoes "Entrar" duplicados
-- Existe "Entrar" no dropdown "Professor" E um botao "Entrar" separado no canto direito
-- **Solucao**: Remover a duplicacao, manter apenas os botoes do canto direito
-
-### 15. Acessibilidade do link "Estudante" no mobile menu da Landing
-- No menu mobile, o link "Estudante" navega para `/join`, mas nao tem icone ou indicacao visual de que e para estudantes
-- **Solucao**: Adicionar icone e label mais descritivo
+**Arquivos a editar:**
+- `src/lib/stripe-plans.ts` - Adicionar `ai_questions_per_month`
+- `src/hooks/useAuth.tsx` - Expor `aiUsedThisMonth` no contexto
+- `supabase/functions/check-subscription/index.ts` - Retornar uso de IA + checar manual_subscriptions
+- `supabase/functions/generate-quiz-ai/index.ts` - Validar limites e registrar uso
+- `src/pages/TeacherDashboard.tsx` - Aplicar travas, corrigir Meu Plano, admin subscribers
+- `src/components/AnalyticsDashboard.tsx` - Adicionar trava de exportacao
 
 ---
 
-## Detalhes Tecnicos da Implementacao
+## Mapeamento de Features por Plano
 
-### Prioridade 1 - Criticos (estimativa: 4-5 prompts)
-1. Unificar entrada de estudante: remover dialogo da Landing, ajustar botao "Sou Estudante" para navegar a `/join`
-2. Adicionar "Esqueci minha senha" + pagina `/reset-password`
-3. Corrigir redirecionamento pos-signup (navegar para `/dashboard`)
-4. Corrigir Google OAuth para incluir role nos metadados
-
-### Prioridade 2 - Moderados (estimativa: 3-4 prompts)
-5. Resolver duplicacao AuthPage vs AuthDialog
-6. Corrigir PricingPage para mostrar plano ativo real
-7. Mudar checkout para mesma aba (`location.href`)
-8. Simplificar menu lateral (unificar "Meu Plano" e "Planos")
-9. Criar wizard de onboarding pos-aprovacao
-
-### Prioridade 3 - Menores (estimativa: 2-3 prompts)
-10. Corrigir fluxo de reconexao do estudante
-11. Melhorar tela de "Cadastro em Analise"
-12. Adicionar skeleton loaders
-13. Limpar duplicacao de botoes na navbar
-
----
-
-## Ordem de Execucao Recomendada
-
-1. Correcoes criticas de autenticacao (itens 2, 3, 4)
-2. Unificacao do fluxo de entrada do estudante (item 1)
-3. PricingPage e checkout (itens 6, 7)
-4. Simplificacao do menu lateral (item 8)
-5. Onboarding wizard (item 9)
-6. Polimentos visuais (itens 11, 12, 13, 14)
+| Feature | Gratuito | Pro | Institucional |
+|---|---|---|---|
+| Professores | 1 | 1 | Multiplos |
+| Alunos | Ate 30 | Ilimitados | Ilimitados |
+| Salas ativas/mes | 3 | Ilimitadas | Ilimitadas |
+| iRAT + tRAT + Aplicacao | Sim | Sim | Sim |
+| Relatorio basico | Sim | Sim | Sim |
+| Questionarios com IA | Nao | 50/mes | Ilimitado |
+| Relatorios detalhados | Nao | Sim | Sim |
+| Exportar CSV/PDF | Nao | Sim | Sim |
+| Painel administrativo | Nao | Nao | Sim |
+| White-label | Nao | Nao | Sim |
+| Integracao LMS | Nao | Nao | Sim |
