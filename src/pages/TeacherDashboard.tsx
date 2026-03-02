@@ -291,15 +291,30 @@ export default function TeacherDashboard() {
   };
 
   const loadAdminSubscribers = async () => {
-    const [{ data: roles }, { data: profiles }, { data: manualSubs }] = await Promise.all([
+    const [{ data: roles }, { data: profiles }, { data: manualSubs }, { data: rooms }, { data: participants }] = await Promise.all([
       supabase.from('user_roles').select('user_id, role'),
       supabase.from('profiles').select('id, full_name, email, institution, created_at'),
       supabase.from('manual_subscriptions').select('*'),
+      supabase.from('rooms').select('id, teacher_id'),
+      supabase.from('room_participants').select('user_id, room_id'),
     ]);
+    // Build student→teacher mapping (most recent room's teacher)
+    const studentTeacherMap: Record<string, string> = {};
+    (participants || []).forEach((p: any) => {
+      const room = (rooms || []).find((r: any) => r.id === p.room_id);
+      if (room) studentTeacherMap[p.user_id] = room.teacher_id;
+    });
     const merged = (profiles || []).map((p: any) => {
       const r = (roles || []).find((r: any) => r.user_id === p.id);
       const ms = (manualSubs || []).find((s: any) => s.user_id === p.id);
-      return { ...p, role: r?.role || 'student', manualPlan: ms?.plan || 'free', grantedAt: ms?.granted_at, expiresAt: ms?.expires_at };
+      return {
+        ...p,
+        role: r?.role || 'student',
+        manualPlan: ms?.plan || 'free',
+        grantedAt: ms?.granted_at,
+        expiresAt: ms?.expires_at,
+        teacherId: studentTeacherMap[p.id] || null,
+      };
     });
     setAdminSubscribers(merged);
   };
@@ -1565,120 +1580,224 @@ export default function TeacherDashboard() {
     );
   };
 
-  const renderAdminSubscribers = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-heading font-bold">Usuários e Planos</h2>
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-primary/10">
-                <TableHead>Nome</TableHead>
-                <TableHead>E-mail</TableHead>
-                <TableHead>Instituição</TableHead>
-                <TableHead className="text-center">Cargo</TableHead>
-                <TableHead className="text-center">Plano</TableHead>
-                <TableHead>Cadastro</TableHead>
-                <TableHead className="text-center">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {adminSubscribers.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>
-              ) : adminSubscribers.map((s: any) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.full_name}</TableCell>
-                  <TableCell className="text-sm">{s.email || '—'}</TableCell>
-                  <TableCell className="text-sm">{s.institution || '—'}</TableCell>
-                  <TableCell className="text-center">
-                    <Select
-                      value={s.role}
-                      onValueChange={async (val) => {
-                        await supabase.from('user_roles').update({ role: val } as any).eq('user_id', s.id);
-                        toast.success('Cargo atualizado!');
-                        loadAdminSubscribers();
-                      }}
-                    >
-                      <SelectTrigger className="w-[110px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student">Aluno</SelectItem>
-                        <SelectItem value="teacher">Professor</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant={s.manualPlan === 'institutional' ? 'default' : s.manualPlan === 'pro' ? 'secondary' : 'outline'}>
-                      {s.manualPlan === 'institutional' ? 'Institucional' : s.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm">{new Date(s.created_at).toLocaleDateString('pt-BR')}</TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Select
-                        value={s.manualPlan}
-                        onValueChange={async (val) => {
-                          await supabase.from('manual_subscriptions').upsert({
-                            user_id: s.id, plan: val, granted_by: user!.id,
-                          } as any, { onConflict: 'user_id' });
-                          toast.success('Plano atualizado!');
-                          loadAdminSubscribers();
-                        }}
-                      >
-                        <SelectTrigger className="w-[120px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="free">Gratuito</SelectItem>
-                          <SelectItem value="pro">Pro</SelectItem>
-                          <SelectItem value="institutional">Institucional</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {s.id !== user!.id && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                          onClick={() => setDeleteUserTarget({ id: s.id, name: s.full_name })}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+  const renderAdminSubscribers = () => {
+    const nonStudents = adminSubscribers.filter((s: any) => s.role !== 'student');
+    const students = adminSubscribers.filter((s: any) => s.role === 'student');
 
-      {/* Delete User Confirmation Dialog */}
-      <AlertDialog open={!!deleteUserTarget} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir <strong>{deleteUserTarget?.name}</strong>? Esta ação é irreversível e removerá todas as informações deste usuário do sistema (respostas, participações, salas, questionários, etc).
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteUserLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteUserLoading}
-              onClick={() => deleteUserTarget && deleteFullUser(deleteUserTarget.id)}
+    // Group students by teacher
+    const teacherProfiles = adminSubscribers.filter((s: any) => s.role === 'teacher' || s.role === 'admin');
+    const studentsByTeacher: Record<string, any[]> = {};
+    const unassignedStudents: any[] = [];
+
+    students.forEach((s: any) => {
+      if (s.teacherId) {
+        if (!studentsByTeacher[s.teacherId]) studentsByTeacher[s.teacherId] = [];
+        studentsByTeacher[s.teacherId].push(s);
+      } else {
+        unassignedStudents.push(s);
+      }
+    });
+
+    const renderUserRow = (s: any) => (
+      <TableRow key={s.id}>
+        <TableCell className="font-medium">{s.full_name}</TableCell>
+        <TableCell className="text-sm">{s.email || '—'}</TableCell>
+        <TableCell className="text-sm">{s.institution || '—'}</TableCell>
+        <TableCell className="text-center">
+          <Select
+            value={s.role}
+            onValueChange={async (val) => {
+              await supabase.from('user_roles').update({ role: val } as any).eq('user_id', s.id);
+              toast.success('Cargo atualizado!');
+              loadAdminSubscribers();
+            }}
+          >
+            <SelectTrigger className="w-[110px] h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="student">Aluno</SelectItem>
+              <SelectItem value="teacher">Professor</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
+            </SelectContent>
+          </Select>
+        </TableCell>
+        <TableCell className="text-center">
+          <Badge variant={s.manualPlan === 'institutional' ? 'default' : s.manualPlan === 'pro' ? 'secondary' : 'outline'}>
+            {s.manualPlan === 'institutional' ? 'Institucional' : s.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-sm">{new Date(s.created_at).toLocaleDateString('pt-BR')}</TableCell>
+        <TableCell className="text-center">
+          <div className="flex items-center justify-center gap-1">
+            <Select
+              value={s.manualPlan}
+              onValueChange={async (val) => {
+                await supabase.from('manual_subscriptions').upsert({
+                  user_id: s.id, plan: val, granted_by: user!.id,
+                } as any, { onConflict: 'user_id' });
+                toast.success('Plano atualizado!');
+                loadAdminSubscribers();
+              }}
             >
-              {deleteUserLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Excluir Permanentemente
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Gratuito</SelectItem>
+                <SelectItem value="pro">Pro</SelectItem>
+                <SelectItem value="institutional">Institucional</SelectItem>
+              </SelectContent>
+            </Select>
+            {s.id !== user!.id && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => setDeleteUserTarget({ id: s.id, name: s.full_name })}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+
+    const tableHeader = (
+      <TableHeader>
+        <TableRow className="bg-primary/10">
+          <TableHead>Nome</TableHead>
+          <TableHead>E-mail</TableHead>
+          <TableHead>Instituição</TableHead>
+          <TableHead className="text-center">Cargo</TableHead>
+          <TableHead className="text-center">Plano</TableHead>
+          <TableHead>Cadastro</TableHead>
+          <TableHead className="text-center">Ações</TableHead>
+        </TableRow>
+      </TableHeader>
+    );
+
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-heading font-bold">Usuários e Planos</h2>
+
+        {/* Professores e Admins */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+            <Crown className="w-5 h-5 text-primary" /> Professores e Administradores
+            <Badge variant="secondary" className="ml-1">{nonStudents.length}</Badge>
+          </h3>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                {tableHeader}
+                <TableBody>
+                  {nonStudents.length === 0 ? (
+                    <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">Nenhum professor encontrado.</TableCell></TableRow>
+                  ) : nonStudents.map(renderUserRow)}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Separator />
+
+        {/* Students grouped by teacher */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-primary" /> Alunos por Professor
+            <Badge variant="secondary" className="ml-1">{students.length}</Badge>
+          </h3>
+
+          {teacherProfiles.filter((t: any) => studentsByTeacher[t.id]?.length > 0).map((teacher: any) => (
+            <Collapsible key={teacher.id} defaultOpen>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Users className="w-4 h-4 text-primary" />
+                        {teacher.full_name}
+                        {teacher.institution && <span className="text-muted-foreground font-normal">— {teacher.institution}</span>}
+                      </CardTitle>
+                      <Badge variant="secondary">{studentsByTeacher[teacher.id].length} alunos</Badge>
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="p-0">
+                    <Table>
+                      {tableHeader}
+                      <TableBody>
+                        {studentsByTeacher[teacher.id].map(renderUserRow)}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          ))}
+
+          {unassignedStudents.length > 0 && (
+            <Collapsible defaultOpen>
+              <Card>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="py-3 px-4 cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        Sem professor vinculado
+                      </CardTitle>
+                      <Badge variant="outline">{unassignedStudents.length} alunos</Badge>
+                    </div>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="p-0">
+                    <Table>
+                      {tableHeader}
+                      <TableBody>
+                        {unassignedStudents.map(renderUserRow)}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          )}
+
+          {students.length === 0 && (
+            <Card><CardContent className="py-8 text-center text-muted-foreground">Nenhum aluno encontrado.</CardContent></Card>
+          )}
+        </div>
+
+        {/* Delete User Confirmation Dialog */}
+        <AlertDialog open={!!deleteUserTarget} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir Usuário</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir <strong>{deleteUserTarget?.name}</strong>? Esta ação é irreversível e removerá todas as informações deste usuário do sistema (respostas, participações, salas, questionários, etc).
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteUserLoading}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteUserLoading}
+                onClick={() => deleteUserTarget && deleteFullUser(deleteUserTarget.id)}
+              >
+                {deleteUserLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Excluir Permanentemente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  };
 
   const renderQuizConfig = () => {
     if (!configQuiz) return null;
