@@ -9,6 +9,7 @@ interface SubscriptionState {
   subscribed: boolean;
   plan: PlanKey | null;
   subscriptionEnd: string | null;
+  aiUsedThisMonth: number;
 }
 
 interface AuthContextType {
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     subscribed: false,
     plan: null,
     subscriptionEnd: null,
+    aiUsedThisMonth: 0,
   });
 
   const checkSubscription = useCallback(async () => {
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           subscribed: data.subscribed ?? false,
           plan: data.product_id ? getPlanByProductId(data.product_id) : null,
           subscriptionEnd: data.subscription_end ?? null,
+          aiUsedThisMonth: data.ai_used_this_month ?? 0,
         });
       }
     } catch {
@@ -74,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setRole(null);
         setProfile(null);
-        setSubscription({ subscribed: false, plan: null, subscriptionEnd: null });
+        setSubscription({ subscribed: false, plan: null, subscriptionEnd: null, aiUsedThisMonth: 0 });
       }
       setLoading(false);
     });

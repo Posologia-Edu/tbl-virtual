@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,8 @@ import ClassManagement from '@/components/ClassManagement';
 import QuestionBank from '@/components/QuestionBank';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import AdminApiKeys from '@/components/AdminApiKeys';
-
+import UpgradeDialog from '@/components/UpgradeDialog';
+import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
   name: string;
@@ -79,7 +81,8 @@ type ProfileData = {
 type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
-  | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank';
+  | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank'
+  | 'admin-subscribers';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -93,7 +96,8 @@ const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finish
 const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 export default function TeacherDashboard() {
-  const { user, profile, signOut, isAdmin } = useAuth();
+  const { user, profile, signOut, isAdmin, subscription } = useAuth();
+  const planLimits = usePlanLimits();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -145,6 +149,8 @@ export default function TeacherDashboard() {
 
   // Admin state
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
+  const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
+  const [approvalPlan, setApprovalPlan] = useState<string>('free');
 
   // Question type choice dialog
   const [showTypeChoice, setShowTypeChoice] = useState(false);
@@ -176,6 +182,7 @@ export default function TeacherDashboard() {
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
     if (user && activeView === 'admin-teachers' && isAdmin) loadTeachers();
+    if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
   }, [user, activeView]);
 
   const loadData = async () => {
@@ -248,14 +255,36 @@ export default function TeacherDashboard() {
 
   const approveTeacher = async (id: string) => {
     await supabase.from('profiles').update({ is_approved: true } as any).eq('id', id);
+    // If a plan was selected, grant it via manual_subscriptions
+    if (approvalPlan && approvalPlan !== 'free') {
+      await supabase.from('manual_subscriptions').upsert({
+        user_id: id,
+        plan: approvalPlan,
+        granted_by: user!.id,
+      } as any, { onConflict: 'user_id' });
+    }
     toast.success('Professor aprovado!');
+    setApprovalPlan('free');
     loadTeachers();
-    // Send approval email in background
     supabase.functions.invoke('send-approval-email', { body: { teacherId: id } })
       .then(res => {
         if (res.error) console.error('Erro ao enviar e-mail de aprovação:', res.error);
         else toast.success('E-mail de aprovação enviado!');
       });
+  };
+
+  const loadAdminSubscribers = async () => {
+    const { data: roles } = await supabase.from('user_roles').select('user_id, role');
+    if (!roles) return;
+    const teacherIds = roles.filter((r: any) => r.role === 'teacher' || r.role === 'admin').map((r: any) => r.user_id);
+    if (teacherIds.length === 0) { setAdminSubscribers([]); return; }
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, institution, created_at').in('id', teacherIds);
+    const { data: manualSubs } = await supabase.from('manual_subscriptions').select('*');
+    const merged = (profiles || []).map((p: any) => {
+      const ms = (manualSubs || []).find((s: any) => s.user_id === p.id);
+      return { ...p, manualPlan: ms?.plan || 'free', grantedAt: ms?.granted_at, expiresAt: ms?.expires_at };
+    });
+    setAdminSubscribers(merged);
   };
 
   const blockTeacher = async (id: string, block: boolean) => {
@@ -279,6 +308,16 @@ export default function TeacherDashboard() {
 
   const createRoom = async () => {
     if (!newRoomName.trim()) return;
+    // Check room limit for free plan
+    if (isFinite(planLimits.maxRoomsPerMonth)) {
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const roomsThisMonth = rooms.filter(r => r.created_at >= firstOfMonth).length;
+      if (roomsThisMonth >= planLimits.maxRoomsPerMonth) {
+        planLimits.showUpgradeDialog('Salas ilimitadas');
+        return;
+      }
+    }
     const { data: codeData } = await supabase.rpc('generate_room_code');
     const code = codeData as string;
     const { error } = await supabase.from('rooms').insert({
@@ -476,6 +515,8 @@ export default function TeacherDashboard() {
 
   const generateWithAI = async () => {
     if (!aiFile || !aiQuizTitle.trim()) return;
+    if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
+    if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
     if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
     setAiLoading(true);
     try {
@@ -487,7 +528,10 @@ export default function TeacherDashboard() {
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiFile.name, mimeType: isText ? undefined : mimeType } });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiLoading(false); return; }
+        throw new Error(data.message || data.error);
+      }
 
       const { data: quiz, error: qErr } = await supabase.from('quizzes').insert({ title: aiQuizTitle.trim(), teacher_id: user!.id }).select().single();
       if (qErr || !quiz) throw new Error('Falha ao criar questionário');
@@ -517,12 +561,18 @@ export default function TeacherDashboard() {
       setActiveView('edit-quiz');
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Falha ao gerar questões com IA');
-    } finally { setAiLoading(false); }
+      if (err.message?.includes('PLAN_LIMIT')) {
+        planLimits.showUpgradeDialog('Geração de Questões com IA');
+      } else {
+        toast.error(err.message || 'Falha ao gerar questões com IA');
+      }
+    } finally { setAiLoading(false); planLimits.refreshSubscription(); }
   };
 
   const generateForExistingQuiz = async () => {
     if (!aiImportFile || !selectedQuiz) return;
+    if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
+    if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
     if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
     setAiImportLoading(true);
     try {
@@ -534,7 +584,10 @@ export default function TeacherDashboard() {
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiImportFile.name, mimeType: isText ? undefined : mimeType } });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (data?.error) {
+        if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiImportLoading(false); return; }
+        throw new Error(data.message || data.error);
+      }
 
       if (data.irat_questions?.length) {
         await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
@@ -557,8 +610,12 @@ export default function TeacherDashboard() {
       setAppQuestions(aData || []);
     } catch (err: any) {
       console.error(err);
-      toast.error(err.message || 'Falha ao gerar questões com IA');
-    } finally { setAiImportLoading(false); }
+      if (err.message?.includes('PLAN_LIMIT')) {
+        planLimits.showUpgradeDialog('Geração de Questões com IA');
+      } else {
+        toast.error(err.message || 'Falha ao gerar questões com IA');
+      }
+    } finally { setAiImportLoading(false); planLimits.refreshSubscription(); }
   };
 
   // Chart data
@@ -801,62 +858,51 @@ export default function TeacherDashboard() {
     </div>
   );
 
-  const renderMyPlan = () => (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-heading font-bold">Informações Professor</h2>
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        <Card>
-          <CardHeader className="text-center"><CardTitle>Dados Pessoais</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            <Badge className="bg-success text-success-foreground mx-auto block w-fit mb-3">Situação: Ativo</Badge>
-            <p className="text-sm"><span className="font-semibold">CPF:</span> {profileForm.cpf || '—'}</p>
-            <p className="text-sm"><span className="font-semibold">Apelido:</span> {profileForm.nickname || '—'}</p>
-            <p className="text-sm"><span className="font-semibold text-primary">Nome:</span> {profileForm.full_name}</p>
-            <p className="text-sm"><span className="font-semibold">E-mail:</span> {user?.email}</p>
-            <p className="text-sm"><span className="font-semibold">Instituição:</span> {profileForm.institution || '—'}</p>
-            <p className="text-sm"><span className="font-semibold">Cidade Instituição:</span> {profileForm.institution_city || '—'}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-t-4 border-t-primary">
-          <CardHeader className="text-center"><CardTitle className="text-primary">Meu Plano</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Plano Atual:</span> Grátis</span></div>
-            <div className="flex items-center gap-2"><span className="text-muted-foreground text-base">$</span><span><span className="font-semibold">Valor Disponível:</span> R$0,00</span></div>
-            <div className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Tempo disponível:</span> Ilimitado</span></div>
-            <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Início do plano:</span> {new Date(user?.created_at || '').toLocaleString('pt-BR')}</span></div>
-            <div className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Válido até:</span> Tempo Ilimitado</span></div>
-          </CardContent>
-        </Card>
+  const renderMyPlan = () => {
+    const currentPlanKey = subscription.plan || 'free';
+    const plan = STRIPE_PLANS[currentPlanKey];
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-heading font-bold">Informações Professor</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          <Card>
+            <CardHeader className="text-center"><CardTitle>Dados Pessoais</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <Badge className="bg-success text-success-foreground mx-auto block w-fit mb-3">Situação: Ativo</Badge>
+              <p className="text-sm"><span className="font-semibold">CPF:</span> {profileForm.cpf || '—'}</p>
+              <p className="text-sm"><span className="font-semibold">Apelido:</span> {profileForm.nickname || '—'}</p>
+              <p className="text-sm"><span className="font-semibold text-primary">Nome:</span> {profileForm.full_name}</p>
+              <p className="text-sm"><span className="font-semibold">E-mail:</span> {user?.email}</p>
+              <p className="text-sm"><span className="font-semibold">Instituição:</span> {profileForm.institution || '—'}</p>
+              <p className="text-sm"><span className="font-semibold">Cidade Instituição:</span> {profileForm.institution_city || '—'}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-t-4 border-t-primary">
+            <CardHeader className="text-center"><CardTitle className="text-primary">Meu Plano</CardTitle></CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Plano Atual:</span> {plan.name}</span></div>
+              <div className="flex items-center gap-2"><span className="text-muted-foreground text-base">$</span><span><span className="font-semibold">Valor:</span> R${plan.price.toFixed(2).replace('.', ',')}/mês</span></div>
+              {plan.limits.ai_questions && (
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-muted-foreground" />
+                  <span><span className="font-semibold">IA:</span> {isFinite(plan.limits.ai_questions_per_month) ? `${subscription.aiUsedThisMonth}/${plan.limits.ai_questions_per_month} usados este mês` : 'Ilimitado'}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2"><FileText className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Início do plano:</span> {new Date(user?.created_at || '').toLocaleString('pt-BR')}</span></div>
+              {subscription.subscriptionEnd && (
+                <div className="flex items-center gap-2"><Settings2 className="w-4 h-4 text-muted-foreground" /><span><span className="font-semibold">Válido até:</span> {new Date(subscription.subscriptionEnd).toLocaleDateString('pt-BR')}</span></div>
+              )}
+              {!subscription.subscribed && (
+                <Button variant="outline" className="w-full mt-2 gap-1" onClick={() => navigate('/pricing')}>
+                  <Crown className="w-4 h-4" /> Fazer Upgrade
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      <Card>
-        <CardHeader className="text-center"><CardTitle>Histórico de Pagamentos</CardTitle></CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Plano Contratado</TableHead>
-                <TableHead>Início</TableHead>
-                <TableHead>Vigência até</TableHead>
-                <TableHead>Dias do plano</TableHead>
-                <TableHead>Valor do Plano</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>Grátis</TableCell>
-                <TableCell>{new Date(user?.created_at || '').toLocaleString('pt-BR')}</TableCell>
-                <TableCell>Tempo Ilimitado</TableCell>
-                <TableCell>Ilimitado</TableCell>
-                <TableCell>R$0,00</TableCell>
-                <TableCell>Gratuito</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
-  );
+    );
+  };
 
   const renderChangePassword = () => (
     <div className="max-w-lg space-y-6">
@@ -962,8 +1008,15 @@ export default function TeacherDashboard() {
         <Button variant="link" className="text-primary px-0" onClick={() => setActiveView('create-quiz')}>
           <Plus className="w-4 h-4 mr-1" /> Novo Questionário
         </Button>
-        <Button variant="link" className="px-0" onClick={() => { setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true); }}>
+        <Button variant="link" className="px-0" onClick={() => {
+          if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
+          if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
+          setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true);
+        }}>
           <Sparkles className="w-4 h-4 mr-1" /> Criar com IA
+          {planLimits.canUseAI && isFinite(planLimits.aiLimit) && (
+            <Badge variant="secondary" className="ml-1 text-xs">{planLimits.aiUsed}/{planLimits.aiLimit}</Badge>
+          )}
         </Button>
       </div>
       <div className="flex gap-2 max-w-lg">
@@ -1278,9 +1331,21 @@ export default function TeacherDashboard() {
                     {t.id !== user!.id && (
                       <div className="flex items-center justify-center gap-1">
                         {!t.is_approved && !t.is_blocked && (
-                          <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50" onClick={() => approveTeacher(t.id)}>
-                            Aprovar
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Select value={approvalPlan} onValueChange={setApprovalPlan}>
+                              <SelectTrigger className="w-[110px] h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="free">Gratuito</SelectItem>
+                                <SelectItem value="pro">Pro</SelectItem>
+                                <SelectItem value="institutional">Institucional</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button size="sm" variant="outline" className="text-green-600 border-green-300 hover:bg-green-50" onClick={() => approveTeacher(t.id)}>
+                              Aprovar
+                            </Button>
+                          </div>
                         )}
                         {!t.is_blocked ? (
                           <Button size="sm" variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => blockTeacher(t.id, true)}>
@@ -1296,6 +1361,66 @@ export default function TeacherDashboard() {
                         </Button>
                       </div>
                     )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderAdminSubscribers = () => (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-heading font-bold">Usuários e Planos</h2>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-primary/10">
+                <TableHead>Nome</TableHead>
+                <TableHead>E-mail</TableHead>
+                <TableHead>Instituição</TableHead>
+                <TableHead className="text-center">Plano</TableHead>
+                <TableHead>Cadastro</TableHead>
+                <TableHead className="text-center">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {adminSubscribers.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum usuário encontrado.</TableCell></TableRow>
+              ) : adminSubscribers.map((s: any) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium">{s.full_name}</TableCell>
+                  <TableCell className="text-sm">{s.email || '—'}</TableCell>
+                  <TableCell className="text-sm">{s.institution || '—'}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge variant={s.manualPlan === 'institutional' ? 'default' : s.manualPlan === 'pro' ? 'secondary' : 'outline'}>
+                      {s.manualPlan === 'institutional' ? 'Institucional' : s.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm">{new Date(s.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                  <TableCell className="text-center">
+                    <Select
+                      value={s.manualPlan}
+                      onValueChange={async (val) => {
+                        await supabase.from('manual_subscriptions').upsert({
+                          user_id: s.id, plan: val, granted_by: user!.id,
+                        } as any, { onConflict: 'user_id' });
+                        toast.success('Plano atualizado!');
+                        loadAdminSubscribers();
+                      }}
+                    >
+                      <SelectTrigger className="w-[120px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="free">Gratuito</SelectItem>
+                        <SelectItem value="pro">Pro</SelectItem>
+                        <SelectItem value="institutional">Institucional</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1488,6 +1613,11 @@ export default function TeacherDashboard() {
                          <Key className="w-4 h-4" /><span>API Keys IA</span>
                        </SidebarMenuButton>
                      </SidebarMenuItem>
+                     <SidebarMenuItem>
+                       <SidebarMenuButton onClick={() => setActiveView('admin-subscribers')} isActive={activeView === 'admin-subscribers'} className="cursor-pointer">
+                         <CreditCard className="w-4 h-4" /><span>Usuários e Planos</span>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
                    </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -1535,11 +1665,20 @@ export default function TeacherDashboard() {
                 {activeView === 'edit-quiz' && renderEditQuiz()}
                 {activeView === 'reports' && renderReports()}
                 {activeView === 'quiz-config' && renderQuizConfig()}
-                {activeView === 'analytics' && user && <AnalyticsDashboard userId={user.id} />}
+                {activeView === 'analytics' && user && (
+                  planLimits.canViewDetailedReports
+                    ? <AnalyticsDashboard userId={user.id} canExport={planLimits.canExportCSV} onUpgradeNeeded={planLimits.showUpgradeDialog} />
+                    : <div className="text-center py-12 space-y-4">
+                        <TrendingUp className="w-12 h-12 mx-auto text-muted-foreground opacity-40" />
+                        <p className="text-muted-foreground">Analytics detalhados estão disponíveis nos planos Pro e Institucional.</p>
+                        <Button onClick={() => planLimits.showUpgradeDialog('Relatórios Detalhados')}><Crown className="w-4 h-4 mr-1" /> Fazer Upgrade</Button>
+                      </div>
+                )}
                 {activeView === 'classes' && user && <ClassManagement userId={user.id} />}
                 {activeView === 'question-bank' && user && <QuestionBank userId={user.id} />}
                 {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
                 {activeView === 'admin-api-keys' && isAdmin && <AdminApiKeys />}
+                {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
               </>
             )}
           </main>
@@ -1642,6 +1781,14 @@ export default function TeacherDashboard() {
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Upgrade Dialog */}
+    <UpgradeDialog
+      open={planLimits.upgradeOpen}
+      onOpenChange={planLimits.closeUpgradeDialog}
+      feature={planLimits.upgradeFeature}
+      currentPlan={planLimits.currentPlan as any}
+    />
     </>
   );
 }
