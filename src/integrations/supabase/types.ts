@@ -126,6 +126,7 @@ export type Database = {
       application_questions: {
         Row: {
           correct_answer: string | null
+          deleted_at: string | null
           id: string
           option_a: string | null
           option_b: string | null
@@ -138,6 +139,7 @@ export type Database = {
         }
         Insert: {
           correct_answer?: string | null
+          deleted_at?: string | null
           id?: string
           option_a?: string | null
           option_b?: string | null
@@ -150,6 +152,7 @@ export type Database = {
         }
         Update: {
           correct_answer?: string | null
+          deleted_at?: string | null
           id?: string
           option_a?: string | null
           option_b?: string | null
@@ -435,6 +438,7 @@ export type Database = {
       questions: {
         Row: {
           correct_option: string
+          deleted_at: string | null
           id: string
           option_a: string
           option_b: string
@@ -446,6 +450,7 @@ export type Database = {
         }
         Insert: {
           correct_option: string
+          deleted_at?: string | null
           id?: string
           option_a: string
           option_b: string
@@ -457,6 +462,7 @@ export type Database = {
         }
         Update: {
           correct_option?: string
+          deleted_at?: string | null
           id?: string
           option_a?: string
           option_b?: string
@@ -479,6 +485,7 @@ export type Database = {
       quizzes: {
         Row: {
           created_at: string
+          deleted_at: string | null
           difficulty_level: string | null
           discipline: string | null
           id: string
@@ -489,6 +496,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           difficulty_level?: string | null
           discipline?: string | null
           id?: string
@@ -499,6 +507,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           difficulty_level?: string | null
           discipline?: string | null
           id?: string
@@ -557,6 +566,7 @@ export type Database = {
           code: string
           created_at: string
           current_stage: Database["public"]["Enums"]["room_stage"]
+          deleted_at: string | null
           id: string
           individual_pct: number | null
           irat_end_time: string | null
@@ -578,6 +588,7 @@ export type Database = {
           code: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
+          deleted_at?: string | null
           id?: string
           individual_pct?: number | null
           irat_end_time?: string | null
@@ -599,6 +610,7 @@ export type Database = {
           code?: string
           created_at?: string
           current_stage?: Database["public"]["Enums"]["room_stage"]
+          deleted_at?: string | null
           id?: string
           individual_pct?: number | null
           irat_end_time?: string | null
