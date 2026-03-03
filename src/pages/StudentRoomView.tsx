@@ -317,7 +317,17 @@ export default function StudentRoomView() {
   }, [membership, roomId]);
 
   useEffect(() => { loadRoom(); loadMembership(); loadParticipants(); }, [loadRoom, loadMembership, loadParticipants]);
-  useEffect(() => { if (room?.quiz_id && room?.current_stage !== 'waiting') loadQuestions(room.quiz_id); }, [room?.quiz_id, room?.current_stage, loadQuestions]);
+  
+  // Only load questions when stage moves away from 'waiting' (teacher clicked "Iniciar TBL")
+  useEffect(() => { 
+    if (room?.quiz_id && room?.current_stage !== 'waiting') {
+      loadQuestions(room.quiz_id); 
+    } else {
+      // Clear questions when in waiting stage so student doesn't see them
+      setQuestions([]);
+    }
+  }, [room?.quiz_id, room?.current_stage, loadQuestions]);
+  
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
     if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); loadAppeals(); } }
@@ -636,8 +646,20 @@ export default function StudentRoomView() {
   const renderWaiting = () => (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
       <TBLVirtualLogo />
-      <p className="text-lg text-muted-foreground">Aguarde a liberação do professor para início da Aplicação.</p>
+      <div className="space-y-2">
+        <p className="text-lg font-heading font-semibold text-foreground">Aguardando o professor iniciar a atividade</p>
+        <p className="text-sm text-muted-foreground">
+          Você está conectado à sala <span className="text-primary font-bold">{room.code}</span>. 
+          As questões serão liberadas quando o professor iniciar o TBL.
+        </p>
+      </div>
       <WaitingAnimation />
+      <Card className="w-full max-w-sm">
+        <CardContent className="py-4 text-center space-y-1">
+          <p className="text-sm text-muted-foreground">Estudante conectado:</p>
+          <p className="font-semibold text-primary">{profile?.full_name || 'Aluno'}</p>
+        </CardContent>
+      </Card>
     </div>
   );
 

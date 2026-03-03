@@ -75,9 +75,16 @@ export default function TeacherRoomManage() {
       .select('id, name, trat_started_at, team_members(user_id, profiles:user_id(full_name))')
       .eq('room_id', roomId!)
       .order('name');
-    // Filter out empty teams (teams with no members)
     const nonEmptyTeams = (teamsData || []).filter((t: any) => (t.team_members || []).length > 0);
     setTeams(nonEmptyTeams);
+
+    // Load appeals BEFORE using them in scoring
+    const { data: appealsData } = await supabase
+      .from('appeals')
+      .select('*, teams(name)')
+      .eq('room_id', roomId!)
+      .order('submitted_at', { ascending: false });
+    setAppeals(appealsData || []);
 
     if (roomData?.quiz_id) {
       const { data: qs } = await supabase.from('questions').select('*').eq('quiz_id', roomData.quiz_id).order('sort_order');
@@ -97,7 +104,6 @@ export default function TeacherRoomManage() {
       const scores = nonEmptyTeams.map((t: any) => {
         const teamAttempts = (tratData || []).filter((a: any) => a.team_id === t.id && a.is_correct);
         let score = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
-        // Add bonus for accepted appeals
         const accepted = (appealsData || []).filter((ap: any) => ap.team_id === t.id && ap.status === 'accepted');
         accepted.forEach((ap: any) => {
           const existing = teamAttempts.find((a: any) => a.question_id === ap.question_id);
@@ -148,14 +154,6 @@ export default function TeacherRoomManage() {
 
     const { data: quizzesData } = await supabase.from('quizzes').select('*, questions(id)').eq('teacher_id', user!.id).order('created_at', { ascending: false });
     setQuizzes(quizzesData || []);
-
-    // Load appeals
-    const { data: appealsData } = await supabase
-      .from('appeals')
-      .select('*, teams(name)')
-      .eq('room_id', roomId!)
-      .order('submitted_at', { ascending: false });
-    setAppeals(appealsData || []);
   }, [roomId, user]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
