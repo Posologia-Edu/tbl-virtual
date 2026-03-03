@@ -345,18 +345,39 @@ export default function StudentRoomView() {
     }
   }, [room?.current_stage]);
   
+  // Stage-driven data loading (avoid membership-triggered loops)
   useEffect(() => {
-    if (room?.current_stage === 'irat_open') loadIratResponses();
-    if (room?.current_stage === 'trat_open') { loadMembership(); loadParticipants(); if (membership) { loadTratAttempts(); loadMemberIratResponses(); loadAppeals(); } }
-    if (room?.current_stage === 'application_open') { loadMembership(); loadAppData(); }
-  }, [room?.current_stage, membership]);
+    if (!room?.current_stage) return;
 
-  // Reload app data when professor advances question index or releases alternatives
+    if (room.current_stage === 'irat_open') {
+      loadIratResponses();
+    }
+
+    if (room.current_stage === 'trat_open') {
+      loadMembership();
+      loadParticipants();
+    }
+
+    if (room.current_stage === 'application_open') {
+      loadMembership();
+    }
+  }, [room?.current_stage, loadIratResponses, loadMembership, loadParticipants]);
+
+  // tRAT data depends on membership
+  useEffect(() => {
+    if (room?.current_stage === 'trat_open' && membership) {
+      loadTratAttempts();
+      loadMemberIratResponses();
+      loadAppeals();
+    }
+  }, [room?.current_stage, membership?.team_id, loadTratAttempts, loadMemberIratResponses, loadAppeals]);
+
+  // Application data: reload on professor controls and membership availability
   useEffect(() => {
     if (room?.current_stage === 'application_open' && membership) {
       loadAppData();
     }
-  }, [room?.current_app_question_index, room?.app_alternatives_released, room?.current_stage, membership, loadAppData]);
+  }, [room?.current_stage, room?.current_app_question_index, room?.app_alternatives_released, membership?.team_id, loadAppData]);
 
   // Determine tRAT step based on state
   useEffect(() => {
@@ -469,7 +490,12 @@ export default function StudentRoomView() {
 
   // Realtime + polling fallback for room stage changes
   const loadRoomRef = useRef(loadRoom);
+  const roomRef = useRef<Room | null>(null);
   loadRoomRef.current = loadRoom;
+
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -479,13 +505,23 @@ export default function StudentRoomView() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload) => {
           const newRoom = payload.new as any;
-          const oldStage = room?.current_stage;
+          const oldStage = roomRef.current?.current_stage;
+
           setRoom(newRoom);
+          roomRef.current = newRoom;
+
           if (!newRoom.is_active) {
             toast.error('A aplicação foi cancelada pelo professor.');
             navigate('/');
             return;
           }
+
+          // Keep application phase synced immediately after teacher controls
+          if (newRoom.current_stage === 'application_open') {
+            loadMembership();
+            loadAppData();
+          }
+
           // Only reset question indices on stage transitions
           if (oldStage !== newRoom.current_stage) {
             setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0);
@@ -499,6 +535,8 @@ export default function StudentRoomView() {
         () => { loadMembership(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` },
         () => { loadAppData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` },
+        () => { loadAppData(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` },
         () => { loadParticipants(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` },
@@ -507,10 +545,14 @@ export default function StudentRoomView() {
         console.log('[StudentRoom] Realtime status:', status);
       });
 
-    // Polling fallback: check room state to catch missed realtime events
-    // Use 2s during application phase for faster sync, 3s otherwise
-    const pollInterval = setInterval(() => {
-      loadRoomRef.current();
+    // Polling fallback: keep room + application data synced even if realtime misses events
+    const pollInterval = setInterval(async () => {
+      await loadRoomRef.current();
+      const latestRoom = roomRef.current;
+      if (latestRoom?.current_stage === 'application_open') {
+        await loadMembership();
+        await loadAppData();
+      }
     }, 2000);
 
     return () => {
