@@ -1,64 +1,80 @@
 
 
-## Diagnóstico: Por que o e-mail de convite não chega
+## Plano de Implementação
 
-### Causa raiz encontrada
+Este plano cobre 5 problemas/funcionalidades distintas:
 
-O usuário `sergiofernandesaraujo@hotmail.com` **já existia** no banco de dados quando o convite foi enviado (provavelmente de um cadastro anterior). 
+### 1. tRAT começa pela questão 10 em vez da questão 1
 
-No código da Edge Function `send-invite-teacher` (linha 76-82), quando o perfil já existe, a função **apenas aprova o perfil e vincula à instituição, mas NÃO envia nenhum e-mail**. O envio de e-mail só acontece no bloco `else` (linhas 83-171), que é executado apenas para **usuários novos**.
+**Causa:** Na `StudentRoomView.tsx`, o Realtime listener (linha 464) faz `setCurrentQ(0)` e `setAppCurrentQ(0)` ao receber uma mudança de stage. Porém, as questões são carregadas via `sort_order` e o `currentQ` pode não ser resetado corretamente ao iniciar o tRAT porque o `renderTrat()` verifica se `hasStarted` e pula para `renderTratAnswering()` que usa `currentQ`, que pode estar apontando para o último índice do iRAT.
 
-Os logs confirmam isso:
-```
-[INVITE] User already exists: 4ac286ec-..., linking to institution
-```
-
-Isso também afeta o botão "Reenviar convite", que chama a mesma função e cai no mesmo branch sem envio.
-
-**Problema secundário**: a resposta do `fetch` para o Resend não é verificada, então erros silenciosos de envio passam despercebidos.
+**Correção:** Garantir que `setCurrentQ(0)` é chamado explicitamente quando `current_stage` muda para `trat_open` ou `application_open`. Adicionar um `useEffect` dedicado que reseta `currentQ` sempre que `room.current_stage` muda.
 
 ---
 
-## Plano de correção
+### 2. Fase de Aplicação de Conceitos: Alunos ficam com animação e não veem questões
 
-### 1. Reestruturar a Edge Function `send-invite-teacher`
+**Causa:** O `renderApplication()` na `StudentRoomView.tsx` carrega `appQuestions` via `loadAppData()`, mas esse load depende de `membership` existir. Se o load ocorre antes da membership estar pronta, as questões ficam vazias. Além disso, o fluxo atual permite que o aluno navegue livremente entre as questões, mas o novo requisito é que o professor controle qual questão é exibida.
 
-Mover a lógica de envio de e-mail para **fora** do bloco condicional `if/else`, para que seja executada tanto para usuários novos quanto existentes:
-
-- Para **usuários existentes**: gerar um link de recuperação e enviar o e-mail de convite (mesmo template)
-- Para **usuários novos**: manter o fluxo atual (criar usuário + gerar link + enviar e-mail)
-- Adicionar **verificação da resposta** do Resend (`res.ok`, `res.status`) e logar erros detalhados
-- Adicionar log do corpo da resposta do Resend para diagnóstico
-
-### Estrutura proposta:
-
-```text
-1. Autenticar chamador (admin ou institucional)
-2. Verificar se usuário já existe
-   ├─ SIM: aprovar perfil, obter userId
-   └─ NÃO: criar usuário, inserir perfil e role, obter userId
-3. Gerar link de recuperação (SEMPRE)
-4. Enviar e-mail via Resend (SEMPRE)
-5. Verificar resposta do Resend e logar resultado
-6. Gravar manual_subscriptions
-7. Retornar sucesso
-```
-
-### 2. Validar domínio Resend
-
-Verificar se o domínio `tbl.posologia.app` está efetivamente verificado no Resend. Se não estiver, o envio falhará silenciosamente. A correção de logs acima ajudará a diagnosticar isso.
+**Correção:** Refatorar completamente a fase de aplicação para ser controlada pelo professor:
+- Adicionar `current_app_question_index` e `app_alternatives_released` na tabela `rooms` (migration)
+- O professor avança questão por questão e libera alternativas via botões no painel
+- Os alunos só veem a questão atual e as alternativas ficam desabilitadas até o professor liberar
 
 ---
 
-### Detalhes técnicos
+### 3. Painel do professor na fase de aplicação: controle questão a questão
 
-**Arquivo alterado**: `supabase/functions/send-invite-teacher/index.ts`
+**Novo fluxo no `TeacherRoomManage.tsx` (`renderAppMonitoring`):**
+- Exibir apenas a questão atual (baseada em `current_app_question_index`)
+- Botão "Liberar Alternativas" que seta `app_alternatives_released = true` na room
+- Quando o primeiro grupo responde, iniciar janela de 1 segundo
+- Após 1s, alternativas ficam desabilitadas novamente e `app_alternatives_released = false`
+- Botão "Próxima Questão" incrementa `current_app_question_index` e reseta `app_alternatives_released`
+- Exibir respostas dos grupos em tempo real (V/F com cores verde/vermelho)
+- Quando todas as questões terminarem, exibir botão "Liberar Relatórios"
 
-Mudanças principais:
-- Extrair o bloco de geração de link + envio de e-mail para depois do `if/else` de existência do usuário
-- Sempre gerar `recoveryUrl` via `supabase.auth.admin.generateLink({ type: "recovery" })`
-- Capturar e logar `await res.json()` da resposta do Resend
-- Adicionar `if (!res.ok)` com log de erro detalhado
+---
 
-Nenhuma alteração no frontend necessária -- o `resendInvite` já chama a mesma função, que passará a funcionar para ambos os casos.
+### 4. Captura simultânea de respostas (janela de 1 segundo)
+
+**Lógica no `StudentRoomView.tsx`:**
+- Alternativas desabilitadas por padrão
+- Quando `app_alternatives_released = true` (via Realtime), habilitar V/F
+- Ao submeter, a resposta é enviada normalmente
+- O professor vê em tempo real quem respondeu
+- Após 1s do primeiro grupo, o professor seta `app_alternatives_released = false` (pode ser automático via edge function ou pelo frontend do professor ao detectar a primeira resposta)
+
+**Implementação simplificada:** O professor libera as alternativas, os grupos respondem, e a lógica de janela de 1s será gerenciada no frontend do professor: ao detectar a primeira `application_response` para a questão atual, iniciar um timer de 1s e depois setar `app_alternatives_released = false` automaticamente.
+
+---
+
+### 5. Botão "Liberar Relatórios" e envio de email ao final
+
+**No `TeacherRoomManage.tsx`:**
+- Quando todas as questões de aplicação terminarem, exibir botão "Liberar Relatórios"
+- Ao clicar, avançar para `finished` e acionar o envio de emails via `send-report-email`
+- O relatório já existe e funciona; apenas ajustar o trigger para que ocorra no momento correto
+
+---
+
+### Migration SQL necessária
+
+```sql
+ALTER TABLE public.rooms 
+  ADD COLUMN IF NOT EXISTS current_app_question_index integer DEFAULT 0;
+ALTER TABLE public.rooms 
+  ADD COLUMN IF NOT EXISTS app_alternatives_released boolean DEFAULT false;
+```
+
+---
+
+### Resumo de Arquivos Modificados
+
+| Arquivo | Alterações |
+|---------|-----------|
+| `TeacherRoomManage.tsx` | Refatorar `renderAppMonitoring` com controle questão-a-questão, botão liberar alternativas, janela 1s, botão liberar relatórios |
+| `StudentRoomView.tsx` | Reset `currentQ` na troca de stage; refatorar `renderApplication` para seguir questão controlada pelo professor com alternativas desabilitáveis |
+| Migration SQL | Adicionar `current_app_question_index` e `app_alternatives_released` à tabela `rooms` |
+| `types.ts` | Atualizado automaticamente pela migration |
 
