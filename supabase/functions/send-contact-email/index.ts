@@ -46,12 +46,23 @@ serve(async (req) => {
     const adminIds = adminRoles.map((r: any) => r.user_id);
     const { data: adminProfiles } = await supabase
       .from("profiles")
-      .select("email")
+      .select("id, email")
       .in("id", adminIds);
 
-    const adminEmails = (adminProfiles || [])
-      .map((p: any) => p.email)
-      .filter((e: string | null) => !!e);
+    // Collect emails from profiles, fallback to auth.users for missing ones
+    const adminEmails: string[] = [];
+    for (const adminId of adminIds) {
+      const profile = (adminProfiles || []).find((p: any) => p.id === adminId);
+      if (profile?.email) {
+        adminEmails.push(profile.email);
+      } else {
+        // Fallback: get email from auth.users
+        const { data: authUser } = await supabase.auth.admin.getUserById(adminId);
+        if (authUser?.user?.email) {
+          adminEmails.push(authUser.user.email);
+        }
+      }
+    }
 
     if (adminEmails.length === 0) {
       throw new Error("No admin email addresses found");
