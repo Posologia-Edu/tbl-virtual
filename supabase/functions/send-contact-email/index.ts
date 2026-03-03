@@ -33,40 +33,7 @@ serve(async (req) => {
       throw new Error("subject and message are required");
     }
 
-    // Find admin emails
-    const { data: adminRoles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "admin");
-
-    if (!adminRoles || adminRoles.length === 0) {
-      throw new Error("No admin users found");
-    }
-
-    const adminIds = adminRoles.map((r: any) => r.user_id);
-    const { data: adminProfiles } = await supabase
-      .from("profiles")
-      .select("id, email")
-      .in("id", adminIds);
-
-    // Collect emails from profiles, fallback to auth.users for missing ones
-    const adminEmails: string[] = [];
-    for (const adminId of adminIds) {
-      const profile = (adminProfiles || []).find((p: any) => p.id === adminId);
-      if (profile?.email) {
-        adminEmails.push(profile.email);
-      } else {
-        // Fallback: get email from auth.users
-        const { data: authUser } = await supabase.auth.admin.getUserById(adminId);
-        if (authUser?.user?.email) {
-          adminEmails.push(authUser.user.email);
-        }
-      }
-    }
-
-    if (adminEmails.length === 0) {
-      throw new Error("No admin email addresses found");
-    }
+    const adminEmails = ["srfernandesaraujo@gmail.com"];
 
     console.log(`[CONTACT] From: ${senderEmail}, To: ${adminEmails.join(", ")}, Subject: ${subject}`);
 
