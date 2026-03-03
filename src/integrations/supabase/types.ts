@@ -559,12 +559,14 @@ export type Database = {
       }
       rooms: {
         Row: {
+          app_alternatives_released: boolean | null
           app_end_time: string | null
           application_pct: number | null
           cancelled_at: string | null
           class_id: string | null
           code: string
           created_at: string
+          current_app_question_index: number | null
           current_stage: Database["public"]["Enums"]["room_stage"]
           deleted_at: string | null
           id: string
@@ -581,12 +583,14 @@ export type Database = {
           trat_end_time: string | null
         }
         Insert: {
+          app_alternatives_released?: boolean | null
           app_end_time?: string | null
           application_pct?: number | null
           cancelled_at?: string | null
           class_id?: string | null
           code: string
           created_at?: string
+          current_app_question_index?: number | null
           current_stage?: Database["public"]["Enums"]["room_stage"]
           deleted_at?: string | null
           id?: string
@@ -603,12 +607,14 @@ export type Database = {
           trat_end_time?: string | null
         }
         Update: {
+          app_alternatives_released?: boolean | null
           app_end_time?: string | null
           application_pct?: number | null
           cancelled_at?: string | null
           class_id?: string | null
           code?: string
           created_at?: string
+          current_app_question_index?: number | null
           current_stage?: Database["public"]["Enums"]["room_stage"]
           deleted_at?: string | null
           id?: string

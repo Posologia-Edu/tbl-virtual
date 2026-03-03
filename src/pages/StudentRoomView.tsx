@@ -41,6 +41,8 @@ type Room = {
   app_end_time: string | null;
   show_individual_in_team?: boolean;
   is_active: boolean;
+  current_app_question_index?: number;
+  app_alternatives_released?: boolean;
 };
 
 type TeamMember = {
@@ -327,6 +329,21 @@ export default function StudentRoomView() {
       setQuestions([]);
     }
   }, [room?.quiz_id, room?.current_stage, loadQuestions]);
+
+  // Reset currentQ when stage changes to trat_open or application_open
+  const prevStageRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!room?.current_stage) return;
+    if (prevStageRef.current !== room.current_stage) {
+      if (room.current_stage === 'trat_open' || room.current_stage === 'application_open') {
+        setCurrentQ(0);
+        setAppCurrentQ(0);
+        setTratFeedback(null);
+        setTratSelectedOption(null);
+      }
+      prevStageRef.current = room.current_stage;
+    }
+  }, [room?.current_stage]);
   
   useEffect(() => {
     if (room?.current_stage === 'irat_open') loadIratResponses();
@@ -1292,7 +1309,7 @@ export default function StudentRoomView() {
     );
   };
 
-  // ===== RENDER: APPLICATION (V/F) =====
+  // ===== RENDER: APPLICATION (V/F) - Professor-controlled =====
   const renderApplication = () => {
     if (!membership) {
       return (
@@ -1335,25 +1352,23 @@ export default function StudentRoomView() {
       );
     }
 
-    // Check if all app questions answered
-    const allAppDone = appQuestions.every(q => appResponses[q.id]);
-
-    if (allAppDone) {
+    // Use professor-controlled question index from room
+    const currentAppIdx = room?.current_app_question_index ?? 0;
+    const alternativesReleased = room?.app_alternatives_released ?? false;
+    const q = appQuestions[currentAppIdx];
+    if (!q) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
           <TBLVirtualLogo />
-          <p className="text-lg text-primary font-semibold">Aplicação de Conceitos concluída com sucesso!</p>
-          <p className="text-muted-foreground">
-            Aguarde o professor finalizar a aplicação, permanecendo na tela.
-          </p>
+          <p className="text-lg text-primary font-semibold">Aplicação de Conceitos concluída!</p>
+          <p className="text-muted-foreground">Aguarde o professor liberar os relatórios.</p>
           <WaitingAnimation />
         </div>
       );
     }
 
-    const q = appQuestions[appCurrentQ];
-    if (!q) return null;
     const currentResponse = appResponses[q.id];
+    const alreadyAnswered = !!currentResponse;
 
     return (
       <div className="space-y-4">
@@ -1368,45 +1383,56 @@ export default function StudentRoomView() {
           <p className="text-sm text-muted-foreground">Equipe: {membership?.teams.name}</p>
         </div>
 
-        {appTimeLeft !== null && (
-          <Card className={appTimeLeft <= 60 ? 'border-destructive' : ''}>
-            <CardContent className="py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className={`w-4 h-4 ${appTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
-                <span className="text-sm">Tempo restante</span>
-              </div>
-              <span className={`font-mono text-xl font-bold ${appTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(appTimeLeft)}</span>
-            </CardContent>
-          </Card>
-        )}
         <Card className="overflow-hidden">
           <div className="bg-muted py-3 text-center border-b">
-            <p className="font-heading font-semibold">Questão Nº {appCurrentQ + 1}</p>
+            <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
           </div>
           <CardContent className="pt-6 space-y-5">
             <p className="text-base leading-relaxed">{q.question_text}</p>
-            <div className="grid grid-cols-2 gap-4">
-              {(['A', 'B'] as const).map(opt => {
-                const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
-                const isSelected = currentResponse === opt;
-                return (
-                  <button key={opt} onClick={() => submitApp(q.id, opt)}
-                    className={`p-6 rounded-xl border-2 text-center text-xl font-bold transition-all ${
-                      isSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:border-primary/50 hover:bg-primary/5'
-                    }`}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+            
+            {alreadyAnswered ? (
+              <div className="text-center space-y-3">
+                <CheckCircle2 className="w-10 h-10 mx-auto text-success" />
+                <p className="font-medium text-success">Resposta enviada!</p>
+                <p className="text-sm text-muted-foreground">Aguarde o professor avançar para a próxima questão.</p>
+              </div>
+            ) : !alternativesReleased ? (
+              <div className="text-center space-y-3 py-4">
+                <Clock className="w-10 h-10 mx-auto text-muted-foreground animate-pulse" />
+                <p className="text-sm text-muted-foreground font-medium">Alternativas bloqueadas</p>
+                <p className="text-xs text-muted-foreground">Aguarde o professor liberar as alternativas para responder.</p>
+                <div className="grid grid-cols-2 gap-4 opacity-50">
+                  {(['A', 'B'] as const).map(opt => {
+                    const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
+                    return (
+                      <div key={opt} className="p-6 rounded-xl border-2 border-border text-center text-xl font-bold cursor-not-allowed">
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {(['A', 'B'] as const).map(opt => {
+                  const label = opt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
+                  return (
+                    <button key={opt} onClick={() => submitApp(q.id, opt)}
+                      className="p-6 rounded-xl border-2 text-center text-xl font-bold transition-all border-primary bg-primary/5 hover:bg-primary/15 animate-pulse">
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         <div className="flex justify-center gap-1.5 pt-2">
           {appQuestions.map((_, i) => (
-            <button key={i} onClick={() => setAppCurrentQ(i)}
+            <div key={i}
               className={`w-2.5 h-2.5 rounded-full transition-all ${
-                i === appCurrentQ ? 'bg-primary scale-125' : appResponses[appQuestions[i]?.id] ? 'bg-success' : 'bg-border'
+                i === currentAppIdx ? 'bg-primary scale-125' : i < currentAppIdx ? 'bg-success' : 'bg-border'
               }`} />
           ))}
         </div>
