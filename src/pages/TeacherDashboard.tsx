@@ -28,7 +28,7 @@ import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
   BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown, Key,
-  Building2, UserPlus,
+  Building2, UserPlus, RefreshCw,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -177,6 +177,7 @@ export default function TeacherDashboard() {
   const [inviteName, setInviteName] = useState('');
   const [invitePlan, setInvitePlan] = useState('free');
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   const [showTypeChoice, setShowTypeChoice] = useState(false);
   const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; name: string } | null>(null);
@@ -501,6 +502,22 @@ export default function TeacherDashboard() {
     if (!contactSubject.trim() || !contactMessage.trim()) { toast.error('Preencha todos os campos'); return; }
     toast.success('Mensagem enviada com sucesso!');
     setContactSubject(''); setContactMessage('');
+  };
+
+  const resendInvite = async (email: string, fullName: string, plan: string = 'free'): Promise<void> => {
+    setResendingInvite(email);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-teacher', {
+        body: { email, fullName, plan },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Convite reenviado para ${email}!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao reenviar convite');
+    } finally {
+      setResendingInvite(null);
+    }
   };
 
   const createRoom = async () => {
@@ -1677,6 +1694,17 @@ export default function TeacherDashboard() {
                             </Button>
                           </div>
                         )}
+                        {t.grantedBy && (
+                          <Button
+                            size="sm" variant="outline"
+                            className="text-primary border-primary/30 hover:bg-primary/10"
+                            disabled={resendingInvite === t.email}
+                            onClick={() => resendInvite(t.email, t.full_name, t.manualPlan || 'free')}
+                            title="Reenviar convite"
+                          >
+                            {resendingInvite === t.email ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          </Button>
+                        )}
                         {!t.is_blocked ? (
                           <Button size="sm" variant="outline" className="text-orange-600 border-orange-300 hover:bg-orange-50" onClick={() => blockTeacher(t.id, true)}>
                             Bloquear
@@ -2169,12 +2197,22 @@ export default function TeacherDashboard() {
                       <Badge variant="secondary">Pro</Badge>
                     </TableCell>
                     <TableCell className="text-center">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
+                      <div className="flex items-center justify-center gap-1">
+                        <Button
+                          variant="ghost" size="sm"
+                          className="text-primary hover:text-primary"
+                          disabled={resendingInvite === t.email}
+                          onClick={() => resendInvite(t.email, t.full_name, 'pro')}
+                          title="Reenviar convite"
+                        >
+                          {resendingInvite === t.email ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Remover professor?</AlertDialogTitle>
@@ -2189,7 +2227,8 @@ export default function TeacherDashboard() {
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
-                      </AlertDialog>
+                        </AlertDialog>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
