@@ -716,7 +716,7 @@ export default function TeacherRoomManage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[100px]">Nº de Registro</TableHead>
+                <TableHead className="min-w-[100px]">Pontuação</TableHead>
                 <TableHead className="min-w-[100px]">NOME</TableHead>
                 {questions.map((_, i) => (<TableHead key={i} className="text-center min-w-[70px]">Q{i + 1}</TableHead>))}
               </TableRow>

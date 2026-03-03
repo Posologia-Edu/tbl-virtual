@@ -553,6 +553,10 @@ export default function StudentRoomView() {
         await loadMembership();
         await loadAppData();
       }
+      // Keep appeals synced during tRAT (when appeals are submitted/reviewed)
+      if (latestRoom?.current_stage === 'trat_open') {
+        await loadAppeals();
+      }
     }, 2000);
 
     return () => {
