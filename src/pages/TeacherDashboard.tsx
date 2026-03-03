@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarGroupContent,
   SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarProvider, SidebarTrigger,
@@ -88,7 +89,7 @@ type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
   | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank'
-  | 'admin-subscribers' | 'institution';
+  | 'admin-subscribers' | 'institution' | 'trash';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -111,6 +112,16 @@ export default function TeacherDashboard() {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomQuiz, setNewRoomQuiz] = useState('');
   const [createRoomOpen, setCreateRoomOpen] = useState(false);
+  const [newRoomMaxGrade, setNewRoomMaxGrade] = useState('10');
+  const [newRoomIndPct, setNewRoomIndPct] = useState('30');
+  const [newRoomTeamPct, setNewRoomTeamPct] = useState('40');
+  const [newRoomAppPct, setNewRoomAppPct] = useState('30');
+
+  // Trash state
+  const [trashRooms, setTrashRooms] = useState<any[]>([]);
+  const [trashQuizzes, setTrashQuizzes] = useState<any[]>([]);
+  const [trashQuestions, setTrashQuestions] = useState<any[]>([]);
+  const [trashTab, setTrashTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const [totalStudents, setTotalStudents] = useState(0);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
@@ -215,12 +226,13 @@ export default function TeacherDashboard() {
     if (user && activeView === 'admin-teachers' && isAdmin) { loadTeachers(); loadTrialTeachers(); }
     if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
     if (user && activeView === 'institution' && isInstitutionalPlan) loadInstitutionTeachers();
+    if (user && activeView === 'trash') loadTrash();
   }, [user, activeView]);
 
   const loadData = async () => {
     const [{ data: roomsData }, { data: quizzesData }] = await Promise.all([
-      supabase.from('rooms').select('*').eq('teacher_id', user!.id).order('created_at', { ascending: false }),
-      supabase.from('quizzes').select('*, questions(id)').eq('teacher_id', user!.id).order('created_at', { ascending: false }),
+      supabase.from('rooms').select('*').eq('teacher_id', user!.id).is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from('quizzes').select('*, questions(id)').eq('teacher_id', user!.id).is('deleted_at', null).order('created_at', { ascending: false }),
     ]);
     setRooms((roomsData as Room[]) || []);
     setQuizzes((quizzesData as Quiz[]) || []);
@@ -235,6 +247,17 @@ export default function TeacherDashboard() {
       setTotalStudents(uniqueStudents.size);
     }
     setLoading(false);
+  };
+
+  const loadTrash = async () => {
+    const [{ data: tRooms }, { data: tQuizzes }, { data: tQuestions }] = await Promise.all([
+      supabase.from('rooms').select('*').eq('teacher_id', user!.id).not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      supabase.from('quizzes').select('*').eq('teacher_id', user!.id).not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+      supabase.from('questions').select('*, quizzes!inner(teacher_id)').not('deleted_at', 'is', null).order('deleted_at', { ascending: false }),
+    ]);
+    setTrashRooms(tRooms || []);
+    setTrashQuizzes(tQuizzes || []);
+    setTrashQuestions((tQuestions || []).filter((q: any) => q.quizzes?.teacher_id === user!.id));
   };
 
   const loadProfile = async () => {
@@ -533,14 +556,21 @@ export default function TeacherDashboard() {
         return;
       }
     }
+    const indPct = parseInt(newRoomIndPct) || 30;
+    const tmPct = parseInt(newRoomTeamPct) || 40;
+    const appPct = parseInt(newRoomAppPct) || 30;
+    if (indPct + tmPct + appPct !== 100) { toast.error('A soma dos percentuais deve ser 100%'); return; }
     const { data: codeData } = await supabase.rpc('generate_room_code');
     const code = codeData as string;
     const { error } = await supabase.from('rooms').insert({
       name: newRoomName.trim(), code, teacher_id: user!.id, quiz_id: newRoomQuiz || null,
-    });
+      max_grade: parseFloat(newRoomMaxGrade) || 10,
+      individual_pct: indPct, team_pct: tmPct, application_pct: appPct,
+    } as any);
     if (error) { toast.error('Falha ao criar sala'); return; }
     toast.success(`Sala criada! Código: ${code}`);
     setNewRoomName(''); setNewRoomQuiz(''); setCreateRoomOpen(false);
+    setNewRoomMaxGrade('10'); setNewRoomIndPct('30'); setNewRoomTeamPct('40'); setNewRoomAppPct('30');
     loadData();
   };
 
@@ -559,8 +589,10 @@ export default function TeacherDashboard() {
   };
 
   const toggleArchive = async (room: Room) => {
-    await supabase.from('rooms').update({ is_active: !room.is_active }).eq('id', room.id);
+    // Soft delete - send to trash
+    await supabase.from('rooms').update({ deleted_at: new Date().toISOString() } as any).eq('id', room.id);
     loadData();
+    toast.success('Sala movida para a lixeira');
   };
 
   const canReapply = (room: Room) => {
@@ -571,6 +603,21 @@ export default function TeacherDashboard() {
   };
 
   const reapplyRoom = async (room: Room) => {
+    // Clean all previous data
+    const { data: qIds } = await supabase.from('questions').select('id').eq('quiz_id', room.quiz_id!);
+    const { data: aqIds } = await supabase.from('application_questions').select('id').eq('room_id', room.id);
+    if (qIds && qIds.length > 0) {
+      const ids = qIds.map(q => q.id);
+      await supabase.from('irat_responses').delete().eq('room_id', room.id);
+      await supabase.from('trat_attempts').delete().eq('room_id', room.id);
+    }
+    if (aqIds && aqIds.length > 0) {
+      const ids = aqIds.map(q => q.id);
+      await supabase.from('application_responses').delete().eq('room_id', room.id);
+    }
+    await supabase.from('application_questions').delete().eq('room_id', room.id);
+    await supabase.from('appeals').delete().eq('room_id', room.id);
+    
     await supabase.from('rooms').update({ 
       is_active: true, 
       current_stage: 'waiting',
@@ -579,7 +626,7 @@ export default function TeacherDashboard() {
       trat_end_time: null,
       app_end_time: null,
     } as any).eq('id', room.id);
-    toast.success('Sala reativada! Você pode iniciar uma nova aplicação.');
+    toast.success('Sala reativada! Todos os dados anteriores foram limpos.');
     loadData();
   };
 
@@ -631,12 +678,53 @@ export default function TeacherDashboard() {
   };
 
   const deleteQuiz = async (id: string) => {
-    try {
-      // 1. Get question IDs to clean up responses
+    // Soft delete - move to trash
+    await supabase.from('quizzes').update({ deleted_at: new Date().toISOString() } as any).eq('id', id);
+    loadData();
+    toast.success('Questionário movido para a lixeira');
+  };
+
+  const deleteQuestion = async (id: string) => {
+    // Soft delete
+    await supabase.from('questions').update({ deleted_at: new Date().toISOString() } as any).eq('id', id);
+    if (selectedQuiz) {
+      const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
+      setQuestions((data as Question[]) || []);
+    }
+  };
+
+  const deleteAppQuestionFromQuiz = async (id: string) => {
+    await supabase.from('application_questions').update({ deleted_at: new Date().toISOString() } as any).eq('id', id);
+    if (selectedQuiz) {
+      const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
+      setAppQuestions(data || []);
+    }
+  };
+
+  // Trash actions
+  const restoreFromTrash = async (type: 'room' | 'quiz' | 'question', id: string) => {
+    const table = type === 'room' ? 'rooms' : type === 'quiz' ? 'quizzes' : 'questions';
+    await supabase.from(table).update({ deleted_at: null } as any).eq('id', id);
+    toast.success('Item restaurado!');
+    loadTrash();
+    loadData();
+  };
+
+  const permanentDelete = async (type: 'room' | 'quiz' | 'question', id: string) => {
+    if (type === 'room') {
+      // Clean related data
+      await supabase.from('irat_responses').delete().eq('room_id', id);
+      await supabase.from('trat_attempts').delete().eq('room_id', id);
+      await supabase.from('application_responses').delete().eq('room_id', id);
+      await supabase.from('application_questions').delete().eq('room_id', id);
+      await supabase.from('appeals').delete().eq('room_id', id);
+      await supabase.from('team_members').delete().eq('room_id', id);
+      await supabase.from('teams').delete().eq('room_id', id);
+      await supabase.from('room_participants').delete().eq('room_id', id);
+      await supabase.from('rooms').delete().eq('id', id);
+    } else if (type === 'quiz') {
       const { data: qIds } = await supabase.from('questions').select('id').eq('quiz_id', id);
       const { data: aqIds } = await supabase.from('application_questions').select('id').eq('quiz_id', id);
-
-      // 2. Delete responses referencing these questions
       if (qIds && qIds.length > 0) {
         const ids = qIds.map(q => q.id);
         await supabase.from('irat_responses').delete().in('question_id', ids);
@@ -646,29 +734,24 @@ export default function TeacherDashboard() {
         const ids = aqIds.map(q => q.id);
         await supabase.from('application_responses').delete().in('question_id', ids);
       }
-
-      // 3. Delete questions themselves
       await supabase.from('application_questions').delete().eq('quiz_id', id);
       await supabase.from('questions').delete().eq('quiz_id', id);
-
-      // 4. Nullify quiz_id in rooms that reference this quiz
       await supabase.from('rooms').update({ quiz_id: null }).eq('quiz_id', id);
-
-      // 5. Delete the quiz
-      const { error } = await supabase.from('quizzes').delete().eq('id', id);
-      if (error) { toast.error('Falha ao excluir questionário'); return; }
-      loadData();
-      toast.success('Questionário excluído');
-    } catch (err: any) {
-      toast.error('Erro ao excluir questionário: ' + (err.message || ''));
+      await supabase.from('quizzes').delete().eq('id', id);
+    } else {
+      await supabase.from('irat_responses').delete().eq('question_id', id);
+      await supabase.from('trat_attempts').delete().eq('question_id', id);
+      await supabase.from('questions').delete().eq('id', id);
     }
+    toast.success('Item excluído definitivamente');
+    loadTrash();
   };
 
   const openEditQuiz = async (quiz: Quiz) => {
     setSelectedQuiz(quiz);
     const [{ data }, { data: appData }] = await Promise.all([
-      supabase.from('questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
-      supabase.from('application_questions').select('*').eq('quiz_id', quiz.id).order('sort_order'),
+      supabase.from('questions').select('*').eq('quiz_id', quiz.id).is('deleted_at', null).order('sort_order'),
+      supabase.from('application_questions').select('*').eq('quiz_id', quiz.id).is('deleted_at', null).order('sort_order'),
     ]);
     setQuestions((data as Question[]) || []);
     setAppQuestions(appData || []);
@@ -691,7 +774,7 @@ export default function TeacherDashboard() {
     toast.success('Questão adicionada!');
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
     setAddQOpen(false);
-    const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
+    const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setQuestions((data as Question[]) || []);
     loadData();
   };
@@ -713,21 +796,11 @@ export default function TeacherDashboard() {
     toast.success('Questão de aplicação adicionada!');
     setAppQText(''); setAppCorrectAnswer('V');
     setAddAppQOpen(false);
-    const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
+    const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setAppQuestions(data || []);
   };
 
-  const deleteQuestion = async (id: string) => {
-    await supabase.from('questions').delete().eq('id', id);
-    const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
-    setQuestions((data as Question[]) || []);
-  };
-
-  const deleteAppQuestionFromQuiz = async (id: string) => {
-    await supabase.from('application_questions').delete().eq('id', id);
-    const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).order('sort_order');
-    setAppQuestions(data || []);
-  };
+  // deleteQuestion and deleteAppQuestionFromQuiz already defined above
 
   // AI helper functions
   const getMimeType = (name: string): string => {
@@ -985,7 +1058,31 @@ export default function TeacherDashboard() {
                   {quizzes.map(q => (<option key={q.id} value={q.id}>{q.title} ({q.questions?.length || 0} questões)</option>))}
                 </select>
               </div>
-              <Button onClick={createRoom} className="w-full">Criar Sala</Button>
+              <Separator />
+              <p className="text-sm font-semibold text-center">Configurações da Avaliação</p>
+              <div className="space-y-2">
+                <Label>Nota Máxima</Label>
+                <Input value={newRoomMaxGrade} onChange={e => setNewRoomMaxGrade(e.target.value)} placeholder="10" type="number" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">% Individual (iRAT)</Label>
+                  <Input value={newRoomIndPct} onChange={e => setNewRoomIndPct(e.target.value)} type="number" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">% Equipe (tRAT)</Label>
+                  <Input value={newRoomTeamPct} onChange={e => setNewRoomTeamPct(e.target.value)} type="number" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">% Aplicação</Label>
+                  <Input value={newRoomAppPct} onChange={e => setNewRoomAppPct(e.target.value)} type="number" />
+                </div>
+              </div>
+              {(() => {
+                const total = (parseInt(newRoomIndPct) || 0) + (parseInt(newRoomTeamPct) || 0) + (parseInt(newRoomAppPct) || 0);
+                return <p className={`text-xs text-center ${total !== 100 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>Total: {total}% — A soma deve ser 100%.</p>;
+              })()}
+              <Button onClick={createRoom} className="w-full" disabled={(() => { const t = (parseInt(newRoomIndPct)||0) + (parseInt(newRoomTeamPct)||0) + (parseInt(newRoomAppPct)||0); return t !== 100; })()}>Criar Sala</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -1650,6 +1747,82 @@ export default function TeacherDashboard() {
       </Card>
     </div>
   );
+
+  const renderTrash = () => {
+    const allItems = [
+      ...trashRooms.map((r: any) => ({ ...r, _type: 'room' as const, _name: r.name, _deleted: r.deleted_at })),
+      ...trashQuizzes.map((q: any) => ({ ...q, _type: 'quiz' as const, _name: q.title, _deleted: q.deleted_at })),
+      ...trashQuestions.map((q: any) => ({ ...q, _type: 'question' as const, _name: q.question_text?.substring(0, 80), _deleted: q.deleted_at })),
+    ].sort((a, b) => new Date(b._deleted).getTime() - new Date(a._deleted).getTime());
+
+    const filtered = trashTab === 'all' ? allItems :
+      trashTab === 'rooms' ? allItems.filter(i => i._type === 'room') :
+      trashTab === 'quizzes' ? allItems.filter(i => i._type === 'quiz') :
+      allItems.filter(i => i._type === 'question');
+
+    const typeLabel = { room: 'Sala', quiz: 'Questionário', question: 'Questão' };
+    const typeColor = { room: 'bg-primary/10 text-primary', quiz: 'bg-warning/10 text-warning-foreground', question: 'bg-muted text-muted-foreground' };
+
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-heading font-bold flex items-center gap-2"><Trash2 className="w-6 h-6" /> Lixeira</h2>
+        <Tabs value={trashTab} onValueChange={setTrashTab}>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="all">Tudo ({allItems.length})</TabsTrigger>
+            <TabsTrigger value="rooms">Salas ({trashRooms.length})</TabsTrigger>
+            <TabsTrigger value="quizzes">Questionários ({trashQuizzes.length})</TabsTrigger>
+            <TabsTrigger value="questions">Questões ({trashQuestions.length})</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {filtered.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <Trash2 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+              <p>A lixeira está vazia.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map((item: any) => (
+              <Card key={`${item._type}-${item.id}`}>
+                <CardContent className="py-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Badge className={typeColor[item._type]}>{typeLabel[item._type]}</Badge>
+                    <span className="font-medium truncate">{item._name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">{new Date(item._deleted).toLocaleDateString('pt-BR')}</span>
+                    <Button size="sm" variant="outline" onClick={() => restoreFromTrash(item._type, item.id)}>
+                      <RefreshCw className="w-3 h-3 mr-1" /> Restaurar
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir definitivamente?</AlertDialogTitle>
+                          <AlertDialogDescription>Esta ação não pode ser desfeita. Todos os dados relacionados serão perdidos.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => permanentDelete(item._type, item.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Excluir Definitivamente
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderAdminTeachers = () => {
     const admins = allTeachers.filter((t: any) => t.role === 'admin');
@@ -2445,6 +2618,11 @@ export default function TeacherDashboard() {
                   <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => setActiveView('question-bank')} isActive={activeView === 'question-bank'} className="cursor-pointer">
                       <Globe className="w-4 h-4" /><span>Banco de Questões</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => setActiveView('trash')} isActive={activeView === 'trash'} className="cursor-pointer">
+                      <Trash2 className="w-4 h-4" /><span>Lixeira</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
