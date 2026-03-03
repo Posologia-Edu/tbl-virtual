@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.delete-user]
 verify_jwt = false
+
+[functions.sync-institution-teachers]
+verify_jwt = false
