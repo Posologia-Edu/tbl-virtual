@@ -54,8 +54,8 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
 
     let subscribed = false;
-    let productId = null;
-    let subscriptionEnd = null;
+    let productId: string | null = null;
+    let subscriptionEnd: string | null = null;
 
     if (customers.data.length > 0) {
       const customerId = customers.data[0].id;
@@ -63,8 +63,12 @@ serve(async (req) => {
 
       const subscriptions = await stripe.subscriptions.list({
         customer: customerId,
-        status: "all",
         limit: 10,
+      });
+
+      logStep("Subscriptions found", {
+        count: subscriptions.data.length,
+        statuses: subscriptions.data.map((s) => s.status),
       });
 
       const validSubscription = subscriptions.data.find(
@@ -73,14 +77,31 @@ serve(async (req) => {
 
       if (validSubscription) {
         subscribed = true;
-        subscriptionEnd = new Date(validSubscription.current_period_end * 1000).toISOString();
-        productId = typeof validSubscription.items.data[0].price.product === 'string'
-          ? validSubscription.items.data[0].price.product
-          : validSubscription.items.data[0].price.product.id;
+
+        // Safely extract end date
+        const endTimestamp =
+          validSubscription.current_period_end ||
+          validSubscription.trial_end ||
+          null;
+
+        if (endTimestamp && typeof endTimestamp === "number") {
+          subscriptionEnd = new Date(endTimestamp * 1000).toISOString();
+        }
+
+        // Safely extract product ID
+        const priceProduct = validSubscription.items?.data?.[0]?.price?.product;
+        if (typeof priceProduct === "string") {
+          productId = priceProduct;
+        } else if (priceProduct && typeof priceProduct === "object" && "id" in priceProduct) {
+          productId = (priceProduct as { id: string }).id;
+        }
+
         logStep("Valid Stripe subscription", {
           status: validSubscription.status,
           productId,
           subscriptionEnd,
+          current_period_end: validSubscription.current_period_end,
+          trial_end: validSubscription.trial_end,
         });
       }
     }
@@ -93,19 +114,21 @@ serve(async (req) => {
         .eq("user_id", user.id)
         .single();
 
-      if (manualSub && manualSub.plan !== 'free') {
-        // Check expiry
-        const isExpired = manualSub.expires_at && new Date(manualSub.expires_at) < now;
+      if (manualSub && manualSub.plan !== "free") {
+        const isExpired =
+          manualSub.expires_at && new Date(manualSub.expires_at) < now;
         if (!isExpired) {
           subscribed = true;
-          // Map plan name to product_id
           const planToProduct: Record<string, string> = {
             pro: "prod_U1oaz7iVie1pFU",
             institutional: "prod_U1ob8n7iDfyGLT",
           };
           productId = planToProduct[manualSub.plan] || null;
           subscriptionEnd = manualSub.expires_at;
-          logStep("Active manual subscription", { plan: manualSub.plan, productId });
+          logStep("Active manual subscription", {
+            plan: manualSub.plan,
+            productId,
+          });
         }
       }
     }
@@ -121,7 +144,9 @@ serve(async (req) => {
         .neq("plan", "free");
 
       if (grantedSubs && grantedSubs.length > 0) {
-        logStep("Downgrading teachers granted by this user", { count: grantedSubs.length });
+        logStep("Downgrading teachers granted by this user", {
+          count: grantedSubs.length,
+        });
         for (const sub of grantedSubs) {
           await supabaseClient
             .from("manual_subscriptions")
@@ -139,15 +164,18 @@ serve(async (req) => {
         .neq("plan", "free");
     }
 
-    return new Response(JSON.stringify({
-      subscribed,
-      product_id: productId,
-      subscription_end: subscriptionEnd,
-      ai_used_this_month: aiUsedThisMonth || 0,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({
+        subscribed,
+        product_id: productId,
+        subscription_end: subscriptionEnd,
+        ai_used_this_month: aiUsedThisMonth || 0,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      }
+    );
   } catch (error) {
     logStep("ERROR", { message: error.message });
     return new Response(JSON.stringify({ error: error.message }), {
