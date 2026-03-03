@@ -1691,9 +1691,12 @@ export default function TeacherDashboard() {
             <Select
               value={s.manualPlan}
               onValueChange={async (val) => {
-                await supabase.from('manual_subscriptions').upsert({
-                  user_id: s.id, plan: val, granted_by: user!.id,
-                } as any, { onConflict: 'user_id' });
+                await Promise.all([
+                  supabase.from('manual_subscriptions').upsert({
+                    user_id: s.id, plan: val, granted_by: user!.id,
+                  } as any, { onConflict: 'user_id' }),
+                  supabase.from('profiles').update({ is_approved: true } as any).eq('id', s.id),
+                ]);
                 toast.success('Plano atualizado!');
                 loadAdminSubscribers();
               }}
