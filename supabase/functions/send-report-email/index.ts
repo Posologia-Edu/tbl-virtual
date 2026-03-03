@@ -66,13 +66,28 @@ Deno.serve(async (req) => {
 
       let appRaw = 0;
       if (studentTeam && appQuestions?.length) {
-        appRaw = appQuestions.filter((q: any) => (appResponses || []).some((r: any) => r.question_id === q.id && r.team_id === studentTeam.id && ((q.correct_answer === 'V' && r.selected_option === 'A') || (q.correct_answer === 'F' && r.selected_option === 'B')))).length;
+        appRaw = appQuestions.filter((q: any) =>
+          (appResponses || []).some((r: any) =>
+            r.question_id === q.id &&
+            r.team_id === studentTeam.id &&
+            (
+              (q.correct_answer === 'V' && r.selected_option === 'A') ||
+              (q.correct_answer === 'F' && r.selected_option === 'B') ||
+              r.selected_option === q.correct_answer
+            )
+          )
+        ).length;
       }
 
-      const iratGrade = maxIrat > 0 ? (iratRaw / maxIrat) * maxGrade : 0;
-      const tratGrade = maxTrat > 0 ? (tratRaw / maxTrat) * maxGrade : 0;
-      const appGrade = maxApp > 0 ? (appRaw / maxApp) * maxGrade : 0;
-      const finalGrade = iratGrade * iratPct + tratGrade * tratPct + appGrade * appPct;
+      const iratBaseGrade = maxIrat > 0 ? (iratRaw / maxIrat) * maxGrade : 0;
+      const tratBaseGrade = maxTrat > 0 ? (tratRaw / maxTrat) * maxGrade : 0;
+      const appBaseGrade = maxApp > 0 ? (appRaw / maxApp) * maxGrade : 0;
+
+      // Stage points aligned with configured maxima (e.g. 3/4/3 when max grade is 10 and 30/40/30)
+      const iratGrade = iratBaseGrade * iratPct;
+      const tratGrade = tratBaseGrade * tratPct;
+      const appGrade = appBaseGrade * appPct;
+      const finalGrade = iratGrade + tratGrade + appGrade;
 
       const html = `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
