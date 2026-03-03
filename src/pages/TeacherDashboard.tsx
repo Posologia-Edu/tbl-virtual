@@ -400,14 +400,10 @@ export default function TeacherDashboard() {
     setInstInviteLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-invite-teacher', {
-        body: { email: instInviteEmail, fullName: instInviteName, plan: 'pro' },
+        body: { email: instInviteEmail, fullName: instInviteName, plan: 'pro', institution: instName.trim() || undefined },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      // Set institution on the invited teacher if we have one
-      if (instName.trim() && data?.userId) {
-        await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', data.userId);
-      }
       toast.success('Professor convidado com sucesso!');
       setInstInviteEmail(''); setInstInviteName(''); setInstInviteOpen(false);
       loadInstitutionTeachers();
