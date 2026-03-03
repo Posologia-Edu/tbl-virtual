@@ -2727,6 +2727,7 @@ export default function TeacherDashboard() {
                 {activeView === 'admin-api-keys' && isAdmin && <AdminApiKeys />}
                 {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
                 {activeView === 'institution' && isInstitutionalPlan && renderInstitution()}
+                {activeView === 'trash' && renderTrash()}
               </>
             )}
           </main>
