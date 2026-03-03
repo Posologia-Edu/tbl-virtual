@@ -351,6 +351,13 @@ export default function StudentRoomView() {
     if (room?.current_stage === 'application_open') { loadMembership(); loadAppData(); }
   }, [room?.current_stage, membership]);
 
+  // Reload app data when professor advances question index or releases alternatives
+  useEffect(() => {
+    if (room?.current_stage === 'application_open' && membership) {
+      loadAppData();
+    }
+  }, [room?.current_app_question_index, room?.app_alternatives_released, room?.current_stage, membership, loadAppData]);
+
   // Determine tRAT step based on state
   useEffect(() => {
     if (room?.current_stage !== 'trat_open') return;
@@ -472,13 +479,17 @@ export default function StudentRoomView() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload) => {
           const newRoom = payload.new as any;
+          const oldStage = room?.current_stage;
           setRoom(newRoom);
           if (!newRoom.is_active) {
             toast.error('A aplicação foi cancelada pelo professor.');
             navigate('/');
             return;
           }
-          setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0);
+          // Only reset question indices on stage transitions
+          if (oldStage !== newRoom.current_stage) {
+            setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0);
+          }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); })
@@ -496,10 +507,11 @@ export default function StudentRoomView() {
         console.log('[StudentRoom] Realtime status:', status);
       });
 
-    // Polling fallback: check room state every 3s to catch missed realtime events
+    // Polling fallback: check room state to catch missed realtime events
+    // Use 2s during application phase for faster sync, 3s otherwise
     const pollInterval = setInterval(() => {
       loadRoomRef.current();
-    }, 3000);
+    }, 2000);
 
     return () => {
       clearInterval(pollInterval);
