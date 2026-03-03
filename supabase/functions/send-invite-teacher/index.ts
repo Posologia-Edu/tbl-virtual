@@ -74,11 +74,10 @@ serve(async (req) => {
     let userId: string;
     
     if (existingProfiles && existingProfiles.length > 0) {
-      // User already exists - just link them
+      // User already exists - approve and link
       userId = existingProfiles[0].id;
-      console.log(`[INVITE] User already exists: ${userId}, linking to institution`);
+      console.log(`[INVITE] User already exists: ${userId}, approving and linking`);
       
-      // Approve the user
       await supabase.from("profiles").update({ is_approved: true }).eq("id", userId);
     } else {
       // Create new user
@@ -105,70 +104,77 @@ serve(async (req) => {
         user_id: userId,
         role: "teacher",
       }, { onConflict: "user_id,role" } as any);
+    }
 
-      // Generate password reset link
-      const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
-      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-        type: "recovery",
-        email,
-        options: { redirectTo: `${origin}/reset-password` },
+    // ===== ALWAYS generate recovery link and send email =====
+    const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: `${origin}/reset-password` },
+    });
+
+    let recoveryUrl = `${origin}/forgot-password`;
+    if (!linkError && linkData?.properties?.action_link) {
+      recoveryUrl = linkData.properties.action_link;
+      console.log(`[INVITE] Recovery link generated for ${email}`);
+    } else {
+      console.warn(`[INVITE] Could not generate recovery link: ${linkError?.message}, falling back to forgot-password`);
+    }
+
+    // Send invite email via Resend (ALWAYS)
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+    if (RESEND_API_KEY) {
+      const planName = effectivePlan === "institutional" ? "Institucional" : effectivePlan === "pro" ? "Pro" : "Gratuito";
+      const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 0;">
+        <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
+          <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 32px; text-align: center;">
+            <h1 style="color: #fff; margin: 0; font-size: 24px;">🎓 Convite TBL Virtual</h1>
+          </div>
+          <div style="padding: 32px;">
+            <p style="font-size: 16px; color: #374151;">Olá, <strong>${fullName}</strong>!</p>
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
+              Você foi convidado(a) para o <strong>TBL Virtual</strong> com o plano <strong>${planName}</strong>.
+              Para começar, clique no botão abaixo e cadastre sua senha de acesso.
+            </p>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${recoveryUrl}" 
+                 style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                Cadastrar Senha
+              </a>
+            </div>
+            <p style="font-size: 13px; color: #9ca3af; text-align: center;">
+              Caso o botão não funcione, acesse ${origin}/forgot-password e informe seu e-mail (${email}).
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>`;
+
+      const resendRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({
+          from: "TBL Virtual <noreply@tbl.posologia.app>",
+          to: [email],
+          subject: "🎓 Você foi convidado para o TBL Virtual!",
+          html,
+        }),
       });
 
-      let recoveryUrl = `${origin}/forgot-password`;
-      if (!linkError && linkData?.properties?.action_link) {
-        recoveryUrl = linkData.properties.action_link;
-        console.log(`[INVITE] Recovery link generated for ${email}`);
+      const resendBody = await resendRes.json();
+      if (!resendRes.ok) {
+        console.error(`[INVITE] Resend API error (${resendRes.status}):`, JSON.stringify(resendBody));
+        throw new Error(`Email sending failed: ${resendBody?.message || resendRes.statusText}`);
       } else {
-        console.warn(`[INVITE] Could not generate recovery link: ${linkError?.message}, falling back to forgot-password`);
+        console.log(`[INVITE] Email sent successfully to ${email}:`, JSON.stringify(resendBody));
       }
-
-      // Send welcome email
-      const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-      if (RESEND_API_KEY) {
-        const planName = effectivePlan === "institutional" ? "Institucional" : effectivePlan === "pro" ? "Pro" : "Gratuito";
-        const html = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"></head>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 0;">
-          <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
-            <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 32px; text-align: center;">
-              <h1 style="color: #fff; margin: 0; font-size: 24px;">🎓 Convite TBL Virtual</h1>
-            </div>
-            <div style="padding: 32px;">
-              <p style="font-size: 16px; color: #374151;">Olá, <strong>${fullName}</strong>!</p>
-              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-                Você foi convidado(a) para o <strong>TBL Virtual</strong> com o plano <strong>${planName}</strong>.
-                Para começar, clique no botão abaixo e cadastre sua senha de acesso.
-              </p>
-              <div style="text-align: center; margin: 28px 0;">
-                <a href="${recoveryUrl}" 
-                   style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
-                  Cadastrar Senha
-                </a>
-              </div>
-              <p style="font-size: 13px; color: #9ca3af; text-align: center;">
-                Caso o botão não funcione, acesse ${origin}/forgot-password e informe seu e-mail (${email}).
-              </p>
-            </div>
-          </div>
-        </body>
-        </html>`;
-
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-          body: JSON.stringify({
-            from: "TBL Virtual <noreply@tbl.posologia.app>",
-            to: [email],
-            subject: "🎓 Você foi convidado para o TBL Virtual!",
-            html,
-          }),
-        });
-        console.log(`[INVITE] Welcome email sent to ${email}`);
-      } else {
-        console.warn(`[INVITE] RESEND_API_KEY not set, no welcome email sent`);
-      }
+    } else {
+      console.warn(`[INVITE] RESEND_API_KEY not set, no email sent`);
     }
 
     // Grant plan via manual_subscriptions
