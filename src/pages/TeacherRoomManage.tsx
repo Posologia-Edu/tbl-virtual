@@ -537,9 +537,9 @@ export default function TeacherRoomManage() {
       <hr className="border-primary/30" />
       <div>
         <h3 className="text-lg font-heading font-bold mb-3">
-          <span className="text-primary font-bold">Aplicação Individual</span> : {participants.length} Estudantes Conectados
+          <span className="text-primary font-bold">Alunos Conectados</span> : {participants.length} Estudante(s)
         </h3>
-        {participants.length > 0 && (
+        {participants.length > 0 ? (
           <Table>
             <TableHeader><TableRow><TableHead>Número de Registro</TableHead><TableHead>Nome</TableHead></TableRow></TableHeader>
             <TableBody>
@@ -551,6 +551,8 @@ export default function TeacherRoomManage() {
               ))}
             </TableBody>
           </Table>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-4">Aguardando alunos entrarem na sala...</p>
         )}
       </div>
 
@@ -587,7 +589,7 @@ export default function TeacherRoomManage() {
             </div>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground text-center">Nenhum questionário vinculado. Vincule um para iniciar a fase iRAT/tRAT.</p>
+            <p className="text-sm text-muted-foreground text-center">Nenhum questionário vinculado. Vincule um para iniciar o TBL.</p>
           </CardContent>
         </Card>
       )}
@@ -598,18 +600,18 @@ export default function TeacherRoomManage() {
             <CheckCircle2 className="w-5 h-5 text-success" />
             <div>
               <p className="font-medium text-sm">Questionário iRAT/tRAT: {linkedQuiz.title}</p>
-              <p className="text-xs text-muted-foreground">{linkedQuiz.questions?.length || 0} questões</p>
+              <p className="text-xs text-muted-foreground">{questions.length} questões objetivas • {appQuestions.length} questões de aplicação</p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Application Questions Management */}
-      {renderAppQuestionsCard()}
-
-      <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg" disabled={!room.quiz_id}>
-        Iniciar Aplicação
+      <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg" disabled={!room.quiz_id || participants.length === 0}>
+        <Play className="w-5 h-5 mr-2" /> Iniciar TBL
       </Button>
+      {participants.length === 0 && room.quiz_id && (
+        <p className="text-xs text-muted-foreground text-center">Aguarde pelo menos um aluno entrar na sala para iniciar o TBL.</p>
+      )}
     </div>
   );
 
@@ -715,7 +717,7 @@ export default function TeacherRoomManage() {
         </div>
       </div>
       <Button onClick={handleAdvanceClick} className="w-full bg-warning hover:bg-warning/90 text-warning-foreground py-6 text-lg">
-        Finalizar Aplicação Individual → Avançar para {nextStageName}
+        Finalizar iRAT → Avançar para {nextStageName}
       </Button>
     </div>
   );
