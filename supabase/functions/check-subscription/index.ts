@@ -166,24 +166,35 @@ serve(async (req) => {
     if (!subscribed) {
       logStep("No active subscription (free plan)");
 
-      // If this user was an institutional owner, downgrade all teachers they granted
-      const { data: grantedSubs } = await supabaseClient
-        .from("manual_subscriptions")
-        .select("id, user_id, plan")
-        .eq("granted_by", user.id)
-        .neq("plan", "free");
+      // Check if this user is a system admin — admins can grant plans without having a subscription themselves
+      const { data: isAdminResult } = await supabaseClient.rpc("is_admin", { _user_id: user.id });
+      const isSystemAdmin = !!isAdminResult;
+      logStep("Admin check", { isSystemAdmin });
 
-      if (grantedSubs && grantedSubs.length > 0) {
-        logStep("Downgrading teachers granted by this user", {
-          count: grantedSubs.length,
-        });
-        for (const sub of grantedSubs) {
-          await supabaseClient
-            .from("manual_subscriptions")
-            .update({ plan: "free" })
-            .eq("id", sub.id);
+      // Only downgrade granted teachers if this user is NOT a system admin
+      // System admins grant plans manually and shouldn't trigger cascading downgrades
+      // This logic is only for institutional plan owners who cancel their subscription
+      if (!isSystemAdmin) {
+        const { data: grantedSubs } = await supabaseClient
+          .from("manual_subscriptions")
+          .select("id, user_id, plan")
+          .eq("granted_by", user.id)
+          .neq("plan", "free");
+
+        if (grantedSubs && grantedSubs.length > 0) {
+          logStep("Downgrading teachers granted by this user", {
+            count: grantedSubs.length,
+          });
+          for (const sub of grantedSubs) {
+            await supabaseClient
+              .from("manual_subscriptions")
+              .update({ plan: "free" })
+              .eq("id", sub.id);
+          }
+          logStep("All granted teachers downgraded to free");
         }
-        logStep("All granted teachers downgraded to free");
+      } else {
+        logStep("Skipping granted teacher downgrade (user is system admin)");
       }
 
       // Only downgrade this user's own manual subscription if it was NOT admin-granted
