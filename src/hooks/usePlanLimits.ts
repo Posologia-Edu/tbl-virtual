@@ -23,6 +23,8 @@ export function usePlanLimits() {
 
   const maxRoomsPerMonth = limits.max_rooms_per_month;
   const maxStudents = limits.max_students;
+  const maxQuizzes = limits.max_quizzes;
+  const maxQuestionsPerQuiz = limits.max_questions_per_quiz;
 
   const showUpgradeDialog = useCallback((feature: string) => {
     setUpgradeFeature(feature);
@@ -47,6 +49,8 @@ export function usePlanLimits() {
     canUseAdminPanel,
     maxRoomsPerMonth,
     maxStudents,
+    maxQuizzes,
+    maxQuestionsPerQuiz,
     upgradeOpen,
     upgradeFeature,
     showUpgradeDialog,
