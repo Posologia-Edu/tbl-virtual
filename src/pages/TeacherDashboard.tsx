@@ -372,24 +372,15 @@ export default function TeacherDashboard() {
     if (!user || !instName.trim()) { toast.error('Informe o nome da instituição'); return; }
     setInstNameSaving(true);
     try {
-      // Update own profile
-      await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', user.id);
-      
-      // Update all linked teachers
-      const { data: subs } = await supabase
-        .from('manual_subscriptions')
-        .select('user_id')
-        .eq('granted_by', user.id);
-      if (subs && subs.length > 0) {
-        const userIds = subs.map((s: any) => s.user_id);
-        for (const uid of userIds) {
-          await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', uid);
-        }
-      }
+      const { data, error } = await supabase.functions.invoke('sync-institution-teachers', {
+        body: { institution: instName.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       toast.success('Instituição atualizada para todos os professores vinculados!');
       loadInstitutionTeachers();
     } catch (err: any) {
-      toast.error('Erro ao salvar instituição');
+      toast.error(err.message || 'Erro ao salvar instituição');
     } finally {
       setInstNameSaving(false);
     }
@@ -429,8 +420,12 @@ export default function TeacherDashboard() {
         granted_by: user!.id,
       } as any, { onConflict: 'user_id' });
       if (error) throw error;
-      // Also approve and set institution
-      await supabase.from('profiles').update({ is_approved: true, institution: instName.trim() || undefined } as any).eq('id', teacherId);
+      // Also approve and set institution server-side (bypass RLS)
+      const { data: syncData, error: syncError } = await supabase.functions.invoke('sync-institution-teachers', {
+        body: { institution: instName.trim() || undefined, teacherId },
+      });
+      if (syncError) throw syncError;
+      if (syncData?.error) throw new Error(syncData.error);
       toast.success('Professor vinculado à instituição!');
       setInstLinkEmail('');
       loadInstitutionTeachers();
