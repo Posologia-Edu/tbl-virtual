@@ -109,7 +109,30 @@ export default function TeacherRoomManage() {
       setTratStats(scores);
     }
 
-    const { data: aq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
+    // Auto-load application questions from quiz if none exist for this room yet
+    let { data: aq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
+    if ((!aq || aq.length === 0) && roomData?.quiz_id) {
+      const { data: quizAppQs } = await supabase
+        .from('application_questions')
+        .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer')
+        .eq('quiz_id', roomData.quiz_id)
+        .order('sort_order');
+      if (quizAppQs && quizAppQs.length > 0) {
+        const toInsert = quizAppQs.map((q: any) => ({
+          room_id: roomId!,
+          question_text: q.question_text,
+          option_a: q.option_a,
+          option_b: q.option_b,
+          option_c: q.option_c,
+          option_d: q.option_d,
+          sort_order: q.sort_order,
+          correct_answer: q.correct_answer,
+        }));
+        await supabase.from('application_questions').insert(toInsert);
+        const { data: freshAq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
+        aq = freshAq;
+      }
+    }
     setAppQuestions(aq || []);
 
     const { data: ar } = await supabase.from('application_responses').select('*').eq('room_id', roomId!);
@@ -256,7 +279,11 @@ export default function TeacherRoomManage() {
   };
 
   const cancelRoom = async () => {
-    await supabase.from('rooms').update({ is_active: false, current_stage: 'finished' } as any).eq('id', roomId!);
+    await supabase.from('rooms').update({ 
+      is_active: false, 
+      current_stage: 'finished',
+      cancelled_at: new Date().toISOString(),
+    } as any).eq('id', roomId!);
     toast.success('Aplicação cancelada');
     navigate('/dashboard');
   };
