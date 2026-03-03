@@ -60,7 +60,7 @@ serve(async (req) => {
       throw new Error("Only admins or institutional plan owners can invite teachers");
     }
 
-    const { email, fullName, plan } = await req.json();
+    const { email, fullName, plan, institution } = await req.json();
     if (!email || !fullName) throw new Error("email and fullName are required");
 
     // Institutional users always grant 'pro' to their teachers
@@ -78,7 +78,9 @@ serve(async (req) => {
       userId = existingProfiles[0].id;
       console.log(`[INVITE] User already exists: ${userId}, approving and linking`);
       
-      await supabase.from("profiles").update({ is_approved: true }).eq("id", userId);
+      const updateData: any = { is_approved: true };
+      if (institution) updateData.institution = institution;
+      await supabase.from("profiles").update(updateData).eq("id", userId);
     } else {
       // Create new user
       const tempPassword = crypto.randomUUID();
@@ -98,6 +100,7 @@ serve(async (req) => {
         email: email,
         is_approved: true,
         is_blocked: false,
+        ...(institution ? { institution } : {}),
       }, { onConflict: "id" });
 
       await supabase.from("user_roles").upsert({
