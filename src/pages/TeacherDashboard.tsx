@@ -156,6 +156,7 @@ export default function TeacherDashboard() {
   const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
   const [approvalPlan, setApprovalPlan] = useState<string>('free');
   const [inlineCheckoutLoading, setInlineCheckoutLoading] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Invite state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -950,6 +951,8 @@ export default function TeacherDashboard() {
       institutional: { icon: CreditCard, highlight: false },
     };
 
+
+
     const handleCheckout = async (planKey: string) => {
       if (planKey === 'free') { toast.info('Você já está no plano gratuito!'); return; }
       setInlineCheckoutLoading(planKey);
@@ -962,6 +965,17 @@ export default function TeacherDashboard() {
       } catch (err: any) {
         toast.error(err.message || 'Erro ao iniciar checkout');
       } finally { setInlineCheckoutLoading(null); }
+    };
+
+    const handleManageSubscription = async () => {
+      setCancelLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('customer-portal');
+        if (error) throw error;
+        if (data?.url) window.location.href = data.url;
+      } catch (err: any) {
+        toast.error(err.message || 'Erro ao abrir portal de gerenciamento');
+      } finally { setCancelLoading(false); }
     };
 
     return (
@@ -1021,15 +1035,28 @@ export default function TeacherDashboard() {
                     </li>
                   ))}
                 </ul>
-                <Button
-                  onClick={() => handleCheckout(key)}
-                  disabled={isLoading || inlineCheckoutLoading !== null || isCurrent}
-                  variant={isCurrent ? 'secondary' : meta.highlight ? 'default' : 'outline'}
-                  className={`w-full rounded-2xl h-12 ${meta.highlight && !isCurrent ? 'shadow-lg shadow-primary/20' : ''}`}
-                >
-                  {isLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                  {isCurrent ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={() => handleCheckout(key)}
+                    disabled={isLoading || inlineCheckoutLoading !== null || isCurrent}
+                    variant={isCurrent ? 'secondary' : meta.highlight ? 'default' : 'outline'}
+                    className={`w-full rounded-2xl h-12 ${meta.highlight && !isCurrent ? 'shadow-lg shadow-primary/20' : ''}`}
+                  >
+                    {isLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                    {isCurrent ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
+                  </Button>
+                  {isCurrent && subscription.subscribed && key !== 'free' && (
+                    <Button
+                      onClick={handleManageSubscription}
+                      disabled={cancelLoading}
+                      variant="ghost"
+                      className="w-full rounded-2xl h-10 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {cancelLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                      Cancelar Assinatura
+                    </Button>
+                  )}
+                </div>
               </div>
             );
           })}

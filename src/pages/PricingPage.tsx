@@ -12,6 +12,7 @@ export default function PricingPage() {
   const navigate = useNavigate();
   const { user, session, subscription } = useAuth();
   const [loading, setLoading] = useState<PlanKey | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const currentPlan = subscription.plan || 'free';
 
   const handleCheckout = async (planKey: PlanKey) => {
@@ -124,19 +125,41 @@ export default function PricingPage() {
                   ))}
                 </ul>
 
-                <Button
-                  onClick={() => handleCheckout(key)}
-                  disabled={isLoading || loading !== null || currentPlan === key}
-                  variant={currentPlan === key ? 'secondary' : meta.highlight ? 'default' : 'outline'}
-                  className={`w-full rounded-2xl h-12 ${
-                    meta.highlight && currentPlan !== key ? 'shadow-lg shadow-primary/20' : ''
-                  }`}
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  {currentPlan === key ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={() => handleCheckout(key)}
+                    disabled={isLoading || loading !== null || currentPlan === key}
+                    variant={currentPlan === key ? 'secondary' : meta.highlight ? 'default' : 'outline'}
+                    className={`w-full rounded-2xl h-12 ${
+                      meta.highlight && currentPlan !== key ? 'shadow-lg shadow-primary/20' : ''
+                    }`}
+                  >
+                    {isLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : null}
+                    {currentPlan === key ? '✓ Plano Atual' : key === 'free' ? 'Plano Gratuito' : 'Assinar Agora'}
+                  </Button>
+                  {currentPlan === key && subscription.subscribed && key !== 'free' && (
+                    <Button
+                      onClick={async () => {
+                        setCancelLoading(true);
+                        try {
+                          const { data, error } = await supabase.functions.invoke('customer-portal');
+                          if (error) throw error;
+                          if (data?.url) window.location.href = data.url;
+                        } catch (err: any) {
+                          toast.error(err.message || 'Erro ao abrir portal');
+                        } finally { setCancelLoading(false); }
+                      }}
+                      disabled={cancelLoading}
+                      variant="ghost"
+                      className="w-full rounded-2xl h-10 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      {cancelLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                      Cancelar Assinatura
+                    </Button>
+                  )}
+                </div>
               </motion.div>
             );
           })}
