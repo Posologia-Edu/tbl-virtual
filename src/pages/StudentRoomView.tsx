@@ -443,15 +443,19 @@ export default function StudentRoomView() {
     }
   }, [room?.is_active, room?.current_stage, navigate]);
 
-  // Realtime
+  // Realtime + polling fallback for room stage changes
+  const loadRoomRef = useRef(loadRoom);
+  loadRoomRef.current = loadRoom;
+
   useEffect(() => {
+    if (!roomId) return;
+
     const channel = supabase
-      .channel(`room-${roomId}`)
+      .channel(`student-room-${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
         (payload) => {
           const newRoom = payload.new as any;
           setRoom(newRoom);
-          // If room was deactivated, students get kicked immediately
           if (!newRoom.is_active) {
             toast.error('A aplicação foi cancelada pelo professor.');
             navigate('/');
@@ -471,9 +475,20 @@ export default function StudentRoomView() {
         () => { loadParticipants(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` },
         () => { loadAppeals(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants, navigate]);
+      .subscribe((status) => {
+        console.log('[StudentRoom] Realtime status:', status);
+      });
+
+    // Polling fallback: check room state every 3s to catch missed realtime events
+    const pollInterval = setInterval(() => {
+      loadRoomRef.current();
+    }, 3000);
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+    };
+  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants, loadAppeals, navigate]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
