@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -18,113 +19,155 @@ serve(async (req) => {
   );
 
   try {
-    // Verify caller is admin
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header");
     const token = authHeader.replace("Bearer ", "");
     const { data: callerData, error: callerError } = await supabase.auth.getUser(token);
     if (callerError) throw new Error("Auth error");
     const callerId = callerData.user?.id;
+    const callerEmail = callerData.user?.email;
     if (!callerId) throw new Error("Not authenticated");
 
+    // Check if caller is admin OR has institutional plan
     const { data: isAdminResult } = await supabase.rpc("is_admin", { _user_id: callerId });
-    if (!isAdminResult) throw new Error("Only admins can invite teachers");
+    
+    let isInstitutional = false;
+    if (!isAdminResult) {
+      // Check if caller has institutional plan via Stripe
+      const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+      if (stripeKey && callerEmail) {
+        const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+        const customers = await stripe.customers.list({ email: callerEmail, limit: 1 });
+        if (customers.data.length > 0) {
+          const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, limit: 10 });
+          const validSub = subs.data.find(s => s.status === "active" || s.status === "trialing");
+          if (validSub) {
+            const productId = typeof validSub.items?.data?.[0]?.price?.product === "string" 
+              ? validSub.items.data[0].price.product 
+              : null;
+            if (productId === "prod_U1ob8n7iDfyGLT") isInstitutional = true;
+          }
+        }
+      }
+      // Also check manual_subscriptions
+      if (!isInstitutional) {
+        const { data: manualSub } = await supabase.from("manual_subscriptions").select("plan").eq("user_id", callerId).single();
+        if (manualSub?.plan === "institutional") isInstitutional = true;
+      }
+    }
+
+    if (!isAdminResult && !isInstitutional) {
+      throw new Error("Only admins or institutional plan owners can invite teachers");
+    }
 
     const { email, fullName, plan } = await req.json();
     if (!email || !fullName) throw new Error("email and fullName are required");
 
-    console.log(`[INVITE] Inviting ${email} with plan ${plan || 'free'}`);
+    // Institutional users always grant 'pro' to their teachers
+    const effectivePlan = isInstitutional && !isAdminResult ? "pro" : (plan || "free");
 
-    // Create user with a random password (they'll reset it)
-    const tempPassword = crypto.randomUUID();
-    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
-      user_metadata: { full_name: fullName, role: "teacher" },
-    });
-    if (createError) throw new Error(`Failed to create user: ${createError.message}`);
-    const userId = newUser.user.id;
-    console.log(`[INVITE] User created: ${userId}`);
+    console.log(`[INVITE] Inviting ${email} with plan ${effectivePlan} by ${isAdminResult ? 'admin' : 'institutional'}`);
 
-    // Ensure profile and role exist (trigger may handle this, but let's be safe)
-    await supabase.from("profiles").upsert({
-      id: userId,
-      full_name: fullName,
-      email: email,
-      is_approved: true,
-      is_blocked: false,
-    }, { onConflict: "id" });
+    // Check if user already exists
+    const { data: existingProfiles } = await supabase.from("profiles").select("id, email").eq("email", email);
+    
+    let userId: string;
+    
+    if (existingProfiles && existingProfiles.length > 0) {
+      // User already exists - just link them
+      userId = existingProfiles[0].id;
+      console.log(`[INVITE] User already exists: ${userId}, linking to institution`);
+      
+      // Approve the user
+      await supabase.from("profiles").update({ is_approved: true }).eq("id", userId);
+    } else {
+      // Create new user
+      const tempPassword = crypto.randomUUID();
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+        email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: { full_name: fullName, role: "teacher" },
+      });
+      if (createError) throw new Error(`Failed to create user: ${createError.message}`);
+      userId = newUser.user.id;
+      console.log(`[INVITE] User created: ${userId}`);
 
-    await supabase.from("user_roles").upsert({
-      user_id: userId,
-      role: "teacher",
-    }, { onConflict: "user_id,role" } as any);
+      await supabase.from("profiles").upsert({
+        id: userId,
+        full_name: fullName,
+        email: email,
+        is_approved: true,
+        is_blocked: false,
+      }, { onConflict: "id" });
 
-    // Grant plan if not free
-    if (plan && plan !== "free") {
-      await supabase.from("manual_subscriptions").upsert({
+      await supabase.from("user_roles").upsert({
         user_id: userId,
-        plan,
-        granted_by: callerId,
-      } as any, { onConflict: "user_id" });
+        role: "teacher",
+      }, { onConflict: "user_id,role" } as any);
+
+      // Send password reset email
+      const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
+      await supabase.auth.admin.generateLink({
+        type: "recovery",
+        email,
+        options: { redirectTo: `${origin}/reset-password` },
+      });
+
+      // Send welcome email
+      const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+      if (RESEND_API_KEY) {
+        const planName = effectivePlan === "institutional" ? "Institucional" : effectivePlan === "pro" ? "Pro" : "Gratuito";
+        const html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 0;">
+          <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
+            <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 32px; text-align: center;">
+              <h1 style="color: #fff; margin: 0; font-size: 24px;">🎓 Convite TBL Virtual</h1>
+            </div>
+            <div style="padding: 32px;">
+              <p style="font-size: 16px; color: #374151;">Olá, <strong>${fullName}</strong>!</p>
+              <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
+                Você foi convidado(a) para o <strong>TBL Virtual</strong> com o plano <strong>${planName}</strong>.
+                Para começar, clique no botão abaixo e cadastre sua senha de acesso.
+              </p>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="${origin}/forgot-password" 
+                   style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  Cadastrar Senha
+                </a>
+              </div>
+              <p style="font-size: 13px; color: #9ca3af; text-align: center;">
+                Caso o botão não funcione, acesse ${origin}/forgot-password e informe seu e-mail (${email}).
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>`;
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
+          body: JSON.stringify({
+            from: "TBL Virtual <onboarding@resend.dev>",
+            to: [email],
+            subject: "🎓 Você foi convidado para o TBL Virtual!",
+            html,
+          }),
+        });
+        console.log(`[INVITE] Welcome email sent to ${email}`);
+      }
     }
 
-    // Send password reset email so the user can set their password
-    const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
-    const { error: resetError } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email,
-      options: { redirectTo: `${origin}/reset-password` },
-    });
-
-    // Also send a welcome email via Resend if available
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (RESEND_API_KEY) {
-      const planName = plan === "institutional" ? "Institucional" : plan === "pro" ? "Pro" : "Gratuito";
-      const html = `
-      <!DOCTYPE html>
-      <html>
-      <head><meta charset="utf-8"></head>
-      <body style="font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 0;">
-        <div style="max-width: 520px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
-          <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 32px; text-align: center;">
-            <h1 style="color: #fff; margin: 0; font-size: 24px;">🎓 Convite TBL Virtual</h1>
-          </div>
-          <div style="padding: 32px;">
-            <p style="font-size: 16px; color: #374151;">Olá, <strong>${fullName}</strong>!</p>
-            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-              Você foi convidado(a) para o <strong>TBL Virtual</strong> com o plano <strong>${planName}</strong>.
-              Para começar, clique no botão abaixo e cadastre sua senha de acesso.
-            </p>
-            <div style="text-align: center; margin: 28px 0;">
-              <a href="${origin}/forgot-password" 
-                 style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
-                Cadastrar Senha
-              </a>
-            </div>
-            <p style="font-size: 13px; color: #9ca3af; text-align: center;">
-              Caso o botão não funcione, acesse ${origin}/forgot-password e informe seu e-mail (${email}) para receber o link de redefinição de senha.
-            </p>
-            <p style="font-size: 13px; color: #9ca3af; text-align: center; margin-top: 24px;">
-              TBL Virtual — Aprendizagem Baseada em Equipes
-            </p>
-          </div>
-        </div>
-      </body>
-      </html>`;
-
-      await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-        body: JSON.stringify({
-          from: "TBL Virtual <onboarding@resend.dev>",
-          to: [email],
-          subject: "🎓 Você foi convidado para o TBL Virtual!",
-          html,
-        }),
-      });
-      console.log(`[INVITE] Welcome email sent to ${email}`);
+    // Grant plan via manual_subscriptions
+    if (effectivePlan !== "free") {
+      await supabase.from("manual_subscriptions").upsert({
+        user_id: userId,
+        plan: effectivePlan,
+        granted_by: callerId,
+      } as any, { onConflict: "user_id" });
     }
 
     return new Response(JSON.stringify({ success: true, userId }), {
