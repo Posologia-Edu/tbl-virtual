@@ -489,10 +489,19 @@ export default function TeacherDashboard() {
     } finally { setInviteLoading(false); }
   };
 
-  const sendContact = () => {
+  const sendContact = async () => {
     if (!contactSubject.trim() || !contactMessage.trim()) { toast.error('Preencha todos os campos'); return; }
-    toast.success('Mensagem enviada com sucesso!');
-    setContactSubject(''); setContactMessage('');
+    try {
+      const { data, error } = await supabase.functions.invoke('send-contact-email', {
+        body: { subject: contactSubject.trim(), message: contactMessage.trim() },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('Mensagem enviada com sucesso!');
+      setContactSubject(''); setContactMessage('');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao enviar mensagem');
+    }
   };
 
   const resendInvite = async (email: string, fullName: string, plan: string = 'free'): Promise<void> => {
