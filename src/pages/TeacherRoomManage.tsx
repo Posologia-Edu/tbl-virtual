@@ -280,7 +280,10 @@ export default function TeacherRoomManage() {
           }
         }
       }
-      await supabase.from('rooms').update({ current_stage: nextStage, trat_end_time: null, app_end_time: endTime } as any).eq('id', roomId!);
+      await supabase.from('rooms').update({ 
+        current_stage: nextStage, trat_end_time: null, app_end_time: endTime,
+        current_app_question_index: 0, app_alternatives_released: false,
+      } as any).eq('id', roomId!);
     } else {
       await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null } as any).eq('id', roomId!);
     }
@@ -367,6 +370,37 @@ export default function TeacherRoomManage() {
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Application phase hooks (must be before early return)
+  const currentAppIdx = (room as any)?.current_app_question_index ?? 0;
+  const alternativesReleased = (room as any)?.app_alternatives_released ?? false;
+  const appWindowTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-lock after 1s when first team responds to current question
+  useEffect(() => {
+    if (!alternativesReleased || appQuestions.length === 0) return;
+    const currentQ = appQuestions[currentAppIdx];
+    if (!currentQ) return;
+    
+    const hasResponseForCurrentQ = appResponses.some(
+      (r: any) => r.question_id === currentQ.id
+    );
+    
+    if (hasResponseForCurrentQ) {
+      if (appWindowTimerRef.current) clearTimeout(appWindowTimerRef.current);
+      appWindowTimerRef.current = setTimeout(async () => {
+        await supabase.from('rooms').update({ app_alternatives_released: false } as any).eq('id', roomId!);
+        appWindowTimerRef.current = null;
+      }, 1000);
+    }
+    
+    return () => {
+      if (appWindowTimerRef.current) {
+        clearTimeout(appWindowTimerRef.current);
+        appWindowTimerRef.current = null;
+      }
+    };
+  }, [alternativesReleased, appResponses, currentAppIdx, appQuestions]);
 
   if (!room) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Carregando...</div>;
 
@@ -924,103 +958,178 @@ export default function TeacherRoomManage() {
     </div>
   );
 
-  // ============ APPLICATION MONITORING ============
+  // ============ APPLICATION MONITORING (Professor-controlled) ============
+  const releaseAlternatives = async () => {
+    await supabase.from('rooms').update({ app_alternatives_released: true } as any).eq('id', roomId!);
+    toast.success('Alternativas liberadas para os grupos!');
+  };
+
+  const nextAppQuestion = async () => {
+    const nextIdx = currentAppIdx + 1;
+    await supabase.from('rooms').update({ 
+      current_app_question_index: nextIdx, 
+      app_alternatives_released: false 
+    } as any).eq('id', roomId!);
+    toast.success(`Avançou para questão ${nextIdx + 1}`);
+  };
+
+  const releaseReports = async () => {
+    setSendingEmails(true);
+    try {
+      await supabase.from('rooms').update({ current_stage: 'finished', app_end_time: null } as any).eq('id', roomId!);
+      const res = await supabase.functions.invoke('send-report-email', { body: { roomId } });
+      if (res.error) throw res.error;
+      const data = res.data as any;
+      if (data.sent === 0) {
+        toast.warning('Nenhum aluno possui e-mail real cadastrado.');
+      } else {
+        toast.success(`Relatórios enviados para ${data.sent} aluno(s)!`);
+      }
+    } catch (err: any) {
+      toast.error('Erro ao enviar relatórios: ' + (err.message || 'Erro desconhecido'));
+    } finally {
+      setSendingEmails(false);
+    }
+  };
+
   const renderAppMonitoring = () => {
-    const teamsAnsweredAll = teams.filter((t: any) => {
-      return appQuestions.every(q => appResponses.some((r: any) => r.question_id === q.id && r.team_id === t.id));
-    }).length;
+    const currentQ = appQuestions[currentAppIdx];
+    const allQuestionsFinished = currentAppIdx >= appQuestions.length;
 
     return (
       <div className="space-y-6">
-        {appTimeLeft !== null && (
-          <Card className={appTimeLeft <= 60 ? 'border-destructive' : ''}>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Clock className={`w-5 h-5 ${appTimeLeft <= 60 ? 'text-destructive animate-pulse' : 'text-muted-foreground'}`} />
-                  <span className="text-sm font-medium">Tempo restante da Aplicação</span>
-                </div>
-                <span className={`font-mono text-2xl font-bold ${appTimeLeft <= 60 ? 'text-destructive' : ''}`}>{formatTime(appTimeLeft)}</span>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <Button size="sm" variant="outline" onClick={() => extendTimer(5, 'app')} className="flex-1">+5 min</Button>
-                <Button size="sm" variant="outline" onClick={() => extendTimer(10, 'app')} className="flex-1">+10 min</Button>
-                <Button size="sm" variant="outline" onClick={() => extendTimer(15, 'app')} className="flex-1">+15 min</Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
         <div className="text-center">
           <h2 className="text-xl font-heading font-bold mb-4">{linkedQuiz?.title || room.name}</h2>
-          <div className="grid grid-cols-4 gap-4 max-w-2xl mx-auto">
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).max_grade ?? 10}</p><p className="text-xs text-muted-foreground">Nota Máxima</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).individual_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Individual</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).team_pct ?? 40}</p><p className="text-xs text-muted-foreground">% Equipe</p></CardContent></Card>
-            <Card className="bg-muted/50"><CardContent className="py-4 text-center"><p className="text-3xl font-bold">{(room as any).application_pct ?? 30}</p><p className="text-xs text-muted-foreground">% Aplicação</p></CardContent></Card>
-          </div>
+          <Badge className="phase-app text-lg px-4 py-1">Aplicação de Conceitos</Badge>
         </div>
 
-        <hr className="border-primary/30" />
+        {allQuestionsFinished || !currentQ ? (
+          <Card>
+            <CardContent className="pt-6 pb-6 text-center space-y-4">
+              <CheckCircle2 className="w-12 h-12 mx-auto text-success" />
+              <h3 className="text-lg font-heading font-bold">Todas as questões de aplicação foram concluídas!</h3>
+              <p className="text-sm text-muted-foreground">
+                Clique abaixo para encerrar a sessão e enviar os relatórios por e-mail aos alunos.
+              </p>
+              <Button 
+                onClick={releaseReports} 
+                disabled={sendingEmails}
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg"
+              >
+                {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Current question display */}
+            <Card className="overflow-hidden">
+              <div className="bg-muted py-3 text-center border-b">
+                <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
+              </div>
+              <CardContent className="pt-6 space-y-5">
+                <p className="text-base leading-relaxed">{currentQ.question_text}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {(['A', 'B'] as const).map(opt => {
+                    const label = opt === 'A' ? (currentQ.option_a || 'V') : (currentQ.option_b || 'F');
+                    return (
+                      <div key={opt} className={`p-6 rounded-xl border-2 text-center text-xl font-bold ${
+                        alternativesReleased ? 'border-primary bg-primary/5 animate-pulse' : 'border-border opacity-50'
+                      }`}>
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
 
-        {/* Team responses table with colors */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-heading flex items-center gap-2">
-              <Badge className="phase-app">Aplicação de Conceitos</Badge> Respostas por Equipe
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {appQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação</p>
-            ) : (
-              <ScrollArea className="w-full">
+                <div className="flex gap-3">
+                  {!alternativesReleased ? (
+                    <Button onClick={releaseAlternatives} className="flex-1 py-5 text-base bg-success hover:bg-success/90">
+                      🔓 Liberar Alternativas
+                    </Button>
+                  ) : (
+                    <div className="flex-1 text-center py-3 bg-success/10 rounded-lg border border-success/30">
+                      <p className="text-success font-semibold animate-pulse">⏱ Alternativas liberadas — capturando respostas...</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Team responses for current question */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-heading">Respostas dos Grupos — Q{currentAppIdx + 1}</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[120px]">Equipe</TableHead>
-                      {appQuestions.map((_: any, i: number) => (
-                        <TableHead key={i} className="text-center min-w-[80px]">Q{i + 1}</TableHead>
-                      ))}
+                      <TableHead>Equipe</TableHead>
+                      <TableHead className="text-center">Resposta</TableHead>
+                      <TableHead className="text-center">Resultado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {teams.map((t: any) => (
-                      <TableRow key={t.id}>
-                        <TableCell className="font-medium text-primary">{t.name}</TableCell>
-                        {appQuestions.map((q: any) => {
-                          const response = appResponses.find((r: any) => r.question_id === q.id && r.team_id === t.id);
-                          if (!response) return <TableCell key={q.id} className="text-center text-muted-foreground text-xs">—</TableCell>;
-                          const selectedOpt = response.selected_option;
-                          const correctAnswer = q.correct_answer?.trim();
-                          const optLabel = selectedOpt === 'A' ? (q.option_a || 'V') : (q.option_b || 'F');
-                          const isCorrect = correctAnswer && ((correctAnswer === 'V' && selectedOpt === 'A') || (correctAnswer === 'F' && selectedOpt === 'B'));
-                          return (
-                            <TableCell key={q.id} className="text-center">
-                              <span className={`font-bold text-sm px-2 py-1 rounded ${
-                                isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    {teams.map((t: any) => {
+                      const response = appResponses.find((r: any) => r.question_id === currentQ.id && r.team_id === t.id);
+                      const selectedOpt = response?.selected_option;
+                      const correctAnswer = currentQ.correct_answer?.trim();
+                      const optLabel = selectedOpt === 'A' ? (currentQ.option_a || 'V') : selectedOpt === 'B' ? (currentQ.option_b || 'F') : null;
+                      const isCorrect = correctAnswer && selectedOpt && (
+                        (correctAnswer === 'V' && selectedOpt === 'A') || 
+                        (correctAnswer === 'F' && selectedOpt === 'B') ||
+                        (correctAnswer === 'A' && selectedOpt === 'A') ||
+                        (correctAnswer === 'B' && selectedOpt === 'B')
+                      );
+                      return (
+                        <TableRow key={t.id}>
+                          <TableCell className="font-medium text-primary">{t.name}</TableCell>
+                          <TableCell className="text-center">
+                            {optLabel ? (
+                              <span className={`font-bold text-sm px-3 py-1 rounded ${
+                                isCorrect ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'
                               }`}>
                                 {optLabel}
                               </span>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    ))}
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {response ? (
+                              isCorrect ? <CheckCircle2 className="w-5 h-5 text-success mx-auto" /> : <XCircle className="w-5 h-5 text-destructive mx-auto" />
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        <div className="text-sm text-muted-foreground text-center">
-          {teamsAnsweredAll}/{teams.length} equipes finalizaram todas as questões
+            {/* Next question button */}
+            <Button 
+              onClick={nextAppQuestion} 
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg"
+              disabled={alternativesReleased}
+            >
+              {currentAppIdx < appQuestions.length - 1 
+                ? `Próxima Questão (Q${currentAppIdx + 2})` 
+                : 'Finalizar Questões de Aplicação'}
+            </Button>
+          </>
+        )}
+
+        {/* Question progress dots */}
+        <div className="flex justify-center gap-1.5 pt-2">
+          {appQuestions.map((_: any, i: number) => (
+            <div key={i} className={`w-3 h-3 rounded-full transition-all ${
+              i === currentAppIdx ? 'bg-primary scale-125' : i < currentAppIdx ? 'bg-success' : 'bg-border'
+            }`} />
+          ))}
         </div>
-
-        <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
-          Finalizar Aplicação → Encerrar Sessão
-        </Button>
       </div>
     );
   };
