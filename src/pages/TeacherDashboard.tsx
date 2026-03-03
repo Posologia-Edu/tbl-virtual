@@ -417,6 +417,10 @@ export default function TeacherDashboard() {
   // Quiz management
   const createQuiz = async () => {
     if (!newQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
+    if (isFinite(planLimits.maxQuizzes) && quizzes.length >= planLimits.maxQuizzes) {
+      planLimits.showUpgradeDialog('Questionários ilimitados');
+      return;
+    }
     const { error } = await supabase.from('quizzes').insert({ title: newQuizTitle.trim(), teacher_id: user!.id });
     if (error) { toast.error('Falha ao criar questionário'); return; }
     toast.success('Questionário criado!');
@@ -504,6 +508,11 @@ export default function TeacherDashboard() {
 
   const addQuestion = async () => {
     if (!qText.trim() || !optA || !optB || !optC || !optD) { toast.error('Preencha todos os campos'); return; }
+    const totalQ = questions.length + appQuestions.length;
+    if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
+      planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
+      return;
+    }
     const { error } = await supabase.from('questions').insert({
       quiz_id: selectedQuiz!.id, question_text: qText.trim(),
       option_a: optA, option_b: optB, option_c: optC, option_d: optD,
@@ -520,6 +529,11 @@ export default function TeacherDashboard() {
 
   const addAppQuestionToQuiz = async () => {
     if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
+    const totalQ = questions.length + appQuestions.length;
+    if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
+      planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
+      return;
+    }
     const { error } = await supabase.from('application_questions').insert({
       quiz_id: selectedQuiz!.id, question_text: appQText.trim(),
       option_a: 'V', option_b: 'F', option_c: null, option_d: null,
@@ -581,6 +595,10 @@ export default function TeacherDashboard() {
 
   const generateWithAI = async () => {
     if (!aiFile || !aiQuizTitle.trim()) return;
+    if (isFinite(planLimits.maxQuizzes) && quizzes.length >= planLimits.maxQuizzes) {
+      planLimits.showUpgradeDialog('Questionários ilimitados');
+      return;
+    }
     if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
     if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
     if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
@@ -1133,10 +1151,18 @@ export default function TeacherDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-heading font-bold">Meus Questionários</h2>
-        <Badge variant="outline" className="text-lg font-heading">{quizzes.length}</Badge>
+        <Badge variant="outline" className="text-lg font-heading">
+          {isFinite(planLimits.maxQuizzes) ? `${quizzes.length}/${planLimits.maxQuizzes}` : quizzes.length}
+        </Badge>
       </div>
       <div className="flex gap-3">
-        <Button variant="link" className="text-primary px-0" onClick={() => setActiveView('create-quiz')}>
+        <Button variant="link" className="text-primary px-0" onClick={() => {
+          if (isFinite(planLimits.maxQuizzes) && quizzes.length >= planLimits.maxQuizzes) {
+            planLimits.showUpgradeDialog('Questionários ilimitados');
+            return;
+          }
+          setActiveView('create-quiz');
+        }}>
           <Plus className="w-4 h-4 mr-1" /> Novo Questionário
         </Button>
         <Button variant="link" className="px-0" onClick={() => {
@@ -1928,7 +1954,13 @@ export default function TeacherDashboard() {
                       <CollapsibleContent>
                         <SidebarMenu className="pl-6 mt-1 space-y-0.5">
                           <SidebarMenuItem>
-                            <SidebarMenuButton onClick={() => setActiveView('create-quiz')} isActive={activeView === 'create-quiz'} className="cursor-pointer text-sm">
+                            <SidebarMenuButton onClick={() => {
+                              if (isFinite(planLimits.maxQuizzes) && quizzes.length >= planLimits.maxQuizzes) {
+                                planLimits.showUpgradeDialog('Questionários ilimitados');
+                                return;
+                              }
+                              setActiveView('create-quiz');
+                            }} isActive={activeView === 'create-quiz'} className="cursor-pointer text-sm">
                               <span>Criar Questionário</span>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
