@@ -1187,10 +1187,15 @@ export default function TeacherRoomManage() {
         ).length;
       }
 
-      const iratGrade = maxIratScore > 0 ? (iratRawScore / maxIratScore) * maxGradeVal : 0;
-      const tratGrade = maxTratScore > 0 ? (tratRawScore / maxTratScore) * maxGradeVal : 0;
-      const appGrade = maxAppScore > 0 ? (appRawScore / maxAppScore) * maxGradeVal : 0;
-      const finalGrade = iratGrade * IRAT_PCT + tratGrade * TRAT_PCT + appGrade * APP_PCT;
+      const iratBaseGrade = maxIratScore > 0 ? (iratRawScore / maxIratScore) * maxGradeVal : 0;
+      const tratBaseGrade = maxTratScore > 0 ? (tratRawScore / maxTratScore) * maxGradeVal : 0;
+      const appBaseGrade = maxAppScore > 0 ? (appRawScore / maxAppScore) * maxGradeVal : 0;
+
+      // Stage points must respect configured maxima (ex.: 3.00, 4.00, 3.00 for 30/40/30 on max 10)
+      const iratGrade = iratBaseGrade * IRAT_PCT;
+      const tratGrade = tratBaseGrade * TRAT_PCT;
+      const appGrade = appBaseGrade * APP_PCT;
+      const finalGrade = iratGrade + tratGrade + appGrade;
 
       return {
         ra, name, studentId, teamName: studentTeam?.name || '—',
