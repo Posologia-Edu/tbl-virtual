@@ -168,6 +168,8 @@ export default function TeacherDashboard() {
   const [instLinkEmail, setInstLinkEmail] = useState('');
   const [instLinkLoading, setInstLinkLoading] = useState(false);
   const [instInviteOpen, setInstInviteOpen] = useState(false);
+  const [instName, setInstName] = useState('');
+  const [instNameSaving, setInstNameSaving] = useState(false);
 
   // Invite state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -347,6 +349,10 @@ export default function TeacherDashboard() {
   // ─── Institutional management ───
   const loadInstitutionTeachers = async () => {
     if (!user) return;
+    // Load institution name from own profile
+    const { data: ownProfile } = await supabase.from('profiles').select('institution').eq('id', user.id).single();
+    if (ownProfile?.institution) setInstName(ownProfile.institution);
+
     const { data: subs } = await supabase
       .from('manual_subscriptions')
       .select('user_id, plan, granted_at')
@@ -361,6 +367,33 @@ export default function TeacherDashboard() {
     setInstitutionTeachers(merged);
   };
 
+  const saveInstitutionName = async () => {
+    if (!user || !instName.trim()) { toast.error('Informe o nome da instituição'); return; }
+    setInstNameSaving(true);
+    try {
+      // Update own profile
+      await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', user.id);
+      
+      // Update all linked teachers
+      const { data: subs } = await supabase
+        .from('manual_subscriptions')
+        .select('user_id')
+        .eq('granted_by', user.id);
+      if (subs && subs.length > 0) {
+        const userIds = subs.map((s: any) => s.user_id);
+        for (const uid of userIds) {
+          await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', uid);
+        }
+      }
+      toast.success('Instituição atualizada para todos os professores vinculados!');
+      loadInstitutionTeachers();
+    } catch (err: any) {
+      toast.error('Erro ao salvar instituição');
+    } finally {
+      setInstNameSaving(false);
+    }
+  };
+
   const handleInstitutionInvite = async () => {
     if (!instInviteEmail || !instInviteName) { toast.error('Preencha nome e e-mail'); return; }
     setInstInviteLoading(true);
@@ -370,6 +403,10 @@ export default function TeacherDashboard() {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      // Set institution on the invited teacher if we have one
+      if (instName.trim() && data?.userId) {
+        await supabase.from('profiles').update({ institution: instName.trim() } as any).eq('id', data.userId);
+      }
       toast.success('Professor convidado com sucesso!');
       setInstInviteEmail(''); setInstInviteName(''); setInstInviteOpen(false);
       loadInstitutionTeachers();
@@ -395,8 +432,8 @@ export default function TeacherDashboard() {
         granted_by: user!.id,
       } as any, { onConflict: 'user_id' });
       if (error) throw error;
-      // Also approve
-      await supabase.from('profiles').update({ is_approved: true } as any).eq('id', teacherId);
+      // Also approve and set institution
+      await supabase.from('profiles').update({ is_approved: true, institution: instName.trim() || undefined } as any).eq('id', teacherId);
       toast.success('Professor vinculado à instituição!');
       setInstLinkEmail('');
       loadInstitutionTeachers();
@@ -2022,6 +2059,28 @@ export default function TeacherDashboard() {
           </p>
         </div>
       </div>
+
+      {/* Institution name */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Building2 className="w-5 h-5" /> Nome da Instituição
+          </CardTitle>
+          <CardDescription>Defina o nome da sua instituição. Ele será aplicado automaticamente a todos os professores vinculados.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <Label>Instituição</Label>
+              <Input value={instName} onChange={e => setInstName(e.target.value)} placeholder="Ex: Universidade Federal..." />
+            </div>
+            <Button onClick={saveInstitutionName} disabled={instNameSaving}>
+              {instNameSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+              Salvar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">

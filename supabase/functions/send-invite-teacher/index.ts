@@ -106,13 +106,21 @@ serve(async (req) => {
         role: "teacher",
       }, { onConflict: "user_id,role" } as any);
 
-      // Send password reset email
+      // Generate password reset link
       const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
-      await supabase.auth.admin.generateLink({
+      const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type: "recovery",
         email,
         options: { redirectTo: `${origin}/reset-password` },
       });
+
+      let recoveryUrl = `${origin}/forgot-password`;
+      if (!linkError && linkData?.properties?.action_link) {
+        recoveryUrl = linkData.properties.action_link;
+        console.log(`[INVITE] Recovery link generated for ${email}`);
+      } else {
+        console.warn(`[INVITE] Could not generate recovery link: ${linkError?.message}, falling back to forgot-password`);
+      }
 
       // Send welcome email
       const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -134,7 +142,7 @@ serve(async (req) => {
                 Para começar, clique no botão abaixo e cadastre sua senha de acesso.
               </p>
               <div style="text-align: center; margin: 28px 0;">
-                <a href="${origin}/forgot-password" 
+                <a href="${recoveryUrl}" 
                    style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
                   Cadastrar Senha
                 </a>
@@ -158,6 +166,8 @@ serve(async (req) => {
           }),
         });
         console.log(`[INVITE] Welcome email sent to ${email}`);
+      } else {
+        console.warn(`[INVITE] RESEND_API_KEY not set, no welcome email sent`);
       }
     }
 
