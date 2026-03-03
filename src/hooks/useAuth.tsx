@@ -95,6 +95,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    // Keep subscription state fresh after checkout redirects/webhook propagation
+    const retry1 = setTimeout(() => checkSubscription(), 3000);
+    const retry2 = setTimeout(() => checkSubscription(), 10000);
+    const intervalId = setInterval(() => checkSubscription(), 60000);
+
+    return () => {
+      clearTimeout(retry1);
+      clearTimeout(retry2);
+      clearInterval(intervalId);
+    };
+  }, [user, checkSubscription]);
+
   const signUp = async (email: string, password: string, fullName: string, role: AppRole) => {
     const { data, error } = await supabase.auth.signUp({
       email,
