@@ -49,6 +49,7 @@ type Room = {
   is_active: boolean;
   quiz_id: string | null;
   created_at: string;
+  cancelled_at?: string | null;
 };
 
 type Quiz = {
@@ -562,6 +563,26 @@ export default function TeacherDashboard() {
     loadData();
   };
 
+  const canReapply = (room: Room) => {
+    if (!room.cancelled_at || room.is_active) return false;
+    const cancelledAt = new Date(room.cancelled_at).getTime();
+    const now = Date.now();
+    return (now - cancelledAt) < 24 * 60 * 60 * 1000; // within 24h
+  };
+
+  const reapplyRoom = async (room: Room) => {
+    await supabase.from('rooms').update({ 
+      is_active: true, 
+      current_stage: 'waiting',
+      cancelled_at: null,
+      irat_end_time: null,
+      trat_end_time: null,
+      app_end_time: null,
+    } as any).eq('id', room.id);
+    toast.success('Sala reativada! Você pode iniciar uma nova aplicação.');
+    loadData();
+  };
+
   // Quiz management
   const createQuiz = async () => {
     if (!newQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
@@ -993,6 +1014,14 @@ export default function TeacherDashboard() {
                 <div className="flex gap-2">
                   {room.is_active && room.current_stage !== 'finished' && (
                     <Button size="sm" onClick={() => advanceStage(room)} className="flex-1"><Play className="w-3 h-3 mr-1" /> Próxima Fase</Button>
+                  )}
+                  {!room.is_active && canReapply(room) && (
+                    <Button size="sm" onClick={() => reapplyRoom(room)} className="flex-1" variant="outline">
+                      <RefreshCw className="w-3 h-3 mr-1" /> Reaplicar
+                    </Button>
+                  )}
+                  {!room.is_active && room.cancelled_at && !canReapply(room) && (
+                    <Badge variant="outline" className="text-destructive border-destructive/30 text-xs">Encerrada definitivamente</Badge>
                   )}
                   <Button size="sm" variant="outline" onClick={() => navigate(`/room/${room.id}/manage`)}><ChevronRight className="w-3 h-3" /></Button>
                   <Button size="sm" variant="ghost" onClick={() => toggleArchive(room)}><Archive className="w-3 h-3" /></Button>

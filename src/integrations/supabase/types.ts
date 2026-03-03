@@ -552,6 +552,7 @@ export type Database = {
         Row: {
           app_end_time: string | null
           application_pct: number | null
+          cancelled_at: string | null
           class_id: string | null
           code: string
           created_at: string
@@ -572,6 +573,7 @@ export type Database = {
         Insert: {
           app_end_time?: string | null
           application_pct?: number | null
+          cancelled_at?: string | null
           class_id?: string | null
           code: string
           created_at?: string
@@ -592,6 +594,7 @@ export type Database = {
         Update: {
           app_end_time?: string | null
           application_pct?: number | null
+          cancelled_at?: string | null
           class_id?: string | null
           code?: string
           created_at?: string

@@ -40,6 +40,7 @@ type Room = {
   trat_end_time: string | null;
   app_end_time: string | null;
   show_individual_in_team?: boolean;
+  is_active: boolean;
 };
 
 type TeamMember = {
@@ -421,12 +422,33 @@ export default function StudentRoomView() {
     }
   }, [timeLeft]);
 
+  // Detect room cancellation and redirect students to home
+  useEffect(() => {
+    if (room && (!room.is_active || room.current_stage === 'finished')) {
+      // Check if room was cancelled (not just finished normally)
+      if (!room.is_active) {
+        toast.error('A aplicação foi cancelada pelo professor.');
+        navigate('/');
+      }
+    }
+  }, [room?.is_active, room?.current_stage, navigate]);
+
   // Realtime
   useEffect(() => {
     const channel = supabase
       .channel(`room-${roomId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
-        (payload) => { setRoom(payload.new as any); setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0); })
+        (payload) => {
+          const newRoom = payload.new as any;
+          setRoom(newRoom);
+          // If room was deactivated, students get kicked immediately
+          if (!newRoom.is_active) {
+            toast.error('A aplicação foi cancelada pelo professor.');
+            navigate('/');
+            return;
+          }
+          setCurrentQ(0); setTratFeedback(null); setAppCurrentQ(0);
+        })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
         () => { loadTratAttempts(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
@@ -441,7 +463,7 @@ export default function StudentRoomView() {
         () => { loadAppeals(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants]);
+  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants, navigate]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
