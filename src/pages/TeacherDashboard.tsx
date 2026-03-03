@@ -28,6 +28,7 @@ import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
   BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown, Key,
+  Building2, UserPlus,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -86,7 +87,7 @@ type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
   | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank'
-  | 'admin-subscribers';
+  | 'admin-subscribers' | 'institution';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -158,6 +159,15 @@ export default function TeacherDashboard() {
   const [inlineCheckoutLoading, setInlineCheckoutLoading] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
 
+  // Institutional state
+  const [institutionTeachers, setInstitutionTeachers] = useState<any[]>([]);
+  const [instInviteEmail, setInstInviteEmail] = useState('');
+  const [instInviteName, setInstInviteName] = useState('');
+  const [instInviteLoading, setInstInviteLoading] = useState(false);
+  const [instLinkEmail, setInstLinkEmail] = useState('');
+  const [instLinkLoading, setInstLinkLoading] = useState(false);
+  const [instInviteOpen, setInstInviteOpen] = useState(false);
+
   // Invite state
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -193,12 +203,13 @@ export default function TeacherDashboard() {
     if (user) loadData();
   }, [user]);
 
-  const showAdminPanel = isAdmin || planLimits.canUseAdminPanel;
+  const isInstitutionalPlan = planLimits.currentPlan === 'institutional';
 
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
-    if (user && activeView === 'admin-teachers' && showAdminPanel) loadTeachers();
-    if (user && activeView === 'admin-subscribers' && showAdminPanel) loadAdminSubscribers();
+    if (user && activeView === 'admin-teachers' && isAdmin) loadTeachers();
+    if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
+    if (user && activeView === 'institution' && isInstitutionalPlan) loadInstitutionTeachers();
   }, [user, activeView]);
 
   const loadData = async () => {
@@ -320,6 +331,75 @@ export default function TeacherDashboard() {
       };
     });
     setAdminSubscribers(merged);
+  };
+
+  // ─── Institutional management ───
+  const loadInstitutionTeachers = async () => {
+    if (!user) return;
+    const { data: subs } = await supabase
+      .from('manual_subscriptions')
+      .select('user_id, plan, granted_at')
+      .eq('granted_by', user.id);
+    if (!subs || subs.length === 0) { setInstitutionTeachers([]); return; }
+    const userIds = subs.map((s: any) => s.user_id);
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, institution').in('id', userIds);
+    const merged = subs.map((s: any) => {
+      const p = profiles?.find((pr: any) => pr.id === s.user_id);
+      return { ...s, full_name: p?.full_name || '—', email: p?.email || '—', institution: p?.institution || '—' };
+    });
+    setInstitutionTeachers(merged);
+  };
+
+  const handleInstitutionInvite = async () => {
+    if (!instInviteEmail || !instInviteName) { toast.error('Preencha nome e e-mail'); return; }
+    setInstInviteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-invite-teacher', {
+        body: { email: instInviteEmail, fullName: instInviteName, plan: 'pro' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success('Professor convidado com sucesso!');
+      setInstInviteEmail(''); setInstInviteName(''); setInstInviteOpen(false);
+      loadInstitutionTeachers();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao convidar professor');
+    } finally {
+      setInstInviteLoading(false);
+    }
+  };
+
+  const handleInstitutionLink = async () => {
+    if (!instLinkEmail) { toast.error('Informe o e-mail do professor'); return; }
+    setInstLinkLoading(true);
+    try {
+      // Find existing user
+      const { data: profiles } = await supabase.from('profiles').select('id, email').eq('email', instLinkEmail);
+      if (!profiles || profiles.length === 0) { toast.error('Professor não encontrado. Use a opção de convidar.'); return; }
+      const teacherId = profiles[0].id;
+      // Grant pro plan linked to this institution
+      const { error } = await supabase.from('manual_subscriptions').upsert({
+        user_id: teacherId,
+        plan: 'pro',
+        granted_by: user!.id,
+      } as any, { onConflict: 'user_id' });
+      if (error) throw error;
+      // Also approve
+      await supabase.from('profiles').update({ is_approved: true } as any).eq('id', teacherId);
+      toast.success('Professor vinculado à instituição!');
+      setInstLinkEmail('');
+      loadInstitutionTeachers();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao vincular professor');
+    } finally {
+      setInstLinkLoading(false);
+    }
+  };
+
+  const handleInstitutionRemove = async (teacherUserId: string) => {
+    await supabase.from('manual_subscriptions').update({ plan: 'free', granted_by: null } as any).eq('user_id', teacherUserId).eq('granted_by', user!.id);
+    toast.success('Professor removido da instituição');
+    loadInstitutionTeachers();
   };
 
   const blockTeacher = async (id: string, block: boolean) => {
@@ -1869,6 +1949,148 @@ export default function TeacherDashboard() {
     );
   };
 
+  const renderInstitution = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-heading font-bold flex items-center gap-2">
+            <Building2 className="w-6 h-6 text-primary" /> Minha Instituição
+          </h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Gerencie os professores vinculados ao seu plano Institucional. Cada professor adicionado recebe acesso <Badge variant="secondary" className="ml-1">Pro</Badge>
+          </p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Dialog open={instInviteOpen} onOpenChange={setInstInviteOpen}>
+          <DialogTrigger asChild>
+            <Button><UserPlus className="w-4 h-4 mr-2" /> Convidar Novo Professor</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Convidar Novo Professor</DialogTitle>
+              <DialogDescription>O professor receberá um e-mail com link para criar sua senha e já terá acesso Pro vinculado à sua instituição.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label>Nome completo</Label>
+                <Input value={instInviteName} onChange={e => setInstInviteName(e.target.value)} placeholder="Nome do professor" />
+              </div>
+              <div>
+                <Label>E-mail</Label>
+                <Input value={instInviteEmail} onChange={e => setInstInviteEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+              </div>
+              <Button onClick={handleInstitutionInvite} disabled={instInviteLoading} className="w-full">
+                {instInviteLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+                Enviar Convite
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="outline"><Search className="w-4 h-4 mr-2" /> Vincular Professor Existente</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Vincular Professor Existente</DialogTitle>
+              <DialogDescription>Informe o e-mail de um professor já cadastrado na plataforma para vinculá-lo à sua instituição com acesso Pro.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
+              <div>
+                <Label>E-mail do professor</Label>
+                <Input value={instLinkEmail} onChange={e => setInstLinkEmail(e.target.value)} placeholder="email@exemplo.com" type="email" />
+              </div>
+              <Button onClick={handleInstitutionLink} disabled={instLinkLoading} className="w-full">
+                {instLinkLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Users className="w-4 h-4 mr-2" />}
+                Vincular Professor
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Teacher list */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Users className="w-5 h-5" /> Professores Vinculados
+            <Badge variant="secondary">{institutionTeachers.length}</Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {institutionTeachers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p>Nenhum professor vinculado ainda.</p>
+              <p className="text-sm">Use os botões acima para convidar ou vincular professores.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-primary/10">
+                  <TableHead>Nome</TableHead>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead>Instituição</TableHead>
+                  <TableHead className="text-center">Plano</TableHead>
+                  <TableHead className="text-center">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {institutionTeachers.map((t: any) => (
+                  <TableRow key={t.user_id}>
+                    <TableCell className="font-medium">{t.full_name}</TableCell>
+                    <TableCell className="text-sm">{t.email}</TableCell>
+                    <TableCell className="text-sm">{t.institution || '—'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">Pro</Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remover professor?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              O professor <strong>{t.full_name}</strong> perderá o acesso Pro e voltará para o plano Gratuito.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleInstitutionRemove(t.user_id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground">
+            <strong>ℹ️ Importante:</strong> Os professores vinculados recebem acesso Pro automaticamente. 
+            Caso seu plano Institucional seja cancelado, todos os professores vinculados voltarão ao plano Gratuito.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+
   const renderQuizConfig = () => {
     if (!configQuiz) return null;
     const indPct = parseInt(individualPct) || 0;
@@ -2041,8 +2263,23 @@ export default function TeacherDashboard() {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            {/* Admin */}
-            {showAdminPanel && (
+            {/* Institutional */}
+            {isInstitutionalPlan && !isAdmin && (
+              <SidebarGroup>
+                <SidebarGroupLabel>Minha Instituição</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton onClick={() => setActiveView('institution')} isActive={activeView === 'institution'} className="cursor-pointer">
+                        <Building2 className="w-4 h-4" /><span>Gerenciar Professores</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
+
+            {isAdmin && (
               <SidebarGroup>
                 <SidebarGroupLabel>Administração</SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -2120,9 +2357,10 @@ export default function TeacherDashboard() {
                 )}
                 {activeView === 'classes' && user && <ClassManagement userId={user.id} />}
                 {activeView === 'question-bank' && user && <QuestionBank userId={user.id} />}
-                {activeView === 'admin-teachers' && showAdminPanel && renderAdminTeachers()}
-                {activeView === 'admin-api-keys' && showAdminPanel && <AdminApiKeys />}
-                {activeView === 'admin-subscribers' && showAdminPanel && renderAdminSubscribers()}
+                {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
+                {activeView === 'admin-api-keys' && isAdmin && <AdminApiKeys />}
+                {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
+                {activeView === 'institution' && isInstitutionalPlan && renderInstitution()}
               </>
             )}
           </main>
