@@ -19,6 +19,8 @@ const FEATURE_PLAN_MAP: Record<string, PlanKey[]> = {
   'Exportar CSV/PDF': ['pro', 'institutional'],
   'Salas ilimitadas': ['pro', 'institutional'],
   'Alunos ilimitados': ['pro', 'institutional'],
+  'Questionários ilimitados': ['pro', 'institutional'],
+  'Questões ilimitadas por questionário': ['pro', 'institutional'],
   'Painel Administrativo': ['institutional'],
   'White-label': ['institutional'],
   'Integração LMS': ['institutional'],

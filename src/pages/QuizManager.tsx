@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Plus, Trash2, ArrowLeft, PencilLine, CheckCircle2, XCircle, CirclePlus, CirclePlay, HelpCircle, BookOpen, FileQuestion, Sparkles, Upload, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import UpgradeDialog from '@/components/UpgradeDialog';
 
 type Question = {
   id: string;
@@ -46,6 +48,7 @@ type ViewMode = 'list' | 'create' | 'quiz-detail' | 'add-question' | 'edit-quest
 
 export default function QuizManager() {
   const { user } = useAuth();
+  const { maxQuizzes, maxQuestionsPerQuiz, currentPlan, showUpgradeDialog, upgradeOpen, upgradeFeature, closeUpgradeDialog } = usePlanLimits();
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
@@ -112,6 +115,10 @@ export default function QuizManager() {
 
   const createQuiz = async () => {
     if (!newQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
+    if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
+      showUpgradeDialog('Questionários ilimitados');
+      return;
+    }
     const { data, error } = await supabase.from('quizzes').insert({ title: newQuizTitle.trim(), teacher_id: user!.id }).select().single();
     if (error || !data) { toast.error('Falha ao criar questionário'); return; }
     setCreatedQuizId(data.id);
@@ -144,6 +151,11 @@ export default function QuizManager() {
       toast.error('Preencha todos os campos');
       return;
     }
+    const totalQuestions = questions.length + appQuestions.length;
+    if (!editingQuestion && isFinite(maxQuestionsPerQuiz) && totalQuestions >= maxQuestionsPerQuiz) {
+      showUpgradeDialog('Questões ilimitadas por questionário');
+      return;
+    }
     if (editingQuestion) {
       const { error } = await supabase.from('questions').update({
         question_text: qText.trim(),
@@ -171,6 +183,11 @@ export default function QuizManager() {
   const saveAppQuestion = async () => {
     if (!appQText.trim()) {
       toast.error('Preencha o enunciado');
+      return;
+    }
+    const totalQuestions = questions.length + appQuestions.length;
+    if (!editingAppQuestion && isFinite(maxQuestionsPerQuiz) && totalQuestions >= maxQuestionsPerQuiz) {
+      showUpgradeDialog('Questões ilimitadas por questionário');
       return;
     }
     if (editingAppQuestion) {
@@ -290,6 +307,10 @@ export default function QuizManager() {
   const generateWithAI = async () => {
     if (!aiFile) { toast.error('Selecione um arquivo'); return; }
     if (!aiQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
+    if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
+      showUpgradeDialog('Questionários ilimitados');
+      return;
+    }
     if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
 
     setAiLoading(true);
@@ -721,10 +742,22 @@ export default function QuizManager() {
               {selectedQuiz && (
                 <>
                   <button
-                    onClick={() => setShowTypeDialog(true)}
+                    onClick={() => {
+                      const totalQ = questions.length + appQuestions.length;
+                      if (isFinite(maxQuestionsPerQuiz) && totalQ >= maxQuestionsPerQuiz) {
+                        showUpgradeDialog('Questões ilimitadas por questionário');
+                        return;
+                      }
+                      setShowTypeDialog(true);
+                    }}
                     className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-blue-200/40 rounded transition-colors"
                   >
                     <CirclePlus className="w-5 h-5 text-primary" /> Adicionar Questão
+                    {isFinite(maxQuestionsPerQuiz) && (
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {questions.length + appQuestions.length}/{maxQuestionsPerQuiz}
+                      </span>
+                    )}
                   </button>
                   {(questions.length > 0 || appQuestions.length > 0) && (
                     <button
@@ -902,12 +935,29 @@ export default function QuizManager() {
       </header>
       <main className="container mx-auto px-4 py-6 space-y-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-lg font-heading font-semibold">Seus Questionários</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-heading font-semibold">Seus Questionários</h2>
+            {isFinite(maxQuizzes) && (
+              <span className="text-sm text-muted-foreground">({quizzes.length}/{maxQuizzes})</span>
+            )}
+          </div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => { setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true); }}>
+            <Button size="sm" variant="outline" onClick={() => {
+              if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
+                showUpgradeDialog('Questionários ilimitados');
+                return;
+              }
+              setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true);
+            }}>
               <Sparkles className="w-4 h-4 mr-1" /> Criar com IA
             </Button>
-            <Button size="sm" onClick={() => { setNewQuizTitle(''); setViewMode('create'); }}>
+            <Button size="sm" onClick={() => {
+              if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
+                showUpgradeDialog('Questionários ilimitados');
+                return;
+              }
+              setNewQuizTitle(''); setViewMode('create');
+            }}>
               <Plus className="w-4 h-4 mr-1" /> Novo Questionário
             </Button>
           </div>
@@ -1013,6 +1063,13 @@ export default function QuizManager() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={closeUpgradeDialog}
+        feature={upgradeFeature}
+        currentPlan={currentPlan}
+      />
     </div>
   );
 }
