@@ -1176,7 +1176,14 @@ export default function TeacherRoomManage() {
       let appRawScore = 0;
       if (teamId && appQuestions.length > 0) {
         appRawScore = appQuestions.filter(q =>
-          appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId)
+          appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId && (
+            (q.correct_answer === 'V' && r.selected_option === 'A') ||
+            (q.correct_answer === 'F' && r.selected_option === 'B') ||
+            (q.correct_answer === 'A' && r.selected_option === 'A') ||
+            (q.correct_answer === 'B' && r.selected_option === 'B') ||
+            (q.correct_answer === 'C' && r.selected_option === 'C') ||
+            (q.correct_answer === 'D' && r.selected_option === 'D')
+          ))
         ).length;
       }
 
