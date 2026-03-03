@@ -1489,6 +1489,7 @@ export default function TeacherDashboard() {
               <TableRow className="bg-primary/10">
                 <TableHead>Nome</TableHead>
                 <TableHead>Instituição</TableHead>
+                <TableHead>Plano</TableHead>
                 <TableHead>Cadastro</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-center">Ações</TableHead>
@@ -1496,17 +1497,23 @@ export default function TeacherDashboard() {
             </TableHeader>
             <TableBody>
               {list.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">{emptyMsg}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{emptyMsg}</TableCell></TableRow>
               ) : list.map((t: any) => (
                 <TableRow key={t.id} className={t.is_blocked ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">
                     {t.full_name}
                     {t.role === 'admin' && <Badge className="ml-2 bg-primary text-primary-foreground text-xs">Admin</Badge>}
-                    {t.manualPlan && t.manualPlan !== 'free' && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        {t.manualPlan === 'institutional' ? 'Institucional' : 'Pro'}
-                      </Badge>
-                    )}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    <Badge variant={
+                      t.manualPlan === 'institutional' ? 'default' :
+                      t.manualPlan === 'pro' ? 'secondary' : 'outline'
+                    } className={
+                      t.manualPlan === 'institutional' ? 'bg-primary text-primary-foreground' :
+                      t.manualPlan === 'pro' ? '' : 'text-muted-foreground'
+                    }>
+                      {t.manualPlan === 'institutional' ? 'Institucional' : t.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-sm">{t.institution || '—'}</TableCell>
                   <TableCell className="text-sm">{new Date(t.created_at).toLocaleDateString('pt-BR')}</TableCell>
