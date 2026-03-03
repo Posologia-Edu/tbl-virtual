@@ -159,7 +159,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
           body: JSON.stringify({
-            from: "TBL Virtual <onboarding@resend.dev>",
+            from: "TBL Virtual <noreply@tbl.posologia.app>",
             to: [email],
             subject: "🎓 Você foi convidado para o TBL Virtual!",
             html,
