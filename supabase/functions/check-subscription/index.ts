@@ -103,6 +103,31 @@ serve(async (req) => {
 
     if (!subscribed) {
       logStep("No active subscription (free plan)");
+
+      // If this user was an institutional owner, downgrade all teachers they granted
+      const { data: grantedSubs } = await supabaseClient
+        .from("manual_subscriptions")
+        .select("id, user_id, plan")
+        .eq("granted_by", user.id)
+        .neq("plan", "free");
+
+      if (grantedSubs && grantedSubs.length > 0) {
+        logStep("Downgrading teachers granted by this user", { count: grantedSubs.length });
+        for (const sub of grantedSubs) {
+          await supabaseClient
+            .from("manual_subscriptions")
+            .update({ plan: "free" })
+            .eq("id", sub.id);
+        }
+        logStep("All granted teachers downgraded to free");
+      }
+
+      // Also downgrade this user's own manual subscription if it exists
+      await supabaseClient
+        .from("manual_subscriptions")
+        .update({ plan: "free" })
+        .eq("user_id", user.id)
+        .neq("plan", "free");
     }
 
     return new Response(JSON.stringify({
