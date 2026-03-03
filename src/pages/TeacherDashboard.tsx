@@ -193,10 +193,12 @@ export default function TeacherDashboard() {
     if (user) loadData();
   }, [user]);
 
+  const showAdminPanel = isAdmin || planLimits.canUseAdminPanel;
+
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
-    if (user && activeView === 'admin-teachers' && isAdmin) loadTeachers();
-    if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
+    if (user && activeView === 'admin-teachers' && showAdminPanel) loadTeachers();
+    if (user && activeView === 'admin-subscribers' && showAdminPanel) loadAdminSubscribers();
   }, [user, activeView]);
 
   const loadData = async () => {
@@ -2040,7 +2042,7 @@ export default function TeacherDashboard() {
             </SidebarGroup>
 
             {/* Admin */}
-            {isAdmin && (
+            {showAdminPanel && (
               <SidebarGroup>
                 <SidebarGroupLabel>Administração</SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -2118,9 +2120,9 @@ export default function TeacherDashboard() {
                 )}
                 {activeView === 'classes' && user && <ClassManagement userId={user.id} />}
                 {activeView === 'question-bank' && user && <QuestionBank userId={user.id} />}
-                {activeView === 'admin-teachers' && isAdmin && renderAdminTeachers()}
-                {activeView === 'admin-api-keys' && isAdmin && <AdminApiKeys />}
-                {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
+                {activeView === 'admin-teachers' && showAdminPanel && renderAdminTeachers()}
+                {activeView === 'admin-api-keys' && showAdminPanel && <AdminApiKeys />}
+                {activeView === 'admin-subscribers' && showAdminPanel && renderAdminSubscribers()}
               </>
             )}
           </main>
