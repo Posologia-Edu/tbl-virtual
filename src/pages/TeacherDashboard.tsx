@@ -155,6 +155,7 @@ export default function TeacherDashboard() {
   // Admin state
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
+  const [trialTeachers, setTrialTeachers] = useState<any[]>([]);
   const [approvalPlan, setApprovalPlan] = useState<string>('free');
   const [inlineCheckoutLoading, setInlineCheckoutLoading] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -207,7 +208,7 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
-    if (user && activeView === 'admin-teachers' && isAdmin) loadTeachers();
+    if (user && activeView === 'admin-teachers' && isAdmin) { loadTeachers(); loadTrialTeachers(); }
     if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
     if (user && activeView === 'institution' && isInstitutionalPlan) loadInstitutionTeachers();
   }, [user, activeView]);
@@ -275,13 +276,23 @@ export default function TeacherDashboard() {
     const teacherRoles = roles.filter((r: any) => r.role === 'teacher' || r.role === 'admin');
     const userIds = teacherRoles.map((r: any) => r.user_id);
     if (userIds.length === 0) { setAllTeachers([]); return; }
-    const { data: profiles } = await supabase.from('profiles').select('id, full_name, is_approved, is_blocked, institution, created_at').in('id', userIds);
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, is_approved, is_blocked, institution, created_at').in('id', userIds);
     const merged = (profiles || []).map((p: any) => {
       const r = teacherRoles.find((r: any) => r.user_id === p.id);
       const ms = (manualSubs || []).find((s: any) => s.user_id === p.id);
       return { ...p, role: r?.role || 'teacher', manualPlan: ms?.plan || null, grantedBy: ms?.granted_by || null };
     });
     setAllTeachers(merged);
+  };
+
+  const loadTrialTeachers = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('list-trial-teachers');
+      if (error) { console.error('Error loading trial teachers:', error); return; }
+      setTrialTeachers(data?.trialTeachers || []);
+    } catch (err) {
+      console.error('Error loading trial teachers:', err);
+    }
   };
 
   const approveTeacher = async (id: string) => {
@@ -1031,8 +1042,7 @@ export default function TeacherDashboard() {
       free: { icon: Sparkles, highlight: false },
       pro: { icon: Crown, highlight: true, badge: 'Mais Popular' },
       institutional: { icon: CreditCard, highlight: false },
-    };
-
+  };
 
 
     const handleCheckout = async (planKey: string) => {
@@ -1570,6 +1580,7 @@ export default function TeacherDashboard() {
             <TableHeader>
               <TableRow className="bg-primary/10">
                 <TableHead>Nome</TableHead>
+                <TableHead>E-mail</TableHead>
                 <TableHead>Instituição</TableHead>
                 <TableHead>Plano</TableHead>
                 <TableHead>Cadastro</TableHead>
@@ -1579,13 +1590,15 @@ export default function TeacherDashboard() {
             </TableHeader>
             <TableBody>
               {list.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{emptyMsg}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">{emptyMsg}</TableCell></TableRow>
               ) : list.map((t: any) => (
                 <TableRow key={t.id} className={t.is_blocked ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">
                     {t.full_name}
                     {t.role === 'admin' && <Badge className="ml-2 bg-primary text-primary-foreground text-xs">Admin</Badge>}
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{t.email || '—'}</TableCell>
+                  <TableCell className="text-sm">{t.institution || '—'}</TableCell>
                   <TableCell className="text-sm">
                     <Badge variant={
                       t.manualPlan === 'institutional' ? 'default' :
@@ -1597,7 +1610,6 @@ export default function TeacherDashboard() {
                       {t.manualPlan === 'institutional' ? 'Institucional' : t.manualPlan === 'pro' ? 'Pro' : 'Gratuito'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-sm">{t.institution || '—'}</TableCell>
                   <TableCell className="text-sm">{new Date(t.created_at).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell className="text-center">
                     {t.is_blocked ? (
@@ -1723,6 +1735,55 @@ export default function TeacherDashboard() {
           </h3>
           {renderTeacherTable(selfRegistered, 'Nenhum professor pagante/auto-cadastrado.')}
         </div>
+
+        {/* Professores em Trial */}
+        {trialTeachers.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <h3 className="text-lg font-heading font-semibold flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" /> Professores em Período de Teste
+                <Badge variant="secondary" className="ml-1">{trialTeachers.length}</Badge>
+              </h3>
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-primary/10">
+                        <TableHead>E-mail</TableHead>
+                        <TableHead>Plano</TableHead>
+                        <TableHead>Fim do Trial</TableHead>
+                        <TableHead className="text-center">Dias Restantes</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trialTeachers.map((t: any, idx: number) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-medium">{t.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={t.plan === 'Institucional' ? 'default' : 'secondary'}>
+                              {t.plan}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {t.trial_end ? new Date(t.trial_end).toLocaleDateString('pt-BR') : '—'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {t.days_remaining !== null ? (
+                              <Badge variant={t.days_remaining <= 2 ? 'destructive' : 'outline'} className={t.days_remaining <= 2 ? '' : 'text-orange-600 border-orange-300'}>
+                                {t.days_remaining} {t.days_remaining === 1 ? 'dia' : 'dias'}
+                              </Badge>
+                            ) : '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
       </div>
     );
   };
