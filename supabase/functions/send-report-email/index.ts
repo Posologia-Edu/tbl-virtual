@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: "TBL Virtual <onboarding@resend.dev>", to: [email], subject: `Relatório TBL - ${room.name}`, html }),
+        body: JSON.stringify({ from: "TBL Virtual <noreply@tbl.posologia.app>", to: [email], subject: `Relatório TBL - ${room.name}`, html }),
       });
       if (res.ok) emails.push(email);
     }
