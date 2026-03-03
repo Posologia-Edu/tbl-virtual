@@ -1,80 +1,68 @@
 
 
-## Plano de Implementação
+## Plano: Correção de Realtime na Aplicação de Conceitos + Cálculo de Relatório
 
-Este plano cobre 5 problemas/funcionalidades distintas:
+### Problema 1: Realtime não funciona na fase de aplicação (StudentRoomView.tsx)
 
-### 1. tRAT começa pela questão 10 em vez da questão 1
+**Causa raiz:** O Realtime listener na linha 474 faz `setRoom(newRoom)`, e o `renderApplication()` lê `room?.current_app_question_index` e `room?.app_alternatives_released`. O `setRoom` deveria atualizar o render. **Porém**, o `loadAppData()` (que carrega `appQuestions`) só é chamado no `useEffect` da linha 351 quando `room?.current_stage` muda — mas `current_app_question_index` e `app_alternatives_released` mudam **sem** mudar o stage.
 
-**Causa:** Na `StudentRoomView.tsx`, o Realtime listener (linha 464) faz `setCurrentQ(0)` e `setAppCurrentQ(0)` ao receber uma mudança de stage. Porém, as questões são carregadas via `sort_order` e o `currentQ` pode não ser resetado corretamente ao iniciar o tRAT porque o `renderTrat()` verifica se `hasStarted` e pula para `renderTratAnswering()` que usa `currentQ`, que pode estar apontando para o último índice do iRAT.
+Além disso, `appQuestions` é carregado uma vez quando o stage muda para `application_open`, mas se o load falha (membership não pronta), fica vazio e nunca é recarregado.
 
-**Correção:** Garantir que `setCurrentQ(0)` é chamado explicitamente quando `current_stage` muda para `trat_open` ou `application_open`. Adicionar um `useEffect` dedicado que reseta `currentQ` sempre que `room.current_stage` muda.
+**Correção:**
+1. Adicionar um `useEffect` que recarrega `appQuestions` quando `room?.current_stage === 'application_open'` e `membership` muda (para cobrir o caso em que membership carrega depois).
+2. O Realtime listener já faz `setRoom(newRoom)` que deveria atualizar o render. Verificar se o `Room` type inclui os campos `current_app_question_index` e `app_alternatives_released` — **já inclui** (linhas 44-45). Então o render deve atualizar. O problema real é que **o polling de 3s faz `loadRoom()` que faz um SELECT e `setRoom(data)`**. Isso deveria funcionar.
 
----
+**Diagnóstico adicional:** Na linha 489, há um listener para `application_questions` que chama `loadAppData()`. Mas o primeiro load de `appQuestions` depende de `membership` existir. Se `membership` é null quando `application_open` começa, `loadAppData` retorna questões mas sem respostas. Mais importante: se o listener Realtime NÃO dispara (problema conhecido do Supabase Realtime com filters), o polling só atualiza `room` (via `loadRoom`), mas **não** chama `loadAppData()`.
 
-### 2. Fase de Aplicação de Conceitos: Alunos ficam com animação e não veem questões
+**Solução definitiva:** Adicionar um `useEffect` que roda `loadAppData()` quando o stage é `application_open` E `membership` existe, reagindo a mudanças no `room?.current_app_question_index`. Isso garante que mesmo sem Realtime, o polling (que atualiza `room`) vai triggerar o reload de app questions e responses.
 
-**Causa:** O `renderApplication()` na `StudentRoomView.tsx` carrega `appQuestions` via `loadAppData()`, mas esse load depende de `membership` existir. Se o load ocorre antes da membership estar pronta, as questões ficam vazias. Além disso, o fluxo atual permite que o aluno navegue livremente entre as questões, mas o novo requisito é que o professor controle qual questão é exibida.
+### Problema 2: Alternativas não habilitam em tempo real
 
-**Correção:** Refatorar completamente a fase de aplicação para ser controlada pelo professor:
-- Adicionar `current_app_question_index` e `app_alternatives_released` na tabela `rooms` (migration)
-- O professor avança questão por questão e libera alternativas via botões no painel
-- Os alunos só veem a questão atual e as alternativas ficam desabilitadas até o professor liberar
+**Causa:** `alternativesReleased` é lido de `room?.app_alternatives_released`. Quando o professor seta `app_alternatives_released = true`, o Realtime deveria atualizar `room` no student. Se o Realtime falha, o polling de 3s (via `loadRoom`) deveria pegar. **O render já usa `room?.app_alternatives_released`**, então deveria funcionar.
 
----
+**Problema real provável:** O Realtime do Supabase pode não estar disparando para a table `rooms` com o filter `id=eq.${roomId}`. Vou garantir que o polling de 3s cubra esse caso e que o componente re-renderize corretamente.
 
-### 3. Painel do professor na fase de aplicação: controle questão a questão
+**Solução:** Reduzir o polling para 2s na fase de aplicação (onde a sincronização precisa ser rápida) e garantir que `loadAppData` também é chamado pelo polling quando na fase de aplicação.
 
-**Novo fluxo no `TeacherRoomManage.tsx` (`renderAppMonitoring`):**
-- Exibir apenas a questão atual (baseada em `current_app_question_index`)
-- Botão "Liberar Alternativas" que seta `app_alternatives_released = true` na room
-- Quando o primeiro grupo responde, iniciar janela de 1 segundo
-- Após 1s, alternativas ficam desabilitadas novamente e `app_alternatives_released = false`
-- Botão "Próxima Questão" incrementa `current_app_question_index` e reseta `app_alternatives_released`
-- Exibir respostas dos grupos em tempo real (V/F com cores verde/vermelho)
-- Quando todas as questões terminarem, exibir botão "Liberar Relatórios"
+### Problema 3: Questões não avançam em tempo real
 
----
+**Mesma causa:** `current_app_question_index` vem de `room`, que é atualizado via Realtime/polling. Se room atualiza, o render atualiza. O polling deveria cobrir. Vou confirmar que o polling está funcionando e adicionar reload de app data quando o index muda.
 
-### 4. Captura simultânea de respostas (janela de 1 segundo)
+### Problema 4: Cálculo de relatório errado
 
-**Lógica no `StudentRoomView.tsx`:**
-- Alternativas desabilitadas por padrão
-- Quando `app_alternatives_released = true` (via Realtime), habilitar V/F
-- Ao submeter, a resposta é enviada normalmente
-- O professor vê em tempo real quem respondeu
-- Após 1s do primeiro grupo, o professor seta `app_alternatives_released = false` (pode ser automático via edge function ou pelo frontend do professor ao detectar a primeira resposta)
+**Causa no frontend (linha 1176-1181):**
+```javascript
+appRawScore = appQuestions.filter(q =>
+  appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId)
+).length;
+```
+Isso conta questões com **qualquer** resposta, não apenas corretas. Um grupo que errou 2 de 3 questões recebe `appRaw = 3`.
 
-**Implementação simplificada:** O professor libera as alternativas, os grupos respondem, e a lógica de janela de 1s será gerenciada no frontend do professor: ao detectar a primeira `application_response` para a questão atual, iniciar um timer de 1s e depois setar `app_alternatives_released = false` automaticamente.
-
----
-
-### 5. Botão "Liberar Relatórios" e envio de email ao final
-
-**No `TeacherRoomManage.tsx`:**
-- Quando todas as questões de aplicação terminarem, exibir botão "Liberar Relatórios"
-- Ao clicar, avançar para `finished` e acionar o envio de emails via `send-report-email`
-- O relatório já existe e funciona; apenas ajustar o trigger para que ocorra no momento correto
-
----
-
-### Migration SQL necessária
-
-```sql
-ALTER TABLE public.rooms 
-  ADD COLUMN IF NOT EXISTS current_app_question_index integer DEFAULT 0;
-ALTER TABLE public.rooms 
-  ADD COLUMN IF NOT EXISTS app_alternatives_released boolean DEFAULT false;
+**Correção:** Filtrar por respostas corretas, similar ao edge function (linha 69):
+```javascript
+appRawScore = appQuestions.filter(q =>
+  appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId && (
+    (q.correct_answer === 'V' && r.selected_option === 'A') || 
+    (q.correct_answer === 'F' && r.selected_option === 'B') ||
+    (q.correct_answer === 'A' && r.selected_option === 'A') ||
+    (q.correct_answer === 'B' && r.selected_option === 'B')
+  ))
+).length;
 ```
 
----
+**Verificação da fórmula de nota:** Com nota máxima 10, pesos 30/40/30:
+- `iratGrade = (iratRaw / maxIrat) * 10` → até 10
+- `finalGrade = iratGrade * 0.3 + tratGrade * 0.4 + appGrade * 0.3` → até 10
+  
+Isso está correto. Ex: aluno acertou 60% no iRAT → `(0.6 * 10) * 0.3 = 1.8`. Correto.
 
-### Resumo de Arquivos Modificados
+O problema é só o `appRawScore` que não filtra por acertos.
 
-| Arquivo | Alterações |
+### Alterações por arquivo
+
+| Arquivo | Alteração |
 |---------|-----------|
-| `TeacherRoomManage.tsx` | Refatorar `renderAppMonitoring` com controle questão-a-questão, botão liberar alternativas, janela 1s, botão liberar relatórios |
-| `StudentRoomView.tsx` | Reset `currentQ` na troca de stage; refatorar `renderApplication` para seguir questão controlada pelo professor com alternativas desabilitáveis |
-| Migration SQL | Adicionar `current_app_question_index` e `app_alternatives_released` à tabela `rooms` |
-| `types.ts` | Atualizado automaticamente pela migration |
+| `StudentRoomView.tsx` | 1. Adicionar `useEffect` que recarrega `loadAppData` quando `room?.current_app_question_index` muda na fase de aplicação. 2. Melhorar polling: chamar `loadAppData` durante `application_open`. 3. Reduzir polling para 2s na fase de aplicação. |
+| `TeacherRoomManage.tsx` | Corrigir `appRawScore` no `computeStudentReport` para contar apenas respostas corretas. |
+| `send-report-email/index.ts` | Já está correto (filtra por acertos na linha 69). Nenhuma mudança. |
 
