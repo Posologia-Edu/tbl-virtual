@@ -103,6 +103,36 @@ serve(async (req) => {
           current_period_end: validSubscription.current_period_end,
           trial_end: validSubscription.trial_end,
         });
+
+        // Sync Stripe plan to manual_subscriptions so admin panel shows correct plan
+        const productToPlan: Record<string, string> = {
+          "prod_U1oaz7iVie1pFU": "pro",
+          "prod_U1ob8n7iDfyGLT": "institutional",
+        };
+        const stripePlan = productId ? (productToPlan[productId] || "pro") : "pro";
+
+        // Check if manual sub exists
+        const { data: existingManualSub } = await supabaseClient
+          .from("manual_subscriptions")
+          .select("id, granted_by, plan")
+          .eq("user_id", user.id)
+          .single();
+
+        if (existingManualSub) {
+          // Only update if NOT admin-granted (don't overwrite admin decisions)
+          if (!existingManualSub.granted_by || existingManualSub.granted_by === user.id) {
+            await supabaseClient
+              .from("manual_subscriptions")
+              .update({ plan: stripePlan, expires_at: subscriptionEnd })
+              .eq("id", existingManualSub.id);
+            logStep("Synced Stripe plan to manual_subscriptions", { stripePlan });
+          }
+        } else {
+          await supabaseClient
+            .from("manual_subscriptions")
+            .insert({ user_id: user.id, plan: stripePlan, expires_at: subscriptionEnd });
+          logStep("Created manual_subscriptions from Stripe", { stripePlan });
+        }
       }
     }
 
@@ -156,12 +186,15 @@ serve(async (req) => {
         logStep("All granted teachers downgraded to free");
       }
 
-      // Also downgrade this user's own manual subscription if it exists
+      // Only downgrade this user's own manual subscription if it was NOT admin-granted
+      // Admin-granted subs (granted_by IS NOT NULL) should persist until admin changes them
       await supabaseClient
         .from("manual_subscriptions")
         .update({ plan: "free" })
         .eq("user_id", user.id)
-        .neq("plan", "free");
+        .neq("plan", "free")
+        .is("granted_by", null);
+      logStep("Downgraded self-managed subscription (if any)");
     }
 
     return new Response(
