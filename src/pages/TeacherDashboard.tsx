@@ -989,6 +989,11 @@ export default function TeacherDashboard() {
                     </span>
                     {plan.price > 0 && <span className="text-muted-foreground text-sm">/mês</span>}
                   </div>
+                  {plan.price > 0 && (
+                    <p className="text-sm text-primary font-semibold mt-2">
+                      🎉 7 dias grátis · Cancele quando quiser
+                    </p>
+                  )}
                 </div>
                 <ul className="space-y-3 mb-8 flex-1">
                   {plan.features.map((feature) => (
