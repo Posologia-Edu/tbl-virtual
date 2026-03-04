@@ -1,86 +1,75 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const log = (step: string, details?: any) => {
-  const d = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[SEND-METRICS] ${step}${d}`);
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async () => {
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
-    log("Starting metrics collection");
+    // Autenticação via chave compartilhada
+    const url = new URL(req.url);
+    const keyFromParam = url.searchParams.get("key");
+    const keyFromHeader = req.headers.get("x-hub-metrics-key");
+    const providedKey = keyFromParam || keyFromHeader;
 
-    const hubServiceKey = Deno.env.get("HUB_SERVICE_KEY");
-    const hubServiceId = Deno.env.get("HUB_SERVICE_ID");
-    if (!hubServiceKey || !hubServiceId) throw new Error("Missing HUB_SERVICE_KEY or HUB_SERVICE_ID");
+    const expectedKey = Deno.env.get("HUB_METRICS_KEY");
+    if (!expectedKey || providedKey !== expectedKey) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Total users
-    const { count: totalUsers, error: e1 } = await supabase
-      .from("profiles")
-      .select("*", { count: "exact", head: true });
-    if (e1) throw new Error(`profiles count: ${e1.message}`);
+    // Contar usuários totais
+    const { count: totalUsers } = await supabase.auth.admin.listUsers({
+      perPage: 1, page: 1,
+    });
 
-    // Active users (last 30 days) — users who joined a room recently
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { count: activeUsers, error: e2 } = await supabase
-      .from("room_participants")
-      .select("user_id", { count: "exact", head: true })
-      .gte("joined_at", thirtyDaysAgo);
-    if (e2) throw new Error(`active users: ${e2.message}`);
-
-    // Subscribers (teachers with active subscription — approximated by approved teachers)
-    const { count: subscribers, error: e3 } = await supabase
-      .from("user_roles")
-      .select("*", { count: "exact", head: true })
-      .eq("role", "teacher");
-    if (e3) throw new Error(`subscribers: ${e3.message}`);
+    // Contar usuários ativos (últimos 7 dias)
+    let activeUsers = 0;
+    const sevenDaysAgo = new Date(
+      Date.now() - 7 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const { data: allUsers } = await supabase.auth.admin.listUsers({
+      perPage: 1000, page: 1,
+    });
+    if (allUsers?.users) {
+      activeUsers = allUsers.users.filter(
+        (u) => u.last_sign_in_at && u.last_sign_in_at > sevenDaysAgo
+      ).length;
+    }
 
     const metrics = {
-      service_id: hubServiceId,
-      total_users: totalUsers ?? 0,
-      active_users: activeUsers ?? 0,
-      subscribers: subscribers ?? 0,
+      total_users: totalUsers ?? (allUsers?.users?.length ?? 0),
+      active_users: activeUsers,
+      subscribers: 0,
       ai_requests: 0,
       ai_tokens_used: 0,
       ai_cost_usd: 0,
       revenue_usd: 0,
       mrr_usd: 0,
+      collected_at: new Date().toISOString(),
     };
 
-    log("Metrics collected", metrics);
-
-    const res = await fetch(
-      "https://slmnpcabhjsqithkmkxn.supabase.co/functions/v1/report-metrics",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-service-key": hubServiceKey,
-        },
-        body: JSON.stringify(metrics),
-      }
-    );
-
-    const body = await res.text();
-    if (!res.ok) throw new Error(`Hub responded ${res.status}: ${body}`);
-
-    log("Metrics sent successfully", { status: res.status });
-
-    return new Response(JSON.stringify({ success: true, metrics }), {
-      headers: { "Content-Type": "application/json" },
+    return new Response(JSON.stringify(metrics), {
       status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    log("ERROR", { message: error.message });
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { "Content-Type": "application/json" },
-      status: 500,
-    });
+  } catch (err) {
+    console.error("hub-metrics error:", err);
+    return new Response(
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
