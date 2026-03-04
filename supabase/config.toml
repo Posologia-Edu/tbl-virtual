@@ -18,7 +18,7 @@ verify_jwt = false
 [functions.customer-portal]
 verify_jwt = false
 
-[functions.send-metrics-to-hub]
+[functions.hub-metrics]
 verify_jwt = false
 
 [functions.send-invite-teacher]
