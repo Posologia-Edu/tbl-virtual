@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,11 +43,33 @@ const PROVIDER_CONFIGS: Record<string, { url: string; model: string; mapBody?: (
   },
 };
 
+interface AIResult {
+  content: string;
+  provider: string;
+  model: string;
+  tokensInput: number;
+  tokensOutput: number;
+}
+
+// Cost per 1M tokens (input/output) in USD
+const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
+  "gpt-4o-mini": { input: 0.15, output: 0.60 },
+  "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
+  "gemini-2.5-flash": { input: 0.15, output: 0.60 },
+  "google/gemini-2.5-flash": { input: 0.15, output: 0.60 },
+};
+
+function estimateCost(model: string, tokensInput: number, tokensOutput: number): number {
+  const costs = TOKEN_COSTS[model] || { input: 0.15, output: 0.60 };
+  return (tokensInput * costs.input + tokensOutput * costs.output) / 1_000_000;
+}
+
 async function tryExternalProvider(
   provider: string,
   apiKey: string,
   messages: any[]
-): Promise<string | null> {
+): Promise<AIResult | null> {
   const config = PROVIDER_CONFIGS[provider];
   if (!config) return null;
 
@@ -64,7 +87,6 @@ async function tryExternalProvider(
 
     let url = config.url;
     if (provider === "google") {
-      url = `${config.url}`;
       headers["Authorization"] = `Bearer ${apiKey}`;
     }
 
@@ -85,20 +107,34 @@ async function tryExternalProvider(
 
     const data = await res.json();
 
+    let content: string | null = null;
+    let tokensInput = 0;
+    let tokensOutput = 0;
+
     if (isAnthropic) {
-      return data.content?.[0]?.text || null;
+      content = data.content?.[0]?.text || null;
+      tokensInput = data.usage?.input_tokens ?? 0;
+      tokensOutput = data.usage?.output_tokens ?? 0;
+    } else {
+      content = data.choices?.[0]?.message?.content || null;
+      tokensInput = data.usage?.prompt_tokens ?? 0;
+      tokensOutput = data.usage?.completion_tokens ?? 0;
     }
-    return data.choices?.[0]?.message?.content || null;
+
+    if (!content) return null;
+
+    return { content, provider, model: config.model, tokensInput, tokensOutput };
   } catch (e) {
     console.error(`[AI] ${provider} error:`, e);
     return null;
   }
 }
 
-async function tryLovableAI(messages: any[]): Promise<string> {
+async function tryLovableAI(messages: any[]): Promise<AIResult> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+  const model = "google/gemini-2.5-flash";
   console.log("[AI] Using Lovable AI (fallback)");
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -106,10 +142,7 @@ async function tryLovableAI(messages: any[]): Promise<string> {
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages,
-    }),
+    body: JSON.stringify({ model, messages }),
   });
 
   if (!response.ok) {
@@ -121,13 +154,14 @@ async function tryLovableAI(messages: any[]): Promise<string> {
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  const content = data.choices?.[0]?.message?.content || "";
+  const tokensInput = data.usage?.prompt_tokens ?? 0;
+  const tokensOutput = data.usage?.completion_tokens ?? 0;
+
+  return { content, provider: "lovable", model, tokensInput, tokensOutput };
 }
 
-import Stripe from "https://esm.sh/stripe@18.5.0";
-
 async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: string): Promise<{ limit: number; used: number; productId: string | null }> {
-  // Count usage this month
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const { count: used } = await supabaseClient
@@ -136,7 +170,6 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
     .eq("user_id", userId)
     .gte("used_at", firstOfMonth);
 
-  // Check Stripe subscription
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
   let productId: string | null = null;
 
@@ -155,7 +188,6 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
     }
   }
 
-  // If no Stripe subscription, check manual_subscriptions
   if (!productId) {
     const { data: manualSub } = await supabaseClient
       .from("manual_subscriptions")
@@ -175,9 +207,7 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
     }
   }
 
-  // Default to free plan product if no subscription found
   if (!productId) productId = "prod_U1oaoU5nQAqqW3";
-
   const limit = PLAN_AI_LIMITS[productId] ?? 0;
   return { limit, used: used || 0, productId };
 }
@@ -194,7 +224,6 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Não autorizado");
 
@@ -203,7 +232,6 @@ serve(async (req) => {
     if (userError || !userData.user) throw new Error("Não autorizado");
     const user = userData.user;
 
-    // Check plan limits
     const { limit, used } = await getUserPlanLimit(adminClient, user.id, user.email!);
     console.log(`[AI] User ${user.email} plan limit: ${limit}, used: ${used}`);
 
@@ -211,32 +239,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         error: "PLAN_LIMIT",
         message: "Seu plano atual não inclui geração de questões com IA. Faça upgrade para o plano Pro ou Institucional.",
-        used,
-        limit,
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        used, limit,
+      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (isFinite(limit) && used >= limit) {
       return new Response(JSON.stringify({
         error: "PLAN_LIMIT",
         message: `Você atingiu o limite de ${limit} gerações de IA este mês (${used}/${limit}). Faça upgrade para continuar.`,
-        used,
-        limit,
-      }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+        used, limit,
+      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const { fileContent, fileName, mimeType } = await req.json();
 
     if (!fileContent) {
       return new Response(JSON.stringify({ error: "No file content provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -290,7 +309,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     ];
 
     // Try external providers first
-    let content: string | null = null;
+    let aiResult: AIResult | null = null;
 
     try {
       const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
@@ -304,8 +323,8 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
           if (!isTextContent && (providerName === "groq" || providerName === "anthropic")) continue;
 
-          content = await tryExternalProvider(providerName, keyRow.api_key, messages);
-          if (content) {
+          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages);
+          if (aiResult) {
             console.log(`[AI] Success with provider: ${providerName}`);
             break;
           }
@@ -316,9 +335,9 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     }
 
     // Fallback to Lovable AI
-    if (!content) {
+    if (!aiResult) {
       try {
-        content = await tryLovableAI(messages);
+        aiResult = await tryLovableAI(messages);
       } catch (e: any) {
         if (e.message === "RATE_LIMIT") {
           return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns instantes." }), {
@@ -339,22 +358,28 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       }
     }
 
-    if (!content) {
+    if (!aiResult?.content) {
       return new Response(JSON.stringify({ error: "IA não retornou conteúdo" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Log AI usage after success
+    // Log AI usage with detailed data
+    const cost = estimateCost(aiResult.model, aiResult.tokensInput, aiResult.tokensOutput);
     await adminClient.from("ai_usage_log").insert({
       user_id: user.id,
-      provider: "auto",
-      tokens_used: 0,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      prompt_type: "quiz_generation",
+      tokens_input: aiResult.tokensInput,
+      tokens_output: aiResult.tokensOutput,
+      tokens_used: aiResult.tokensInput + aiResult.tokensOutput,
+      estimated_cost_usd: cost,
     });
-    console.log(`[AI] Usage logged for user ${user.email}`);
+    console.log(`[AI] Usage logged: ${aiResult.provider}/${aiResult.model} | ${aiResult.tokensInput}+${aiResult.tokensOutput} tokens | $${cost.toFixed(6)}`);
 
     // Parse JSON from response
-    let jsonStr = content.trim();
+    let jsonStr = aiResult.content.trim();
     if (jsonStr.startsWith("```")) {
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
     }
