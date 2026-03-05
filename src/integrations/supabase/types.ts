@@ -40,22 +40,37 @@ export type Database = {
       }
       ai_usage_log: {
         Row: {
+          estimated_cost_usd: number | null
           id: string
+          model: string | null
+          prompt_type: string | null
           provider: string | null
+          tokens_input: number | null
+          tokens_output: number | null
           tokens_used: number | null
           used_at: string
           user_id: string
         }
         Insert: {
+          estimated_cost_usd?: number | null
           id?: string
+          model?: string | null
+          prompt_type?: string | null
           provider?: string | null
+          tokens_input?: number | null
+          tokens_output?: number | null
           tokens_used?: number | null
           used_at?: string
           user_id: string
         }
         Update: {
+          estimated_cost_usd?: number | null
           id?: string
+          model?: string | null
+          prompt_type?: string | null
           provider?: string | null
+          tokens_input?: number | null
+          tokens_output?: number | null
           tokens_used?: number | null
           used_at?: string
           user_id?: string
