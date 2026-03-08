@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Check, Sparkles, ArrowLeft, Crown, Building2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function PricingPage() {
   const navigate = useNavigate();
