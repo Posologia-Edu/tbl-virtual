@@ -1,16 +1,18 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Settings } from 'lucide-react';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import Footer from '@/components/Footer';
 import AuthDialog from '@/components/AuthDialog';
+import { useCookieConsent } from '@/hooks/useCookieConsent';
 
 export default function CookiesPage() {
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
   const openAuth = (mode: 'signin' | 'signup') => { setAuthMode(mode); setAuthOpen(true); };
+  const { hasConsented, resetConsent } = useCookieConsent();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -35,6 +37,20 @@ export default function CookiesPage() {
       <main id="main-content" className="flex-1 pt-24 pb-16">
         <div className="container mx-auto px-4 max-w-3xl">
           <h1 className="text-3xl sm:text-4xl font-heading font-bold mb-8">Política de Cookies</h1>
+
+          {/* Manage preferences button */}
+          {hasConsented && (
+            <div className="mb-8 p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5 text-primary" />
+                <p className="text-sm font-medium">Você já configurou suas preferências de cookies.</p>
+              </div>
+              <Button variant="outline" size="sm" className="rounded-xl" onClick={resetConsent}>
+                Alterar Preferências
+              </Button>
+            </div>
+          )}
+
           <div className="prose prose-sm max-w-none text-muted-foreground space-y-6">
             <p><strong className="text-foreground">Última atualização:</strong> 8 de março de 2026</p>
 
@@ -46,21 +62,33 @@ export default function CookiesPage() {
             <section className="space-y-3">
               <h2 className="text-xl font-heading font-bold text-foreground">2. Cookies que Utilizamos</h2>
 
-              <h3 className="text-lg font-heading font-semibold text-foreground">2.1. Cookies Essenciais</h3>
-              <p>Necessários para o funcionamento da Plataforma. Incluem:</p>
+              <h3 className="text-lg font-heading font-semibold text-foreground">2.1. Cookies Essenciais (Sempre ativos)</h3>
+              <p>Necessários para o funcionamento da Plataforma. <strong className="text-foreground">Não podem ser desativados.</strong></p>
               <ul className="list-disc pl-6 space-y-1">
                 <li><strong className="text-foreground">Autenticação:</strong> mantêm sua sessão ativa após o login (Supabase Auth);</li>
-                <li><strong className="text-foreground">Preferências:</strong> idioma selecionado, modo de acessibilidade, tamanho de fonte.</li>
+                <li><strong className="text-foreground">Sessão:</strong> identificação da sessão de navegação.</li>
               </ul>
 
-              <h3 className="text-lg font-heading font-semibold text-foreground">2.2. Cookies de Funcionalidade</h3>
+              <h3 className="text-lg font-heading font-semibold text-foreground">2.2. Cookies de Funcionalidade (Desativáveis)</h3>
               <p>Melhoram a experiência do usuário:</p>
               <ul className="list-disc pl-6 space-y-1">
-                <li><strong className="text-foreground">LocalStorage:</strong> cache de respostas offline para sincronização;</li>
-                <li><strong className="text-foreground">Tema:</strong> preferência de modo claro/escuro.</li>
+                <li><strong className="text-foreground">Tema:</strong> preferência de modo claro/escuro;</li>
+                <li><strong className="text-foreground">Idioma:</strong> idioma selecionado pelo usuário;</li>
+                <li><strong className="text-foreground">Acessibilidade:</strong> alto contraste, tamanho de fonte;</li>
+                <li><strong className="text-foreground">Cache offline:</strong> respostas salvas localmente para sincronização.</li>
               </ul>
 
-              <h3 className="text-lg font-heading font-semibold text-foreground">2.3. Cookies de Terceiros</h3>
+              <h3 className="text-lg font-heading font-semibold text-foreground">2.3. Cookies Analíticos (Desativáveis)</h3>
+              <p>Nos ajudam a entender como a plataforma é utilizada para melhorar o serviço:</p>
+              <ul className="list-disc pl-6 space-y-1">
+                <li><strong className="text-foreground">Páginas visitadas:</strong> quais páginas são acessadas e por quanto tempo;</li>
+                <li><strong className="text-foreground">Funcionalidades mais usadas:</strong> quais recursos geram mais interesse;</li>
+                <li><strong className="text-foreground">Funil de conversão:</strong> caminho do visitante até a criação de conta;</li>
+                <li><strong className="text-foreground">Dispositivo e idioma:</strong> tipo de dispositivo e idioma do navegador.</li>
+              </ul>
+              <p className="text-sm">Esses dados são anonimizados e armazenados de forma segura. <strong className="text-foreground">Não compartilhamos</strong> essas informações com terceiros.</p>
+
+              <h3 className="text-lg font-heading font-semibold text-foreground">2.4. Cookies de Terceiros</h3>
               <ul className="list-disc pl-6 space-y-1">
                 <li><strong className="text-foreground">Stripe:</strong> processamento seguro de pagamentos;</li>
                 <li><strong className="text-foreground">Supabase:</strong> gerenciamento de sessão e autenticação.</li>
@@ -71,21 +99,21 @@ export default function CookiesPage() {
               <h2 className="text-xl font-heading font-bold text-foreground">3. Cookies que NÃO Utilizamos</h2>
               <p>O TBL Virtual <strong className="text-foreground">não utiliza</strong>:</p>
               <ul className="list-disc pl-6 space-y-1">
-                <li>Cookies de rastreamento ou publicidade;</li>
+                <li>Cookies de publicidade ou remarketing;</li>
                 <li>Cookies de redes sociais;</li>
-                <li>Cookies de análise comportamental (Google Analytics, etc.).</li>
+                <li>Rastreadores de terceiros (Google Analytics, Facebook Pixel, etc.).</li>
               </ul>
             </section>
 
             <section className="space-y-3">
               <h2 className="text-xl font-heading font-bold text-foreground">4. Como Gerenciar Cookies</h2>
-              <p>Você pode controlar e/ou excluir cookies conforme desejar através das configurações do seu navegador. A maioria dos navegadores permite:</p>
+              <p>Ao visitar o TBL Virtual pela primeira vez, um banner de consentimento será exibido com as opções:</p>
               <ul className="list-disc pl-6 space-y-1">
-                <li>Visualizar quais cookies estão armazenados;</li>
-                <li>Excluir cookies individualmente ou todos de uma vez;</li>
-                <li>Bloquear cookies de terceiros;</li>
-                <li>Configurar para receber notificação antes de aceitar um cookie.</li>
+                <li><strong className="text-foreground">Aceitar Todos:</strong> ativa todos os cookies;</li>
+                <li><strong className="text-foreground">Apenas Essenciais:</strong> aceita apenas os cookies necessários;</li>
+                <li><strong className="text-foreground">Personalizar:</strong> escolha individualmente quais categorias ativar.</li>
               </ul>
+              <p>Você pode <strong className="text-foreground">alterar suas preferências a qualquer momento</strong> visitando esta página e clicando em "Alterar Preferências" no topo.</p>
               <p><strong className="text-foreground">Atenção:</strong> bloquear cookies essenciais pode impedir o funcionamento correto da Plataforma, especialmente login e sincronização offline.</p>
             </section>
 

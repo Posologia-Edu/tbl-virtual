@@ -24,6 +24,7 @@ import ContactPage from "./pages/ContactPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import CookiesPage from "./pages/CookiesPage";
+import CookieConsent from "./components/CookieConsent";
 
 const queryClient = new QueryClient();
 
@@ -90,6 +91,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <a href="#main-content" className="skip-to-content">Skip to content</a>
+            <CookieConsent />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<AuthPage />} />

@@ -1,86 +1,68 @@
 
 
-## Plano: Sistema de Consentimento de Cookies + Coleta Estratégica
+## Plano: Correção de Realtime na Aplicação de Conceitos + Cálculo de Relatório
 
-### Contexto Atual
-- Já existe uma página de Política de Cookies (`/cookies`) com informações estáticas
-- Não existe banner de consentimento nem coleta real de cookies
-- O sistema usa localStorage para auth (Supabase), tema, idioma e cache offline
+### Problema 1: Realtime não funciona na fase de aplicação (StudentRoomView.tsx)
 
----
+**Causa raiz:** O Realtime listener na linha 474 faz `setRoom(newRoom)`, e o `renderApplication()` lê `room?.current_app_question_index` e `room?.app_alternatives_released`. O `setRoom` deveria atualizar o render. **Porém**, o `loadAppData()` (que carrega `appQuestions`) só é chamado no `useEffect` da linha 351 quando `room?.current_stage` muda — mas `current_app_question_index` e `app_alternatives_released` mudam **sem** mudar o stage.
 
-### O Que Será Implementado
+Além disso, `appQuestions` é carregado uma vez quando o stage muda para `application_open`, mas se o load falha (membership não pronta), fica vazio e nunca é recarregado.
 
-#### 1. Banner de Consentimento de Cookies
-Um componente `CookieConsent` que aparece na parte inferior da tela para todos os visitantes que ainda não deram consentimento. Terá:
-- Texto resumido explicando o uso de cookies
-- Link para a página `/cookies`
-- Botões: **Aceitar Todos**, **Apenas Essenciais**, **Personalizar**
-- Modal de personalização com toggles por categoria (Essenciais, Funcionalidade, Analíticos)
-- Cookies essenciais ficam sempre ativados (sem toggle)
-- A escolha é salva em `localStorage` com chave `cookie_consent`
+**Correção:**
+1. Adicionar um `useEffect` que recarrega `appQuestions` quando `room?.current_stage === 'application_open'` e `membership` muda (para cobrir o caso em que membership carrega depois).
+2. O Realtime listener já faz `setRoom(newRoom)` que deveria atualizar o render. Verificar se o `Room` type inclui os campos `current_app_question_index` e `app_alternatives_released` — **já inclui** (linhas 44-45). Então o render deve atualizar. O problema real é que **o polling de 3s faz `loadRoom()` que faz um SELECT e `setRoom(data)`**. Isso deveria funcionar.
 
-#### 2. Categorias de Cookies
+**Diagnóstico adicional:** Na linha 489, há um listener para `application_questions` que chama `loadAppData()`. Mas o primeiro load de `appQuestions` depende de `membership` existir. Se `membership` é null quando `application_open` começa, `loadAppData` retorna questões mas sem respostas. Mais importante: se o listener Realtime NÃO dispara (problema conhecido do Supabase Realtime com filters), o polling só atualiza `room` (via `loadRoom`), mas **não** chama `loadAppData()`.
 
-| Categoria | Tipo | Desativável? | O que coleta |
-|-----------|------|-------------|-------------|
-| **Essenciais** | Auth, sessão Supabase | Não | Login, sessão |
-| **Funcionalidade** | Tema, idioma, acessibilidade, cache offline | Sim | Preferências do usuário |
-| **Analíticos** | Navegação, uso de features | Sim | Páginas visitadas, features usadas, tempo de sessão |
+**Solução definitiva:** Adicionar um `useEffect` que roda `loadAppData()` quando o stage é `application_open` E `membership` existe, reagindo a mudanças no `room?.current_app_question_index`. Isso garante que mesmo sem Realtime, o polling (que atualiza `room`) vai triggerar o reload de app questions e responses.
 
-#### 3. Coleta de Cookies Analíticos (novo)
-Se o usuário aceitar cookies analíticos, o sistema passará a rastrear eventos úteis para você como dono do produto:
+### Problema 2: Alternativas não habilitam em tempo real
 
-- **Páginas visitadas**: qual página o visitante acessou e por quanto tempo
-- **Features mais clicadas**: quais seções da landing page e features page geram mais interesse
-- **Funil de conversão**: visitante → página de planos → clique em "Começar" → criação de conta
-- **Dispositivo e idioma**: para entender seu público
+**Causa:** `alternativesReleased` é lido de `room?.app_alternatives_released`. Quando o professor seta `app_alternatives_released = true`, o Realtime deveria atualizar `room` no student. Se o Realtime falha, o polling de 3s (via `loadRoom`) deveria pegar. **O render já usa `room?.app_alternatives_released`**, então deveria funcionar.
 
-Esses dados serão salvos em uma tabela `analytics_events` no Supabase com colunas: `id`, `session_id`, `event_type`, `event_data` (jsonb), `page_url`, `referrer`, `device_type`, `language`, `created_at`, `user_id` (nullable).
+**Problema real provável:** O Realtime do Supabase pode não estar disparando para a table `rooms` com o filter `id=eq.${roomId}`. Vou garantir que o polling de 3s cubra esse caso e que o componente re-renderize corretamente.
 
-#### 4. Hook `useCookieConsent`
-Um hook React que:
-- Lê o consentimento salvo no localStorage
-- Expõe `hasConsent(category)` para checar se uma categoria foi aceita
-- Expõe `updateConsent(preferences)` para atualizar escolhas
-- Usado por outros hooks/componentes para decidir se devem coletar dados
+**Solução:** Reduzir o polling para 2s na fase de aplicação (onde a sincronização precisa ser rápida) e garantir que `loadAppData` também é chamado pelo polling quando na fase de aplicação.
 
-#### 5. Hook `useAnalytics`
-Ativado apenas quando `hasConsent('analytics')` retorna true:
-- Registra `page_view` a cada navegação
-- Expõe `trackEvent(type, data)` para rastrear cliques em CTAs, abertura de modais, etc.
-- Envia dados para a tabela `analytics_events` via Supabase (usando service role em edge function ou insert direto com RLS)
+### Problema 3: Questões não avançam em tempo real
 
-#### 6. Dashboard de Analytics (Admin)
-Expandir o `AnalyticsDashboard` existente para incluir:
-- Visitantes únicos por dia/semana
-- Páginas mais visitadas
-- Funil de conversão (visita → signup)
-- Dispositivos e idiomas mais comuns
+**Mesma causa:** `current_app_question_index` vem de `room`, que é atualizado via Realtime/polling. Se room atualiza, o render atualiza. O polling deveria cobrir. Vou confirmar que o polling está funcionando e adicionar reload de app data quando o index muda.
 
-#### 7. Atualizar Página de Cookies
-Atualizar a página `/cookies` para refletir os novos cookies analíticos e mencionar que o usuário pode alterar suas preferências a qualquer momento (com botão para reabrir o banner).
+### Problema 4: Cálculo de relatório errado
 
----
+**Causa no frontend (linha 1176-1181):**
+```javascript
+appRawScore = appQuestions.filter(q =>
+  appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId)
+).length;
+```
+Isso conta questões com **qualquer** resposta, não apenas corretas. Um grupo que errou 2 de 3 questões recebe `appRaw = 3`.
 
-### Como Usar os Dados a Seu Favor
+**Correção:** Filtrar por respostas corretas, similar ao edge function (linha 69):
+```javascript
+appRawScore = appQuestions.filter(q =>
+  appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId && (
+    (q.correct_answer === 'V' && r.selected_option === 'A') || 
+    (q.correct_answer === 'F' && r.selected_option === 'B') ||
+    (q.correct_answer === 'A' && r.selected_option === 'A') ||
+    (q.correct_answer === 'B' && r.selected_option === 'B')
+  ))
+).length;
+```
 
-1. **Otimização de conversão**: saber quais páginas levam mais pessoas a criar conta
-2. **Priorização de features**: ver quais funcionalidades geram mais interesse na FeaturesPage
-3. **Decisões de pricing**: entender em qual plano os visitantes mais clicam
-4. **Segmentação**: idioma e dispositivo ajudam a decidir onde investir (mobile vs desktop, PT vs EN vs ES)
-5. **Retenção**: comparar visitantes recorrentes vs novos
+**Verificação da fórmula de nota:** Com nota máxima 10, pesos 30/40/30:
+- `iratGrade = (iratRaw / maxIrat) * 10` → até 10
+- `finalGrade = iratGrade * 0.3 + tratGrade * 0.4 + appGrade * 0.3` → até 10
+  
+Isso está correto. Ex: aluno acertou 60% no iRAT → `(0.6 * 10) * 0.3 = 1.8`. Correto.
 
----
+O problema é só o `appRawScore` que não filtra por acertos.
 
-### Arquivos a Criar/Editar
+### Alterações por arquivo
 
-- **Criar**: `src/components/CookieConsent.tsx` — banner + modal de personalização
-- **Criar**: `src/hooks/useCookieConsent.ts` — gerenciamento de consentimento
-- **Criar**: `src/hooks/useAnalytics.ts` — coleta de eventos condicionada ao consentimento
-- **Criar**: migração SQL para tabela `analytics_events`
-- **Editar**: `src/App.tsx` — adicionar `<CookieConsent />` no layout raiz
-- **Editar**: `src/pages/CookiesPage.tsx` — atualizar com novas categorias e botão "Alterar preferências"
-- **Editar**: `src/pages/LandingPage.tsx`, `FeaturesPage.tsx`, `PricingPage.tsx` — adicionar tracking de eventos em CTAs
-- **Editar**: `src/components/AnalyticsDashboard.tsx` — incluir dados de visitantes/conversão
+| Arquivo | Alteração |
+|---------|-----------|
+| `StudentRoomView.tsx` | 1. Adicionar `useEffect` que recarrega `loadAppData` quando `room?.current_app_question_index` muda na fase de aplicação. 2. Melhorar polling: chamar `loadAppData` durante `application_open`. 3. Reduzir polling para 2s na fase de aplicação. |
+| `TeacherRoomManage.tsx` | Corrigir `appRawScore` no `computeStudentReport` para contar apenas respostas corretas. |
+| `send-report-email/index.ts` | Já está correto (filtra por acertos na linha 69). Nenhuma mudança. |
 

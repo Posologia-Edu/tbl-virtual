@@ -15,6 +15,7 @@ import featureTeams from '@/assets/feature-teams.jpg';
 import tblFlowImage from '@/assets/tbl-flow.png';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import Footer from '@/components/Footer';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 40 },
@@ -27,6 +28,7 @@ const stagger = {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { trackEvent } = useAnalytics();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -34,6 +36,7 @@ export default function LandingPage() {
   const openAuth = (mode: 'signin' | 'signup') => {
     setAuthMode(mode);
     setAuthDialogOpen(true);
+    trackEvent('cta_click', { button: mode === 'signup' ? 'signup' : 'signin', page: 'landing' });
   };
 
   const highlights = [

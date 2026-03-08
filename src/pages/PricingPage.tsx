@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { Check, Sparkles, ArrowLeft, Crown, Building2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 export default function PricingPage() {
   const navigate = useNavigate();
   const { user, session, subscription } = useAuth();
+  const { trackEvent } = useAnalytics();
   const [loading, setLoading] = useState<PlanKey | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const currentPlan = subscription.plan || 'free';
@@ -27,6 +29,7 @@ export default function PricingPage() {
       return;
     }
 
+    trackEvent('plan_click', { plan: planKey });
     setLoading(planKey);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
