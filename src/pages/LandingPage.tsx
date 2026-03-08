@@ -14,6 +14,7 @@ import featureReports from '@/assets/feature-reports.jpg';
 import featureTeams from '@/assets/feature-teams.jpg';
 import tblFlowImage from '@/assets/tbl-flow.png';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
+import Footer from '@/components/Footer';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 40 },
