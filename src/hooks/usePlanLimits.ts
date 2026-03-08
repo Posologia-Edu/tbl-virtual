@@ -3,11 +3,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 
 export function usePlanLimits() {
-  const { subscription, checkSubscription } = useAuth();
+  const { subscription, checkSubscription, isAdmin } = useAuth();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<string>('');
 
-  const currentPlan = subscription.plan || 'free';
+  const currentPlan = isAdmin ? 'institutional' : (subscription.plan || 'free');
   const planData = STRIPE_PLANS[currentPlan];
   const limits = planData.limits;
 
