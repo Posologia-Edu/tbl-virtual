@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  PieChart, Pie, Cell,
 } from 'recharts';
-import { BarChart3, TrendingUp, Download, FileSpreadsheet, Printer, Loader2, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, Download, FileSpreadsheet, Printer, Loader2, AlertTriangle, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Props = {
