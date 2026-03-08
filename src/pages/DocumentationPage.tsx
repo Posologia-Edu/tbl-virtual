@@ -9,6 +9,7 @@ import {
   Globe, Eye, Wifi, WifiOff, MessageSquare, FileText, Settings
 } from 'lucide-react';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
+import Footer from '@/components/Footer';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -372,6 +373,8 @@ export default function DocumentationPage() {
           </div>
         </motion.div>
       </main>
+
+      <Footer />
     </div>
   );
 }

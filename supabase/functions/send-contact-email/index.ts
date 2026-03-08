@@ -18,17 +18,30 @@ serve(async (req) => {
   );
 
   try {
-    // Authenticate caller
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header");
-    const token = authHeader.replace("Bearer ", "");
-    const { data: callerData, error: callerError } = await supabase.auth.getUser(token);
-    if (callerError || !callerData.user) throw new Error("Not authenticated");
+    const body = await req.json();
+    const { subject, message, sender_name, sender_email, is_public } = body;
 
-    const senderName = callerData.user.user_metadata?.full_name || callerData.user.email || "Usuário";
-    const senderEmail = callerData.user.email || "desconhecido";
+    let senderName: string;
+    let senderEmail: string;
 
-    const { subject, message } = await req.json();
+    if (is_public) {
+      // Public contact form - no auth required
+      if (!sender_name?.trim() || !sender_email?.trim()) {
+        throw new Error("sender_name and sender_email are required for public contact");
+      }
+      senderName = sender_name.trim();
+      senderEmail = sender_email.trim();
+    } else {
+      // Authenticated contact - get user from token
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) throw new Error("No authorization header");
+      const token = authHeader.replace("Bearer ", "");
+      const { data: callerData, error: callerError } = await supabase.auth.getUser(token);
+      if (callerError || !callerData.user) throw new Error("Not authenticated");
+      senderName = callerData.user.user_metadata?.full_name || callerData.user.email || "Usuário";
+      senderEmail = callerData.user.email || "desconhecido";
+    }
+
     if (!subject?.trim() || !message?.trim()) {
       throw new Error("subject and message are required");
     }
@@ -47,7 +60,7 @@ serve(async (req) => {
     <body style="font-family: 'Segoe UI', Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 40px 0;">
       <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
         <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 24px 32px; text-align: center;">
-          <h1 style="color: #fff; margin: 0; font-size: 20px;">📬 Nova Mensagem de Contato</h1>
+          <h1 style="color: #fff; margin: 0; font-size: 20px;">📬 Nova Mensagem de Contato${is_public ? ' (Visitante)' : ''}</h1>
         </div>
         <div style="padding: 32px;">
           <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;"><strong>De:</strong> ${senderName} (${senderEmail})</p>
