@@ -373,6 +373,8 @@ export default function DocumentationPage() {
           </div>
         </motion.div>
       </main>
+
+      <Footer />
     </div>
   );
 }
