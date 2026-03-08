@@ -12,6 +12,7 @@ import { useAnalytics } from '@/hooks/useAnalytics';
 export default function PricingPage() {
   const navigate = useNavigate();
   const { user, session, subscription } = useAuth();
+  const { trackEvent } = useAnalytics();
   const [loading, setLoading] = useState<PlanKey | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const currentPlan = subscription.plan || 'free';
