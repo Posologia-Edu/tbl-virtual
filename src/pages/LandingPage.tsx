@@ -519,29 +519,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ============ FOOTER ============ */}
-      <footer className="py-12 md:py-16 border-t border-border/50">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-3 gap-8 items-center">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="text-base font-heading font-bold">TBL Virtual</span>
-            </div>
-            <div className="text-sm text-muted-foreground text-center space-y-1">
-              <p>© 2026 TBL Virtual. Aprendizagem Baseada em Equipes.</p>
-              <p>Todos os direitos reservados.</p>
-              <p>Desenvolvido por Sérgio Araújo. Posologia Produções.</p>
-            </div>
-            <div className="flex gap-4 md:justify-end text-sm text-muted-foreground">
-              <button onClick={() => openAuth('signin')} className="hover:text-foreground transition-colors">Login Professor</button>
-              <button onClick={() => navigate('/join')} className="hover:text-foreground transition-colors">Acesso Estudante</button>
-              <button onClick={() => navigate('/docs')} className="hover:text-foreground transition-colors">Documentação</button>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer onOpenAuth={openAuth} />
 
       {/* Auth Dialog */}
       <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} defaultMode={authMode} />
