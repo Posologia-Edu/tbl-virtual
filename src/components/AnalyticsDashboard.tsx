@@ -374,11 +374,12 @@ export default function AnalyticsDashboard({ userId, canExport = true, onUpgrade
       </div>
 
       <Tabs defaultValue="psychometrics" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 print:hidden">
+        <TabsList className="grid w-full grid-cols-5 print:hidden">
           <TabsTrigger value="psychometrics">Psicometria</TabsTrigger>
           <TabsTrigger value="heatmap">Mapa de Calor</TabsTrigger>
           <TabsTrigger value="comparison">Individual vs Equipe</TabsTrigger>
           <TabsTrigger value="history">Evolução</TabsTrigger>
+          <TabsTrigger value="visitors" className="flex items-center gap-1"><Globe className="w-3 h-3" /> Visitantes</TabsTrigger>
         </TabsList>
 
         {/* ===== PSYCHOMETRICS TAB ===== */}
