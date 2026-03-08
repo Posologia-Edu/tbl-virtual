@@ -699,3 +699,210 @@ export default function AnalyticsDashboard({ userId, canExport = true, onUpgrade
     </div>
   );
 }
+
+const CHART_COLORS = ['hsl(var(--primary))', 'hsl(var(--phase-trat))', 'hsl(var(--phase-app))', 'hsl(var(--success))', 'hsl(var(--destructive))'];
+
+function VisitorAnalytics() {
+  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<any[]>([]);
+  const [period, setPeriod] = useState('7');
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const since = new Date();
+      since.setDate(since.getDate() - parseInt(period));
+      const { data } = await supabase
+        .from('analytics_events' as any)
+        .select('*')
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(5000) as any;
+      setEvents(data || []);
+      setLoading(false);
+    };
+    load();
+  }, [period]);
+
+  const uniqueSessions = useMemo(() => new Set(events.map((e: any) => e.session_id)).size, [events]);
+  const pageViews = useMemo(() => events.filter((e: any) => e.event_type === 'page_view').length, [events]);
+  const ctaClicks = useMemo(() => events.filter((e: any) => e.event_type === 'cta_click').length, [events]);
+
+  const topPages = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.filter((e: any) => e.event_type === 'page_view').forEach((e: any) => {
+      const path = e.event_data?.path || e.page_url || '/';
+      counts[path] = (counts[path] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([page, views]) => ({ page, views }));
+  }, [events]);
+
+  const deviceData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.forEach((e: any) => {
+      const d = e.device_type || 'unknown';
+      counts[d] = (counts[d] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), value }));
+  }, [events]);
+
+  const dailyViews = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.filter((e: any) => e.event_type === 'page_view').forEach((e: any) => {
+      const day = new Date(e.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      counts[day] = (counts[day] || 0) + 1;
+    });
+    return Object.entries(counts).reverse().map(([day, views]) => ({ day, views }));
+  }, [events]);
+
+  const conversionFunnel = useMemo(() => {
+    const landing = events.filter((e: any) => e.event_type === 'page_view' && (e.event_data?.path === '/' || e.page_url === '/')).length;
+    const pricing = events.filter((e: any) => e.event_type === 'page_view' && (e.event_data?.path === '/pricing' || e.page_url === '/pricing')).length;
+    const signupClicks = events.filter((e: any) => e.event_type === 'cta_click' && e.event_data?.button === 'signup').length;
+    return [
+      { step: 'Landing', value: landing },
+      { step: 'Preços', value: pricing },
+      { step: 'Clique Criar Conta', value: signupClicks },
+    ];
+  }, [events]);
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Dados de visitantes do site público</p>
+        <Select value={period} onValueChange={setPeriod}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">Últimos 7 dias</SelectItem>
+            <SelectItem value="30">Últimos 30 dias</SelectItem>
+            <SelectItem value="90">Últimos 90 dias</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-2xl font-heading font-bold">{uniqueSessions}</p>
+            <p className="text-xs text-muted-foreground">Visitantes Únicos</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-2xl font-heading font-bold">{pageViews}</p>
+            <p className="text-xs text-muted-foreground">Page Views</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-3 text-center">
+            <p className="text-2xl font-heading font-bold">{ctaClicks}</p>
+            <p className="text-xs text-muted-foreground">Cliques em CTAs</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Daily views */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-heading">Visualizações por Dia</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dailyViews.length > 0 ? (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailyViews}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="day" fontSize={10} />
+                    <YAxis fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Line type="monotone" dataKey="views" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : <p className="text-center text-muted-foreground text-sm py-8">Sem dados</p>}
+          </CardContent>
+        </Card>
+
+        {/* Devices */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-heading">Dispositivos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {deviceData.length > 0 ? (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={deviceData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={11}>
+                      {deviceData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : <p className="text-center text-muted-foreground text-sm py-8">Sem dados</p>}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Top pages */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-heading">Páginas Mais Visitadas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topPages.length > 0 ? (
+              <div className="space-y-2">
+                {topPages.map((p, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="font-mono text-xs truncate max-w-[200px]">{p.page}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${(p.views / (topPages[0]?.views || 1)) * 100}%` }} />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-8 text-right">{p.views}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-center text-muted-foreground text-sm py-8">Sem dados</p>}
+          </CardContent>
+        </Card>
+
+        {/* Conversion funnel */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-heading">Funil de Conversão</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {conversionFunnel.some(s => s.value > 0) ? (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={conversionFunnel}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="step" fontSize={11} />
+                    <YAxis fontSize={10} />
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                    <Bar dataKey="value" name="Eventos" radius={[4, 4, 0, 0]}>
+                      <Cell fill="hsl(var(--primary))" />
+                      <Cell fill="hsl(var(--phase-trat))" />
+                      <Cell fill="hsl(var(--success))" />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : <p className="text-center text-muted-foreground text-sm py-8">Sem dados de conversão</p>}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
