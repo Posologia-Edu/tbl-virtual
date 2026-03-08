@@ -10,6 +10,7 @@ import {
 import AuthDialog from '@/components/AuthDialog';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import Footer from '@/components/Footer';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
