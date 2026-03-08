@@ -680,6 +680,11 @@ export default function AnalyticsDashboard({ userId, canExport = true, onUpgrade
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ===== VISITORS TAB ===== */}
+        <TabsContent value="visitors" className="space-y-4">
+          <VisitorAnalytics />
+        </TabsContent>
       </Tabs>
 
       {/* Export buttons */}
