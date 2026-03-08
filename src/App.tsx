@@ -19,6 +19,11 @@ import DocumentationPage from "./pages/DocumentationPage";
 import PricingPage from "./pages/PricingPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import FeaturesPage from "./pages/FeaturesPage";
+import ContactPage from "./pages/ContactPage";
+import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import CookiesPage from "./pages/CookiesPage";
 
 const queryClient = new QueryClient();
 
