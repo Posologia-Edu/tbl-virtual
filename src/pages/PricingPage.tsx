@@ -29,6 +29,7 @@ export default function PricingPage() {
       return;
     }
 
+    trackEvent('plan_click', { plan: planKey });
     setLoading(planKey);
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {

@@ -36,6 +36,7 @@ export default function LandingPage() {
   const openAuth = (mode: 'signin' | 'signup') => {
     setAuthMode(mode);
     setAuthDialogOpen(true);
+    trackEvent('cta_click', { button: mode === 'signup' ? 'signup' : 'signin', page: 'landing' });
   };
 
   const highlights = [

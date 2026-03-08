@@ -91,6 +91,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <a href="#main-content" className="skip-to-content">Skip to content</a>
+            <CookieConsent />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<AuthPage />} />

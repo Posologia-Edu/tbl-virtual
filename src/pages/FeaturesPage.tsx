@@ -22,12 +22,14 @@ const fadeUp = {
 
 export default function FeaturesPage() {
   const navigate = useNavigate();
+  const { trackEvent } = useAnalytics();
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
 
   const openAuth = (mode: 'signin' | 'signup') => {
     setAuthMode(mode);
     setAuthOpen(true);
+    trackEvent('cta_click', { button: mode === 'signup' ? 'signup' : 'signin', page: 'features' });
   };
 
   const mainFeatures = [
