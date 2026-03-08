@@ -28,6 +28,7 @@ const stagger = {
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const { trackEvent } = useAnalytics();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
