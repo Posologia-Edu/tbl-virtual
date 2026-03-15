@@ -697,48 +697,48 @@ supabase/
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        {/* Sections */}
-        <div className="space-y-6">
-          {sections.map((section, sIdx) => (
-            <motion.div
-              key={section.id}
-              id={section.id}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: '-50px' }}
-              variants={fadeUp}
-              custom={sIdx * 0.3}
-              className="scroll-mt-24"
-            >
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-3 text-xl">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <section.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    {section.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Accordion type="multiple" className="w-full">
-                    {section.items.map((item, iIdx) => (
-                      <AccordionItem key={iIdx} value={`${section.id}-${iIdx}`}>
-                        <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">
-                          {item.q}
-                        </AccordionTrigger>
-                        <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
-                          {item.a}
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </CardContent>
-              </Card>
             </motion.div>
-          ))}
-        </div>
+
+            {/* Sections */}
+            <div className="space-y-6">
+              {sections.map((section, sIdx) => (
+                <motion.div
+                  key={section.id}
+                  id={section.id}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, margin: '-50px' }}
+                  variants={fadeUp}
+                  custom={sIdx * 0.3}
+                  className="scroll-mt-24"
+                >
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-3 text-xl">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <section.icon className="w-5 h-5 text-primary" />
+                        </div>
+                        {section.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Accordion type="multiple" className="w-full">
+                        {section.items.map((item, iIdx) => (
+                          <AccordionItem key={iIdx} value={`${section.id}-${iIdx}`}>
+                            <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">
+                              {item.q}
+                            </AccordionTrigger>
+                            <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                              {item.a}
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </TabsContent>
 
           <TabsContent value="technical" className="mt-6">
