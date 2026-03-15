@@ -739,6 +739,65 @@ supabase/
             </motion.div>
           ))}
         </div>
+          </TabsContent>
+
+          <TabsContent value="technical" className="mt-6">
+            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="mb-10">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Code2 className="w-4 h-4 text-primary" /> Navegação Técnica
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {techSections.map(s => (
+                      <Button
+                        key={s.id}
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl text-xs"
+                        onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      >
+                        <s.icon className="w-3.5 h-3.5 mr-1.5" />
+                        {s.title}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <div className="space-y-6">
+              {techSections.map((section, sIdx) => (
+                <motion.div
+                  key={section.id}
+                  id={section.id}
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: true, margin: '-50px' }}
+                  variants={fadeUp}
+                  custom={sIdx * 0.3}
+                  className="scroll-mt-24"
+                >
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center gap-3 text-xl">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <section.icon className="w-5 h-5 text-primary" />
+                        </div>
+                        {section.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {section.content}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* CTA */}
         <motion.div
