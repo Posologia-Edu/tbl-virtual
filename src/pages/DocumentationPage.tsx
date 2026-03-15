@@ -643,14 +643,43 @@ supabase/
           </p>
         </motion.div>
 
-        {/* Quick Nav */}
-        <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="mb-10">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Settings className="w-4 h-4 text-primary" /> Navegação Rápida
-              </CardTitle>
-            </CardHeader>
+        <Tabs defaultValue="functional" className="mb-10">
+          <TabsList className="grid w-full grid-cols-2 rounded-xl">
+            <TabsTrigger value="functional" className="rounded-xl text-sm">
+              <BookOpen className="w-4 h-4 mr-2" /> Funcionalidades
+            </TabsTrigger>
+            <TabsTrigger value="technical" className="rounded-xl text-sm">
+              <Code2 className="w-4 h-4 mr-2" /> Documentação Técnica
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="functional" className="mt-6">
+            {/* Quick Nav */}
+            <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="mb-10">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-primary" /> Navegação Rápida
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {sections.map(s => (
+                      <Button
+                        key={s.id}
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl text-xs"
+                        onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      >
+                        <s.icon className="w-3.5 h-3.5 mr-1.5" />
+                        {s.title}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
             <CardContent>
               <div className="flex flex-wrap gap-2">
                 {sections.map(s => (
