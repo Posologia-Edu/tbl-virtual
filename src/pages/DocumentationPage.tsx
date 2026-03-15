@@ -6,8 +6,12 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, BookOpen, Users, Brain, Target, BarChart3, Shield, Zap,
   GraduationCap, Sparkles, Clock, Star, Award, Layers, Monitor,
-  Globe, Eye, Wifi, WifiOff, MessageSquare, FileText, Settings
+  Globe, Eye, Wifi, WifiOff, MessageSquare, FileText, Settings,
+  Database, Server, Code2, Lock, Workflow, Cpu, HardDrive, Key, CloudCog
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import Footer from '@/components/Footer';
 
