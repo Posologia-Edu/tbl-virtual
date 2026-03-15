@@ -680,24 +680,6 @@ supabase/
                 </CardContent>
               </Card>
             </motion.div>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {sections.map(s => (
-                  <Button
-                    key={s.id}
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl text-xs"
-                    onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                  >
-                    <s.icon className="w-3.5 h-3.5 mr-1.5" />
-                    {s.title}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-            </motion.div>
 
             {/* Sections */}
             <div className="space-y-6">
