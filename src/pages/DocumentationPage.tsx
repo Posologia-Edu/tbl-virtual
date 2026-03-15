@@ -253,6 +253,359 @@ export default function DocumentationPage() {
     },
   ];
 
+  const techSections = [
+    {
+      id: 'tech-stack',
+      icon: Code2,
+      title: 'Stack Tecnológico',
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Todas as tecnologias que compõem o TBL Virtual:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[
+              { category: 'Frontend', items: ['React 18 (SPA)', 'TypeScript', 'Vite (bundler)', 'Tailwind CSS', 'Shadcn/UI (componentes)', 'Framer Motion (animações)', 'React Router DOM (rotas)', 'i18next (internacionalização)', 'Recharts (gráficos)'] },
+              { category: 'Backend (BaaS)', items: ['Supabase (PostgreSQL 15)', 'Supabase Auth (autenticação)', 'Supabase Realtime (WebSockets)', 'Supabase Edge Functions (Deno)', 'Row-Level Security (RLS)'] },
+              { category: 'Serviços Externos', items: ['Stripe (pagamentos e assinaturas)', 'Resend (e-mails transacionais)', 'OpenAI / Google AI (geração de questões)'] },
+              { category: 'Infraestrutura', items: ['Lovable (hospedagem e CI/CD)', 'Supabase Cloud (banco e auth)', 'CDN global (assets estáticos)', 'HTTPS / TLS em todas as rotas'] },
+            ].map(group => (
+              <Card key={group.category} className="border-border/50">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-sm font-semibold">{group.category}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <ul className="space-y-1">
+                    {group.items.map(item => (
+                      <li key={item} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                        <span className="text-primary mt-0.5">•</span> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-architecture',
+      icon: Workflow,
+      title: 'Arquitetura do Sistema',
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">O TBL Virtual é uma Single Page Application (SPA) que se comunica diretamente com o Supabase como Backend-as-a-Service.</p>
+          <div className="bg-muted/50 rounded-xl p-4 text-xs font-mono space-y-2 overflow-x-auto">
+            <pre className="text-foreground">{`┌─────────────────────────────────────────────────┐
+│                   CLIENTE (Browser)              │
+│  React + TypeScript + Tailwind + Shadcn/UI       │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────┐   │
+│  │ Pages    │ │Components│ │ Hooks          │   │
+│  │ (rotas)  │ │ (UI)     │ │ (lógica/state) │   │
+│  └──────────┘ └──────────┘ └────────────────┘   │
+└────────────────────┬────────────────────────────┘
+                     │ HTTPS / WSS
+┌────────────────────▼────────────────────────────┐
+│              SUPABASE CLOUD                      │
+│  ┌──────────┐ ┌──────────┐ ┌────────────────┐   │
+│  │ Auth     │ │ Realtime │ │ Edge Functions │   │
+│  │ (JWT)    │ │ (WS)     │ │ (Deno)         │   │
+│  └──────────┘ └──────────┘ └────────────────┘   │
+│  ┌──────────────────────────────────────────┐    │
+│  │         PostgreSQL 15 + RLS              │    │
+│  │  18 tabelas · 6 funções · Enums · JSONB  │    │
+│  └──────────────────────────────────────────┘    │
+└────────────────────┬────────────────────────────┘
+                     │
+    ┌────────────────┼────────────────┐
+    ▼                ▼                ▼
+┌────────┐    ┌──────────┐    ┌──────────┐
+│ Stripe │    │  Resend  │    │ AI APIs  │
+│(pagam.)│    │ (e-mail) │    │(OpenAI/  │
+│        │    │          │    │ Google)  │
+└────────┘    └──────────┘    └──────────┘`}</pre>
+          </div>
+          <Accordion type="multiple" className="w-full">
+            <AccordionItem value="auth-flow">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Como funciona a autenticação?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                O Supabase Auth gerencia todo o ciclo de autenticação via JWT. Ao criar conta, um trigger <code className="bg-muted px-1 rounded text-xs">handle_new_user()</code> cria automaticamente o perfil do usuário na tabela <code className="bg-muted px-1 rounded text-xs">profiles</code> e atribui o role na tabela <code className="bg-muted px-1 rounded text-xs">user_roles</code>. Roles disponíveis: <Badge variant="outline" className="text-xs mx-0.5">teacher</Badge> <Badge variant="outline" className="text-xs mx-0.5">student</Badge> <Badge variant="outline" className="text-xs mx-0.5">admin</Badge>. Professores precisam de aprovação do admin (<code className="bg-muted px-1 rounded text-xs">is_approved</code>) antes de acessar o sistema.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="realtime-flow">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Como funciona o tempo real?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                O Supabase Realtime é usado via WebSockets para sincronizar fases da sala (waiting → irat_open → trat_open → application_open → finished), respostas de alunos e leaderboard de equipes. Um mecanismo de polling redundante (5s no gerenciamento, 2s na fase de aplicação) garante resiliência em caso de falha do WebSocket.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="rls-flow">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Como funciona a segurança (RLS)?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                Todas as tabelas possuem Row-Level Security (RLS) ativo. Cada linha só pode ser acessada por quem tem permissão: professores veem apenas suas salas/quizzes, alunos acessam apenas salas onde participam. Funções <code className="bg-muted px-1 rounded text-xs">SECURITY DEFINER</code> como <code className="bg-muted px-1 rounded text-xs">has_role()</code>, <code className="bg-muted px-1 rounded text-xs">is_admin()</code>, <code className="bg-muted px-1 rounded text-xs">is_room_participant()</code> e <code className="bg-muted px-1 rounded text-xs">is_team_member()</code> evitam recursão e garantem verificações seguras.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-database',
+      icon: Database,
+      title: 'Estrutura do Banco de Dados',
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">O banco PostgreSQL possui 18 tabelas organizadas em domínios funcionais:</p>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Domínio</TableHead>
+                  <TableHead className="text-xs">Tabela</TableHead>
+                  <TableHead className="text-xs">Descrição</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[
+                  { domain: 'Usuários', table: 'profiles', desc: 'Dados do perfil (nome, CPF, instituição, endereço)' },
+                  { domain: 'Usuários', table: 'user_roles', desc: 'Roles: teacher, student, admin (enum app_role)' },
+                  { domain: 'Conteúdo', table: 'quizzes', desc: 'Questionários com disciplina, tema e nível de dificuldade' },
+                  { domain: 'Conteúdo', table: 'questions', desc: 'Questões com 4 alternativas e gabarito (soft delete)' },
+                  { domain: 'Salas', table: 'rooms', desc: 'Sessões TBL com código, fases, pesos e temporizadores' },
+                  { domain: 'Salas', table: 'room_participants', desc: 'Alunos conectados em uma sala (código de participante)' },
+                  { domain: 'Equipes', table: 'teams', desc: 'Equipes por sala' },
+                  { domain: 'Equipes', table: 'team_members', desc: 'Membros de cada equipe' },
+                  { domain: 'Respostas', table: 'irat_responses', desc: 'Respostas individuais com sistema de apostas (4 pontos)' },
+                  { domain: 'Respostas', table: 'trat_attempts', desc: 'Tentativas da equipe no tRAT (raspadinha digital)' },
+                  { domain: 'Aplicação', table: 'application_questions', desc: 'Questões de aplicação (cenários complexos)' },
+                  { domain: 'Aplicação', table: 'application_responses', desc: 'Respostas das equipes na fase de aplicação' },
+                  { domain: 'Recursos', table: 'appeals', desc: 'Contestações de questões pelas equipes' },
+                  { domain: 'Turmas', table: 'classes', desc: 'Turmas por semestre' },
+                  { domain: 'Turmas', table: 'class_students', desc: 'Vínculo aluno-turma' },
+                  { domain: 'Gamificação', table: 'student_achievements', desc: 'Conquistas/badges dos alunos' },
+                  { domain: 'Assinaturas', table: 'manual_subscriptions', desc: 'Planos atribuídos manualmente (free/pro/institutional)' },
+                  { domain: 'Analytics', table: 'analytics_events', desc: 'Eventos de navegação e uso (cookies analíticos)' },
+                  { domain: 'IA', table: 'ai_api_keys', desc: 'Chaves de API para provedores de IA' },
+                  { domain: 'IA', table: 'ai_usage_log', desc: 'Log de uso de tokens e custo estimado' },
+                ].map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="text-xs font-medium">{row.domain}</TableCell>
+                    <TableCell className="text-xs"><code className="bg-muted px-1.5 py-0.5 rounded">{row.table}</code></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{row.desc}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold mb-2">Enums do Banco</h4>
+            <div className="flex flex-wrap gap-2">
+              <div className="text-xs bg-muted/50 rounded-lg p-2">
+                <span className="font-medium">app_role:</span>{' '}
+                <Badge variant="secondary" className="text-xs">teacher</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">student</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">admin</Badge>
+              </div>
+              <div className="text-xs bg-muted/50 rounded-lg p-2">
+                <span className="font-medium">room_stage:</span>{' '}
+                <Badge variant="secondary" className="text-xs">waiting</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">irat_open</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">trat_open</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">application_open</Badge>{' '}
+                <Badge variant="secondary" className="text-xs">finished</Badge>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <h4 className="text-sm font-semibold mb-2">Funções do Banco (SECURITY DEFINER)</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { fn: 'has_role(user_id, role)', desc: 'Verifica se o usuário tem um role específico' },
+                { fn: 'is_admin(user_id)', desc: 'Verifica se o usuário é admin' },
+                { fn: 'is_room_participant(room_id, user_id)', desc: 'Verifica se o usuário participa de uma sala' },
+                { fn: 'is_team_member(team_id, user_id)', desc: 'Verifica se o usuário pertence a uma equipe' },
+                { fn: 'generate_room_code()', desc: 'Gera código numérico único de 11 dígitos para salas' },
+                { fn: 'generate_participant_code(room_id)', desc: 'Gera código de 4 dígitos para participantes' },
+              ].map(f => (
+                <div key={f.fn} className="text-xs bg-muted/50 rounded-lg p-2">
+                  <code className="font-medium text-primary">{f.fn}</code>
+                  <p className="text-muted-foreground mt-0.5">{f.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-edge-functions',
+      icon: Server,
+      title: 'Edge Functions (API)',
+      content: (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">As Edge Functions rodam em Deno no Supabase e servem como API serverless para operações que exigem secrets ou lógica de servidor:</p>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Função</TableHead>
+                  <TableHead className="text-xs">Propósito</TableHead>
+                  <TableHead className="text-xs">Serviço</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[
+                  { fn: 'generate-quiz-ai', desc: 'Gera questões a partir de PDF/DOCX usando IA', service: 'OpenAI / Google AI' },
+                  { fn: 'create-checkout', desc: 'Cria sessão de checkout para assinatura', service: 'Stripe' },
+                  { fn: 'check-subscription', desc: 'Verifica status de assinatura do usuário', service: 'Stripe' },
+                  { fn: 'customer-portal', desc: 'Abre portal de gerenciamento do cliente', service: 'Stripe' },
+                  { fn: 'send-report-email', desc: 'Envia relatórios por e-mail', service: 'Resend' },
+                  { fn: 'send-approval-email', desc: 'Notifica aprovação de conta de professor', service: 'Resend' },
+                  { fn: 'send-invite-teacher', desc: 'Envia convite para professor de instituição', service: 'Resend' },
+                  { fn: 'send-contact-email', desc: 'Processa formulário de contato', service: 'Resend' },
+                  { fn: 'delete-user', desc: 'Remove usuário e dados associados', service: 'Supabase Admin' },
+                  { fn: 'hub-metrics', desc: 'Coleta métricas do hub institucional', service: 'Interno' },
+                  { fn: 'sync-institution-teachers', desc: 'Sincroniza professores de uma instituição', service: 'Interno' },
+                  { fn: 'list-trial-teachers', desc: 'Lista professores em período de teste', service: 'Interno' },
+                ].map((row, i) => (
+                  <TableRow key={i}>
+                    <TableCell className="text-xs"><code className="bg-muted px-1.5 py-0.5 rounded">{row.fn}</code></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{row.desc}</TableCell>
+                    <TableCell className="text-xs"><Badge variant="outline">{row.service}</Badge></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-security',
+      icon: Lock,
+      title: 'Segurança e Permissões',
+      content: (
+        <div className="space-y-4">
+          <Accordion type="multiple" className="w-full">
+            <AccordionItem value="rls">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Row-Level Security (RLS)</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed space-y-2">
+                <p>Todas as 18 tabelas possuem RLS ativo. As políticas garantem:</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Professores: acessam apenas suas próprias salas, quizzes e turmas</li>
+                  <li>Alunos: acessam apenas salas e equipes onde participam</li>
+                  <li>Admin: acesso total via função <code className="bg-muted px-1 rounded">is_admin()</code></li>
+                  <li>Inserções anônimas: apenas na tabela <code className="bg-muted px-1 rounded">analytics_events</code></li>
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="auth-security">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Autenticação e Tokens</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed space-y-2">
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>JWT emitido pelo Supabase Auth com expiração configurável</li>
+                  <li>Roles armazenados em tabela separada (não no JWT) para evitar escalação de privilégios</li>
+                  <li>Aprovação manual de professores pelo admin antes do primeiro acesso</li>
+                  <li>Sistema de bloqueio (<code className="bg-muted px-1 rounded">is_blocked</code>) para desativar contas</li>
+                </ul>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="secrets">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Secrets e Chaves de API</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed space-y-2">
+                <p>Chaves sensíveis são armazenadas como Supabase Secrets (nunca no código-fonte):</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {['STRIPE_SECRET_KEY', 'RESEND_API_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'HUB_SERVICE_KEY', 'HUB_METRICS_KEY'].map(s => (
+                    <Badge key={s} variant="outline" className="text-xs font-mono">{s}</Badge>
+                  ))}
+                </div>
+                <p className="mt-2">Apenas a <code className="bg-muted px-1 rounded">SUPABASE_ANON_KEY</code> (publishable) é exposta no frontend.</p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-features',
+      icon: Cpu,
+      title: 'Funcionalidades Técnicas',
+      content: (
+        <div className="space-y-4">
+          <Accordion type="multiple" className="w-full">
+            <AccordionItem value="offline">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Modo Offline e Sincronização</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                O hook <code className="bg-muted px-1 rounded">useOfflineSync</code> salva respostas no <code className="bg-muted px-1 rounded">localStorage</code> quando offline e sincroniza automaticamente a cada 30 segundos ou quando a conexão retorna (evento <code className="bg-muted px-1 rounded">online</code>). Um indicador visual mostra o status de conexão.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="i18n">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Internacionalização (i18n)</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                Usa <code className="bg-muted px-1 rounded">i18next</code> com 3 locales: <Badge variant="secondary" className="text-xs">pt-BR</Badge> <Badge variant="secondary" className="text-xs">en</Badge> <Badge variant="secondary" className="text-xs">es</Badge>. Os arquivos de tradução ficam em <code className="bg-muted px-1 rounded">src/i18n/locales/</code>. A detecção de idioma é automática pelo navegador.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="accessibility-tech">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Acessibilidade (a11y)</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                O hook <code className="bg-muted px-1 rounded">useAccessibility</code> persiste preferências (alto contraste, tamanho de fonte) em <code className="bg-muted px-1 rounded">localStorage</code>. Componentes usam ARIA labels, roles semânticos e suporte a navegação por teclado. Skip links disponíveis em todas as páginas.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="analytics-tech">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Analytics e Cookies</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                O consentimento de cookies é gerenciado por <code className="bg-muted px-1 rounded">useCookieConsent</code> com 3 categorias (essenciais, funcionalidade, analíticos). O hook <code className="bg-muted px-1 rounded">useAnalytics</code> só coleta dados quando o usuário aceita cookies analíticos, registrando page views, cliques em CTAs e funil de conversão na tabela <code className="bg-muted px-1 rounded">analytics_events</code>.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="payments">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Pagamentos e Planos</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                Integração com Stripe via Edge Functions. Planos: <Badge variant="secondary" className="text-xs">Free</Badge> <Badge variant="secondary" className="text-xs">Pro</Badge> <Badge variant="secondary" className="text-xs">Institutional</Badge>. O checkout é criado server-side (<code className="bg-muted px-1 rounded">create-checkout</code>), a verificação de status é feita por <code className="bg-muted px-1 rounded">check-subscription</code>. Admins podem atribuir planos manualmente via tabela <code className="bg-muted px-1 rounded">manual_subscriptions</code>.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="ai-generation">
+              <AccordionTrigger className="text-left text-sm font-medium hover:no-underline">Geração de Questões com IA</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                A Edge Function <code className="bg-muted px-1 rounded">generate-quiz-ai</code> recebe arquivos (PDF, DOCX, PPTX), extrai o texto e usa modelos de IA (OpenAI GPT ou Google Gemini) para gerar questões de múltipla escolha. O uso de tokens é registrado na tabela <code className="bg-muted px-1 rounded">ai_usage_log</code> com custo estimado.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      ),
+    },
+    {
+      id: 'tech-project-structure',
+      icon: HardDrive,
+      title: 'Estrutura de Pastas',
+      content: (
+        <div className="bg-muted/50 rounded-xl p-4 text-xs font-mono space-y-0.5 overflow-x-auto">
+          <pre className="text-foreground">{`src/
+├── assets/              # Imagens e assets estáticos
+├── components/          # Componentes reutilizáveis
+│   └── ui/              # Shadcn/UI (accordion, button, card, etc.)
+├── hooks/               # Custom hooks (useAuth, useAnalytics, etc.)
+├── i18n/                # Internacionalização
+│   └── locales/         # Arquivos JSON (pt-BR, en, es)
+├── integrations/
+│   └── supabase/        # Cliente Supabase + types gerados
+├── lib/                 # Utilitários (stripe-plans, utils)
+├── pages/               # Páginas/rotas da aplicação
+├── test/                # Configuração de testes
+├── App.tsx              # Roteamento principal
+├── main.tsx             # Entry point
+└── index.css            # Design tokens (CSS variables)
+
+supabase/
+├── functions/           # Edge Functions (Deno)
+│   ├── generate-quiz-ai/
+│   ├── create-checkout/
+│   ├── check-subscription/
+│   └── ...
+├── migrations/          # Migrações SQL
+└── config.toml          # Configuração do projeto`}</pre>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
