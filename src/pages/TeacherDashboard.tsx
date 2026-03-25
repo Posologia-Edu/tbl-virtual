@@ -89,7 +89,7 @@ type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
   | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank'
-  | 'admin-subscribers' | 'institution' | 'trash';
+  | 'admin-subscribers' | 'institution' | 'trash' | 'pipeline';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
