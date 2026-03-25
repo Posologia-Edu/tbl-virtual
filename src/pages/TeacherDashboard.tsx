@@ -41,6 +41,8 @@ import QuestionBank from '@/components/QuestionBank';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import AdminApiKeys from '@/components/AdminApiKeys';
 import UpgradeDialog from '@/components/UpgradeDialog';
+import SystemUpdates from '@/components/SystemUpdates';
+import PipelineNotification from '@/components/PipelineNotification';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
