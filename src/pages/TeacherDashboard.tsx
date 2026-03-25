@@ -2667,6 +2667,11 @@ export default function TeacherDashboard() {
                          <CreditCard className="w-4 h-4" /><span>Usuários e Planos</span>
                        </SidebarMenuButton>
                      </SidebarMenuItem>
+                     <SidebarMenuItem>
+                       <SidebarMenuButton onClick={() => setActiveView('pipeline')} isActive={activeView === 'pipeline'} className="cursor-pointer">
+                         <Rocket className="w-4 h-4" /><span>Pipeline</span>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
                    </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
