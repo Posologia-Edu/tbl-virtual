@@ -2735,11 +2735,13 @@ export default function TeacherDashboard() {
                 {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
                 {activeView === 'institution' && isInstitutionalPlan && renderInstitution()}
                 {activeView === 'trash' && renderTrash()}
+                {activeView === 'pipeline' && isAdmin && <SystemUpdates />}
               </>
             )}
           </main>
         </div>
       </div>
+      {isAdmin && <PipelineNotification onNavigate={() => setActiveView('pipeline')} />}
     </SidebarProvider>
 
     {/* AI Create New Quiz Dialog */}
