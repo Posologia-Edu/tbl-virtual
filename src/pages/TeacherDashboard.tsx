@@ -29,7 +29,7 @@ import {
   Plus, Users, Play, Archive, LogOut, ChevronRight, ChevronDown, LayoutDashboard,
   BookOpen, FileText, UserCircle, Mail, Lock, CreditCard, Trash2, Pencil, PlayCircle, Search,
   BarChart3, Settings2, FileQuestion, Sparkles, Upload, Loader2, CheckCircle2, TrendingUp, GraduationCap, Globe, Crown, Key,
-  Building2, UserPlus, RefreshCw,
+  Building2, UserPlus, RefreshCw, Rocket,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -41,6 +41,8 @@ import QuestionBank from '@/components/QuestionBank';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import AdminApiKeys from '@/components/AdminApiKeys';
 import UpgradeDialog from '@/components/UpgradeDialog';
+import SystemUpdates from '@/components/SystemUpdates';
+import PipelineNotification from '@/components/PipelineNotification';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
@@ -89,7 +91,7 @@ type ActiveView =
   | 'dashboard' | 'rooms' | 'personal-data' | 'my-plan' | 'change-password'
   | 'contact' | 'create-quiz' | 'my-quizzes' | 'reports' | 'edit-quiz' | 'quiz-config'
   | 'admin-teachers' | 'admin-api-keys' | 'analytics' | 'classes' | 'question-bank'
-  | 'admin-subscribers' | 'institution' | 'trash';
+  | 'admin-subscribers' | 'institution' | 'trash' | 'pipeline';
 
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
@@ -2665,6 +2667,11 @@ export default function TeacherDashboard() {
                          <CreditCard className="w-4 h-4" /><span>Usuários e Planos</span>
                        </SidebarMenuButton>
                      </SidebarMenuItem>
+                     <SidebarMenuItem>
+                       <SidebarMenuButton onClick={() => setActiveView('pipeline')} isActive={activeView === 'pipeline'} className="cursor-pointer">
+                         <Rocket className="w-4 h-4" /><span>Pipeline</span>
+                       </SidebarMenuButton>
+                     </SidebarMenuItem>
                    </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -2728,11 +2735,13 @@ export default function TeacherDashboard() {
                 {activeView === 'admin-subscribers' && isAdmin && renderAdminSubscribers()}
                 {activeView === 'institution' && isInstitutionalPlan && renderInstitution()}
                 {activeView === 'trash' && renderTrash()}
+                {activeView === 'pipeline' && isAdmin && <SystemUpdates />}
               </>
             )}
           </main>
         </div>
       </div>
+      {isAdmin && <PipelineNotification onNavigate={() => setActiveView('pipeline')} />}
     </SidebarProvider>
 
     {/* AI Create New Quiz Dialog */}
