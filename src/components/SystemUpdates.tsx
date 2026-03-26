@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,10 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 import {
-  Plus, CheckCircle2, Clock, Lightbulb, Rocket, Loader2, Pencil, Trash2, Calendar,
-  Tag, AlertCircle, ArrowUpCircle, ArrowRightCircle, ArrowDownCircle,
+  Plus, CheckCircle2, Rocket, Loader2, Trash2, Calendar, Sparkles, Lightbulb,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,26 +28,53 @@ interface SystemUpdate {
   notes: string | null;
 }
 
-const statusConfig: Record<string, { label: string; icon: any; color: string }> = {
-  done: { label: 'Implementado', icon: CheckCircle2, color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  in_progress: { label: 'Em Desenvolvimento', icon: Loader2, color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-  planned: { label: 'Planejado', icon: Clock, color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
-  idea: { label: 'Ideia', icon: Lightbulb, color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
+const priorityConfig: Record<string, { label: string; color: string }> = {
+  high: { label: 'Alta', color: 'bg-red-500 text-white' },
+  medium: { label: 'Média', color: 'bg-amber-500 text-white' },
+  low: { label: 'Baixa', color: 'bg-green-500 text-white' },
 };
 
-const categoryConfig: Record<string, { label: string; color: string }> = {
-  feature: { label: 'Funcionalidade', color: 'bg-primary/10 text-primary' },
-  improvement: { label: 'Melhoria', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400' },
-  bugfix: { label: 'Correção', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
-  security: { label: 'Segurança', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
-  infrastructure: { label: 'Infraestrutura', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400' },
+const categoryConfig: Record<string, { label: string }> = {
+  feature: { label: 'Funcionalidade' },
+  improvement: { label: 'Melhoria' },
+  bugfix: { label: 'Correção' },
+  security: { label: 'Segurança' },
+  infrastructure: { label: 'Infraestrutura' },
 };
 
-const priorityIcons: Record<string, any> = {
-  high: ArrowUpCircle,
-  medium: ArrowRightCircle,
-  low: ArrowDownCircle,
+const borderColors: Record<string, string> = {
+  high: 'border-l-red-500',
+  medium: 'border-l-amber-500',
+  low: 'border-l-green-500',
 };
+
+// Roadmap suggestions pool - contextually relevant to a TBL/education platform
+const roadmapSuggestions = [
+  { title: 'App Mobile (PWA)', description: 'Versão mobile progressiva para acesso offline e notificações push.', category: 'feature', priority: 'high' },
+  { title: 'Análise de Desempenho por Competência', description: 'Dashboard de competências cruzando resultados de múltiplas avaliações por aluno.', category: 'feature', priority: 'high' },
+  { title: 'IA para Feedback Personalizado', description: 'Feedback automático por IA adaptado ao perfil de erros de cada aluno.', category: 'feature', priority: 'high' },
+  { title: 'Integração com LMS', description: 'Conectores para Moodle, Canvas e Google Classroom para importação/exportação de dados.', category: 'feature', priority: 'medium' },
+  { title: 'Banco de Casos Clínicos Compartilhado', description: 'Marketplace específico para casos clínicos reutilizáveis entre professores e instituições.', category: 'feature', priority: 'medium' },
+  { title: 'Sistema de Gamificação Avançado', description: 'Ranking global, badges temáticos e desafios semanais entre equipes.', category: 'feature', priority: 'medium' },
+  { title: 'Relatórios em PDF Personalizáveis', description: 'Templates configuráveis para exportação de relatórios com identidade visual da instituição.', category: 'improvement', priority: 'medium' },
+  { title: 'Dashboard de Engajamento', description: 'Métricas de participação, frequência e evolução dos alunos ao longo do semestre.', category: 'feature', priority: 'high' },
+  { title: 'Modo Prova Seguro', description: 'Bloqueio de navegação e monitoramento anti-cola durante avaliações individuais.', category: 'feature', priority: 'high' },
+  { title: 'Suporte a Questões Discursivas', description: 'Permitir questões abertas no iRAT/tRAT com correção manual ou por IA.', category: 'feature', priority: 'medium' },
+  { title: 'Importação de Questões via Excel/CSV', description: 'Upload em massa de questões a partir de planilhas formatadas.', category: 'improvement', priority: 'medium' },
+  { title: 'Notificações por Email', description: 'Alertas automáticos para alunos sobre novas salas, prazos e resultados.', category: 'feature', priority: 'medium' },
+  { title: 'Tema Escuro Avançado', description: 'Modo escuro completo com personalização de cores por instituição.', category: 'improvement', priority: 'low' },
+  { title: 'API Pública para Integrações', description: 'API REST documentada para integração com sistemas terceiros.', category: 'infrastructure', priority: 'medium' },
+  { title: 'Multi-idioma Completo', description: 'Suporte completo a inglês e espanhol além do português.', category: 'improvement', priority: 'low' },
+  { title: 'Sistema de Rubricas', description: 'Criação e aplicação de rubricas de avaliação para questões de aplicação.', category: 'feature', priority: 'high' },
+  { title: 'Backup e Exportação de Dados', description: 'Exportação completa de dados do professor em formato estruturado.', category: 'security', priority: 'medium' },
+  { title: 'Chat entre Equipes no tRAT', description: 'Canal de comunicação em tempo real entre membros da equipe durante o tRAT.', category: 'feature', priority: 'medium' },
+  { title: 'Análise de Tempo por Questão', description: 'Métricas detalhadas de tempo gasto em cada questão por aluno e equipe.', category: 'feature', priority: 'low' },
+  { title: 'Suporte a Vídeo nas Questões', description: 'Incorporar vídeos do YouTube ou uploads como parte do enunciado das questões.', category: 'feature', priority: 'medium' },
+  { title: 'Painel Institucional', description: 'Visão consolidada para coordenadores com métricas de todos os professores da instituição.', category: 'feature', priority: 'high' },
+  { title: 'Modo Revisão Pós-Prova', description: 'Permite ao aluno revisar suas respostas e ver explicações após encerramento.', category: 'feature', priority: 'medium' },
+  { title: 'Templates de Sala Reutilizáveis', description: 'Salvar configurações de sala como template para reutilização rápida.', category: 'improvement', priority: 'low' },
+  { title: 'Webhooks para Automação', description: 'Disparar eventos para sistemas externos quando uma sala é finalizada.', category: 'infrastructure', priority: 'low' },
+];
 
 export default function SystemUpdates() {
   const { isAdmin } = useAuth();
@@ -58,6 +82,7 @@ export default function SystemUpdates() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUpdate, setEditingUpdate] = useState<SystemUpdate | null>(null);
+  const [generatingRoadmap, setGeneratingRoadmap] = useState(false);
   const [form, setForm] = useState({
     title: '', description: '', category: 'feature', status: 'idea',
     priority: 'medium', version: '', tags: '', notes: '',
@@ -71,6 +96,59 @@ export default function SystemUpdates() {
   };
 
   useEffect(() => { loadUpdates(); }, []);
+
+  // Auto-generate roadmap suggestions every 30 days
+  useEffect(() => {
+    if (!isAdmin) return;
+    const checkAndGenerate = async () => {
+      const lastGenKey = 'roadmap_last_generated';
+      const lastGen = localStorage.getItem(lastGenKey);
+      const now = Date.now();
+      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+
+      if (lastGen && (now - parseInt(lastGen)) < thirtyDays) return;
+
+      // Check if there are already pending roadmap items
+      const { data: pending } = await supabase
+        .from('system_updates')
+        .select('id, title')
+        .in('status', ['planned', 'idea']);
+
+      if (pending && pending.length >= 5) return; // Already have enough
+
+      // Get existing titles to avoid duplicates
+      const { data: existing } = await supabase
+        .from('system_updates')
+        .select('title');
+      const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
+
+      // Pick 7-8 unique suggestions not already in the system
+      const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
+      const shuffled = available.sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
+
+      if (selected.length === 0) return;
+
+      const payload = selected.map(s => ({
+        title: s.title,
+        description: s.description,
+        category: s.category,
+        priority: s.priority,
+        status: 'idea',
+        tags: [],
+      }));
+
+      const { error } = await supabase.from('system_updates').insert(payload);
+      if (!error) {
+        localStorage.setItem(lastGenKey, now.toString());
+        loadUpdates();
+        toast.info(`${selected.length} novas sugestões adicionadas ao roadmap!`);
+      }
+    };
+
+    const timer = setTimeout(checkAndGenerate, 2000);
+    return () => clearTimeout(timer);
+  }, [isAdmin]);
 
   const resetForm = () => {
     setForm({ title: '', description: '', category: 'feature', status: 'idea', priority: 'medium', version: '', tags: '', notes: '', implemented_at: '' });
@@ -127,77 +205,108 @@ export default function SystemUpdates() {
     loadUpdates();
   };
 
+  const handleComplete = async (u: SystemUpdate) => {
+    const { error } = await supabase.from('system_updates').update({
+      status: 'done',
+      implemented_at: new Date().toISOString(),
+    }).eq('id', u.id);
+    if (error) { toast.error('Erro ao concluir'); return; }
+    toast.success(`"${u.title}" movido para o Changelog!`);
+    loadUpdates();
+  };
+
+  const handleGenerateRoadmap = async () => {
+    setGeneratingRoadmap(true);
+    const { data: existing } = await supabase.from('system_updates').select('title');
+    const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
+    const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
+    const shuffled = available.sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
+
+    if (selected.length === 0) {
+      toast.info('Todas as sugestões já foram adicionadas ao sistema.');
+      setGeneratingRoadmap(false);
+      return;
+    }
+
+    const payload = selected.map(s => ({
+      title: s.title, description: s.description, category: s.category,
+      priority: s.priority, status: 'idea', tags: [],
+    }));
+
+    const { error } = await supabase.from('system_updates').insert(payload);
+    if (!error) {
+      localStorage.setItem('roadmap_last_generated', Date.now().toString());
+      toast.success(`${selected.length} novas sugestões geradas!`);
+      loadUpdates();
+    } else {
+      toast.error('Erro ao gerar sugestões');
+    }
+    setGeneratingRoadmap(false);
+  };
+
   const formatDate = (d: string) => {
     const date = new Date(d);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
   const doneUpdates = updates.filter(u => u.status === 'done');
-  const inProgressUpdates = updates.filter(u => u.status === 'in_progress');
-  const plannedUpdates = updates.filter(u => u.status === 'planned');
-  const ideaUpdates = updates.filter(u => u.status === 'idea');
+  const roadmapUpdates = updates.filter(u => ['in_progress', 'planned', 'idea'].includes(u.status));
 
-  const renderUpdateCard = (u: SystemUpdate) => {
-    const sc = statusConfig[u.status] || statusConfig.idea;
-    const cc = categoryConfig[u.category] || categoryConfig.feature;
-    const PriorityIcon = priorityIcons[u.priority || 'medium'] || ArrowRightCircle;
-    const StatusIcon = sc.icon;
-
+  const renderChangelogCard = (u: SystemUpdate) => {
+    const pc = priorityConfig[u.priority || 'medium'] || priorityConfig.medium;
     return (
-      <Card key={u.id} className="group hover:shadow-md transition-shadow">
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <StatusIcon className={`w-4 h-4 shrink-0 ${u.status === 'in_progress' ? 'animate-spin' : ''}`} />
-                <h4 className="font-semibold text-sm">{u.title}</h4>
-                {u.version && <Badge variant="outline" className="text-xs">{u.version}</Badge>}
-              </div>
-              <p className="text-sm text-muted-foreground mb-2">{u.description}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge className={`text-xs ${sc.color}`}>{sc.label}</Badge>
-                <Badge className={`text-xs ${cc.color}`}>{cc.label}</Badge>
-                <PriorityIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {u.implemented_at ? formatDate(u.implemented_at) : formatDate(u.created_at)}
-                </span>
-                {(u.tags || []).map(tag => (
-                  <Badge key={tag} variant="secondary" className="text-xs"><Tag className="w-2.5 h-2.5 mr-0.5" />{tag}</Badge>
-                ))}
-              </div>
-              {u.notes && <p className="text-xs text-muted-foreground mt-2 italic border-l-2 border-muted pl-2">{u.notes}</p>}
+      <div key={u.id} className={`bg-card rounded-lg border border-l-4 ${borderColors[u.priority || 'medium'] || 'border-l-muted'} p-4 hover:shadow-sm transition-shadow`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+              <h4 className="font-semibold text-sm text-foreground">{u.title}</h4>
+              {u.version && <Badge variant="outline" className="text-xs">{u.version}</Badge>}
+              <Badge className={`text-xs ${pc.color}`}>{pc.label}</Badge>
             </div>
-            {isAdmin && (
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(u)}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(u.id)}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">{u.description}</p>
+            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <Calendar className="w-3 h-3" />
+              {u.implemented_at ? formatDate(u.implemented_at) : formatDate(u.created_at)}
+              {u.notes && <span className="italic border-l pl-2 border-muted">— {u.notes}</span>}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          {isAdmin && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => handleDelete(u.id)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+      </div>
     );
   };
 
-  const renderSection = (title: string, icon: any, items: SystemUpdate[], emptyMsg: string) => {
-    const Icon = icon;
+  const renderRoadmapCard = (u: SystemUpdate) => {
+    const pc = priorityConfig[u.priority || 'medium'] || priorityConfig.medium;
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Icon className="w-5 h-5" />
-          <h3 className="font-semibold text-lg">{title}</h3>
-          <Badge variant="secondary">{items.length}</Badge>
+      <div key={u.id} className={`bg-card rounded-lg border border-l-4 ${borderColors[u.priority || 'medium'] || 'border-l-muted'} p-4 hover:shadow-sm transition-shadow`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <Sparkles className="w-4 h-4 text-primary shrink-0" />
+              <h4 className="font-semibold text-sm text-foreground">{u.title}</h4>
+              <Badge className={`text-xs ${pc.color}`}>{pc.label}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{u.description}</p>
+          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => handleComplete(u)}>
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Concluir
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(u.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
         </div>
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">{emptyMsg}</p>
-        ) : (
-          <div className="space-y-2">{items.map(renderUpdateCard)}</div>
-        )}
       </div>
     );
   };
@@ -209,7 +318,7 @@ export default function SystemUpdates() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2"><Rocket className="w-6 h-6" /> Pipeline de Atualizações</h2>
-          <p className="text-muted-foreground text-sm">Histórico de implementações e planejamento de futuras funcionalidades</p>
+          <p className="text-muted-foreground text-sm">Histórico de funcionalidades e planejamento futuro do sistema.</p>
         </div>
         {isAdmin && (
           <Button onClick={openCreate}><Plus className="w-4 h-4 mr-1" /> Nova Entrada</Button>
@@ -218,26 +327,39 @@ export default function SystemUpdates() {
 
       <Tabs defaultValue="changelog">
         <TabsList>
-          <TabsTrigger value="changelog">Changelog ({doneUpdates.length})</TabsTrigger>
-          <TabsTrigger value="pipeline">Pipeline ({inProgressUpdates.length + plannedUpdates.length})</TabsTrigger>
-          {isAdmin && <TabsTrigger value="ideas">Ideias ({ideaUpdates.length})</TabsTrigger>}
+          <TabsTrigger value="changelog" className="gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Changelog ({doneUpdates.length})
+          </TabsTrigger>
+          <TabsTrigger value="roadmap" className="gap-1.5">
+            <Lightbulb className="w-3.5 h-3.5" />
+            Roadmap ({roadmapUpdates.length})
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="changelog" className="space-y-4 mt-4">
-          {renderSection('Implementado', CheckCircle2, doneUpdates, 'Nenhuma atualização registrada ainda.')}
+        <TabsContent value="changelog" className="mt-4">
+          {doneUpdates.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma atualização registrada ainda.</p>
+          ) : (
+            <div className="space-y-3">{doneUpdates.map(renderChangelogCard)}</div>
+          )}
         </TabsContent>
 
-        <TabsContent value="pipeline" className="space-y-6 mt-4">
-          {renderSection('Em Desenvolvimento', Loader2, inProgressUpdates, 'Nenhuma funcionalidade em desenvolvimento.')}
-          <Separator />
-          {renderSection('Planejado', Clock, plannedUpdates, 'Nenhuma funcionalidade planejada.')}
+        <TabsContent value="roadmap" className="mt-4">
+          {isAdmin && (
+            <div className="flex justify-end mb-3">
+              <Button variant="outline" size="sm" onClick={handleGenerateRoadmap} disabled={generatingRoadmap} className="gap-1.5">
+                {generatingRoadmap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                Gerar Sugestões
+              </Button>
+            </div>
+          )}
+          {roadmapUpdates.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma funcionalidade no roadmap.</p>
+          ) : (
+            <div className="space-y-3">{roadmapUpdates.map(renderRoadmapCard)}</div>
+          )}
         </TabsContent>
-
-        {isAdmin && (
-          <TabsContent value="ideas" className="space-y-4 mt-4">
-            {renderSection('Ideias Futuras', Lightbulb, ideaUpdates, 'Nenhuma ideia registrada. Clique em "Nova Entrada" para começar.')}
-          </TabsContent>
-        )}
       </Tabs>
 
       {/* Create/Edit Dialog */}
