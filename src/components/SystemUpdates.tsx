@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Plus, CheckCircle2, Rocket, Loader2, Trash2, Calendar, Sparkles, Lightbulb,
+  Plus, CheckCircle2, Rocket, Loader2, Trash2, Calendar, Sparkles, Lightbulb, Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -48,33 +48,7 @@ const borderColors: Record<string, string> = {
   low: 'border-l-green-500',
 };
 
-// Roadmap suggestions pool - contextually relevant to a TBL/education platform
-const roadmapSuggestions = [
-  { title: 'App Mobile (PWA)', description: 'Versão mobile progressiva para acesso offline e notificações push.', category: 'feature', priority: 'high' },
-  { title: 'Análise de Desempenho por Competência', description: 'Dashboard de competências cruzando resultados de múltiplas avaliações por aluno.', category: 'feature', priority: 'high' },
-  { title: 'IA para Feedback Personalizado', description: 'Feedback automático por IA adaptado ao perfil de erros de cada aluno.', category: 'feature', priority: 'high' },
-  { title: 'Integração com LMS', description: 'Conectores para Moodle, Canvas e Google Classroom para importação/exportação de dados.', category: 'feature', priority: 'medium' },
-  { title: 'Banco de Casos Clínicos Compartilhado', description: 'Marketplace específico para casos clínicos reutilizáveis entre professores e instituições.', category: 'feature', priority: 'medium' },
-  { title: 'Sistema de Gamificação Avançado', description: 'Ranking global, badges temáticos e desafios semanais entre equipes.', category: 'feature', priority: 'medium' },
-  { title: 'Relatórios em PDF Personalizáveis', description: 'Templates configuráveis para exportação de relatórios com identidade visual da instituição.', category: 'improvement', priority: 'medium' },
-  { title: 'Dashboard de Engajamento', description: 'Métricas de participação, frequência e evolução dos alunos ao longo do semestre.', category: 'feature', priority: 'high' },
-  { title: 'Modo Prova Seguro', description: 'Bloqueio de navegação e monitoramento anti-cola durante avaliações individuais.', category: 'feature', priority: 'high' },
-  { title: 'Suporte a Questões Discursivas', description: 'Permitir questões abertas no iRAT/tRAT com correção manual ou por IA.', category: 'feature', priority: 'medium' },
-  { title: 'Importação de Questões via Excel/CSV', description: 'Upload em massa de questões a partir de planilhas formatadas.', category: 'improvement', priority: 'medium' },
-  { title: 'Notificações por Email', description: 'Alertas automáticos para alunos sobre novas salas, prazos e resultados.', category: 'feature', priority: 'medium' },
-  { title: 'Tema Escuro Avançado', description: 'Modo escuro completo com personalização de cores por instituição.', category: 'improvement', priority: 'low' },
-  { title: 'API Pública para Integrações', description: 'API REST documentada para integração com sistemas terceiros.', category: 'infrastructure', priority: 'medium' },
-  { title: 'Multi-idioma Completo', description: 'Suporte completo a inglês e espanhol além do português.', category: 'improvement', priority: 'low' },
-  { title: 'Sistema de Rubricas', description: 'Criação e aplicação de rubricas de avaliação para questões de aplicação.', category: 'feature', priority: 'high' },
-  { title: 'Backup e Exportação de Dados', description: 'Exportação completa de dados do professor em formato estruturado.', category: 'security', priority: 'medium' },
-  { title: 'Chat entre Equipes no tRAT', description: 'Canal de comunicação em tempo real entre membros da equipe durante o tRAT.', category: 'feature', priority: 'medium' },
-  { title: 'Análise de Tempo por Questão', description: 'Métricas detalhadas de tempo gasto em cada questão por aluno e equipe.', category: 'feature', priority: 'low' },
-  { title: 'Suporte a Vídeo nas Questões', description: 'Incorporar vídeos do YouTube ou uploads como parte do enunciado das questões.', category: 'feature', priority: 'medium' },
-  { title: 'Painel Institucional', description: 'Visão consolidada para coordenadores com métricas de todos os professores da instituição.', category: 'feature', priority: 'high' },
-  { title: 'Modo Revisão Pós-Prova', description: 'Permite ao aluno revisar suas respostas e ver explicações após encerramento.', category: 'feature', priority: 'medium' },
-  { title: 'Templates de Sala Reutilizáveis', description: 'Salvar configurações de sala como template para reutilização rápida.', category: 'improvement', priority: 'low' },
-  { title: 'Webhooks para Automação', description: 'Disparar eventos para sistemas externos quando uma sala é finalizada.', category: 'infrastructure', priority: 'low' },
-];
+// Static pool removed - now using AI-powered suggestions
 
 export default function SystemUpdates() {
   const { isAdmin } = useAuth();
@@ -96,59 +70,6 @@ export default function SystemUpdates() {
   };
 
   useEffect(() => { loadUpdates(); }, []);
-
-  // Auto-generate roadmap suggestions every 30 days
-  useEffect(() => {
-    if (!isAdmin) return;
-    const checkAndGenerate = async () => {
-      const lastGenKey = 'roadmap_last_generated';
-      const lastGen = localStorage.getItem(lastGenKey);
-      const now = Date.now();
-      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-
-      if (lastGen && (now - parseInt(lastGen)) < thirtyDays) return;
-
-      // Check if there are already pending roadmap items
-      const { data: pending } = await supabase
-        .from('system_updates')
-        .select('id, title')
-        .in('status', ['planned', 'idea']);
-
-      if (pending && pending.length >= 5) return; // Already have enough
-
-      // Get existing titles to avoid duplicates
-      const { data: existing } = await supabase
-        .from('system_updates')
-        .select('title');
-      const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
-
-      // Pick 7-8 unique suggestions not already in the system
-      const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
-      const shuffled = available.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
-
-      if (selected.length === 0) return;
-
-      const payload = selected.map(s => ({
-        title: s.title,
-        description: s.description,
-        category: s.category,
-        priority: s.priority,
-        status: 'idea',
-        tags: [],
-      }));
-
-      const { error } = await supabase.from('system_updates').insert(payload);
-      if (!error) {
-        localStorage.setItem(lastGenKey, now.toString());
-        loadUpdates();
-        toast.info(`${selected.length} novas sugestões adicionadas ao roadmap!`);
-      }
-    };
-
-    const timer = setTimeout(checkAndGenerate, 2000);
-    return () => clearTimeout(timer);
-  }, [isAdmin]);
 
   const resetForm = () => {
     setForm({ title: '', description: '', category: 'feature', status: 'idea', priority: 'medium', version: '', tags: '', notes: '', implemented_at: '' });
@@ -217,30 +138,20 @@ export default function SystemUpdates() {
 
   const handleGenerateRoadmap = async () => {
     setGeneratingRoadmap(true);
-    const { data: existing } = await supabase.from('system_updates').select('title');
-    const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
-    const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
-    const shuffled = available.sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
-
-    if (selected.length === 0) {
-      toast.info('Todas as sugestões já foram adicionadas ao sistema.');
-      setGeneratingRoadmap(false);
-      return;
-    }
-
-    const payload = selected.map(s => ({
-      title: s.title, description: s.description, category: s.category,
-      priority: s.priority, status: 'idea', tags: [],
-    }));
-
-    const { error } = await supabase.from('system_updates').insert(payload);
-    if (!error) {
-      localStorage.setItem('roadmap_last_generated', Date.now().toString());
-      toast.success(`${selected.length} novas sugestões geradas!`);
-      loadUpdates();
-    } else {
-      toast.error('Erro ao gerar sugestões');
+    try {
+      const { data, error } = await supabase.functions.invoke('suggest-roadmap-ai');
+      if (error) {
+        toast.error('Erro ao gerar sugestões com IA');
+        console.error(error);
+      } else if (data?.count === 0) {
+        toast.info('A IA não encontrou novas sugestões relevantes no momento.');
+      } else {
+        toast.success(`${data.count} novas sugestões geradas pela IA!`);
+        loadUpdates();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao conectar com a IA');
     }
     setGeneratingRoadmap(false);
   };
@@ -349,8 +260,8 @@ export default function SystemUpdates() {
           {isAdmin && (
             <div className="flex justify-end mb-3">
               <Button variant="outline" size="sm" onClick={handleGenerateRoadmap} disabled={generatingRoadmap} className="gap-1.5">
-                {generatingRoadmap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                Gerar Sugestões
+                {generatingRoadmap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                {generatingRoadmap ? 'Gerando...' : 'Sugerir com IA'}
               </Button>
             </div>
           )}
