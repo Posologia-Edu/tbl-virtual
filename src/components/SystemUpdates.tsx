@@ -260,8 +260,8 @@ export default function SystemUpdates() {
           {isAdmin && (
             <div className="flex justify-end mb-3">
               <Button variant="outline" size="sm" onClick={handleGenerateRoadmap} disabled={generatingRoadmap} className="gap-1.5">
-                {generatingRoadmap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                Gerar Sugestões
+                {generatingRoadmap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                {generatingRoadmap ? 'Gerando...' : 'Sugerir com IA'}
               </Button>
             </div>
           )}
