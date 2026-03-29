@@ -71,59 +71,6 @@ export default function SystemUpdates() {
 
   useEffect(() => { loadUpdates(); }, []);
 
-  // Auto-generate roadmap suggestions every 30 days
-  useEffect(() => {
-    if (!isAdmin) return;
-    const checkAndGenerate = async () => {
-      const lastGenKey = 'roadmap_last_generated';
-      const lastGen = localStorage.getItem(lastGenKey);
-      const now = Date.now();
-      const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-
-      if (lastGen && (now - parseInt(lastGen)) < thirtyDays) return;
-
-      // Check if there are already pending roadmap items
-      const { data: pending } = await supabase
-        .from('system_updates')
-        .select('id, title')
-        .in('status', ['planned', 'idea']);
-
-      if (pending && pending.length >= 5) return; // Already have enough
-
-      // Get existing titles to avoid duplicates
-      const { data: existing } = await supabase
-        .from('system_updates')
-        .select('title');
-      const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
-
-      // Pick 7-8 unique suggestions not already in the system
-      const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
-      const shuffled = available.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
-
-      if (selected.length === 0) return;
-
-      const payload = selected.map(s => ({
-        title: s.title,
-        description: s.description,
-        category: s.category,
-        priority: s.priority,
-        status: 'idea',
-        tags: [],
-      }));
-
-      const { error } = await supabase.from('system_updates').insert(payload);
-      if (!error) {
-        localStorage.setItem(lastGenKey, now.toString());
-        loadUpdates();
-        toast.info(`${selected.length} novas sugestões adicionadas ao roadmap!`);
-      }
-    };
-
-    const timer = setTimeout(checkAndGenerate, 2000);
-    return () => clearTimeout(timer);
-  }, [isAdmin]);
-
   const resetForm = () => {
     setForm({ title: '', description: '', category: 'feature', status: 'idea', priority: 'medium', version: '', tags: '', notes: '', implemented_at: '' });
     setEditingUpdate(null);
