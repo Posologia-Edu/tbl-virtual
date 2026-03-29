@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
-  Plus, CheckCircle2, Rocket, Loader2, Trash2, Calendar, Sparkles, Lightbulb,
+  Plus, CheckCircle2, Rocket, Loader2, Trash2, Calendar, Sparkles, Lightbulb, Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
