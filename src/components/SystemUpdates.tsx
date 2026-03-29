@@ -138,30 +138,20 @@ export default function SystemUpdates() {
 
   const handleGenerateRoadmap = async () => {
     setGeneratingRoadmap(true);
-    const { data: existing } = await supabase.from('system_updates').select('title');
-    const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase()));
-    const available = roadmapSuggestions.filter(s => !existingTitles.has(s.title.toLowerCase()));
-    const shuffled = available.sort(() => Math.random() - 0.5);
-    const selected = shuffled.slice(0, Math.min(7 + Math.round(Math.random()), shuffled.length));
-
-    if (selected.length === 0) {
-      toast.info('Todas as sugestões já foram adicionadas ao sistema.');
-      setGeneratingRoadmap(false);
-      return;
-    }
-
-    const payload = selected.map(s => ({
-      title: s.title, description: s.description, category: s.category,
-      priority: s.priority, status: 'idea', tags: [],
-    }));
-
-    const { error } = await supabase.from('system_updates').insert(payload);
-    if (!error) {
-      localStorage.setItem('roadmap_last_generated', Date.now().toString());
-      toast.success(`${selected.length} novas sugestões geradas!`);
-      loadUpdates();
-    } else {
-      toast.error('Erro ao gerar sugestões');
+    try {
+      const { data, error } = await supabase.functions.invoke('suggest-roadmap-ai');
+      if (error) {
+        toast.error('Erro ao gerar sugestões com IA');
+        console.error(error);
+      } else if (data?.count === 0) {
+        toast.info('A IA não encontrou novas sugestões relevantes no momento.');
+      } else {
+        toast.success(`${data.count} novas sugestões geradas pela IA!`);
+        loadUpdates();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao conectar com a IA');
     }
     setGeneratingRoadmap(false);
   };
