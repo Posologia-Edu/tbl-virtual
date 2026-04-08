@@ -58,18 +58,20 @@ const TOOLS_PAYLOAD = [
     type: "function" as const,
     function: {
       name: "suggest_roadmap_items",
-      description: "Return 5-6 new roadmap suggestions for the platform.",
+      description: "Return exactly 5 new roadmap suggestions relevant to a TBL educational platform.",
       parameters: {
         type: "object",
         properties: {
           suggestions: {
             type: "array",
+            minItems: 5,
+            maxItems: 5,
             items: {
               type: "object",
               properties: {
-                title: { type: "string" },
-                description: { type: "string" },
-                category: { type: "string", enum: ["feature", "improvement", "bugfix", "security", "infrastructure"] },
+                title: { type: "string", description: "Short, clear title in Portuguese" },
+                description: { type: "string", description: "2-3 sentences explaining the value for TBL teachers/students" },
+                category: { type: "string", enum: ["feature", "improvement"] },
                 priority: { type: "string", enum: ["high", "medium", "low"] },
               },
               required: ["title", "description", "category", "priority"],
