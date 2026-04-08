@@ -140,10 +140,37 @@ export default function SystemUpdates() {
     setGeneratingRoadmap(true);
     try {
       const { data, error } = await supabase.functions.invoke('suggest-roadmap-ai');
+
       if (error) {
-        toast.error('Erro ao gerar sugestões com IA');
+        let message = error.message || 'Erro ao gerar sugestões com IA';
+        const context = (error as { context?: Response }).context;
+
+        if (context instanceof Response) {
+          try {
+            const errorBody = await context.clone().json();
+            if (typeof errorBody?.error === 'string') {
+              message = errorBody.error;
+            }
+          } catch {
+            if (context.status === 402) {
+              message = 'Créditos de IA esgotados. Adicione fundos em Settings > Workspace > Usage.';
+            } else if (context.status === 429) {
+              message = 'Limite de requisições atingido. Tente novamente em alguns segundos.';
+            }
+          }
+        }
+
+        toast.error(message);
         console.error(error);
-      } else if (data?.count === 0) {
+        return;
+      }
+
+      if (data?.ok === false) {
+        toast.error(data.error || 'Erro ao gerar sugestões com IA');
+        return;
+      }
+
+      if (data?.count === 0) {
         toast.info('A IA não encontrou novas sugestões relevantes no momento.');
       } else {
         toast.success(`${data.count} novas sugestões geradas pela IA!`);
@@ -152,8 +179,9 @@ export default function SystemUpdates() {
     } catch (e) {
       console.error(e);
       toast.error('Erro ao conectar com a IA');
+    } finally {
+      setGeneratingRoadmap(false);
     }
-    setGeneratingRoadmap(false);
   };
 
   const formatDate = (d: string) => {
