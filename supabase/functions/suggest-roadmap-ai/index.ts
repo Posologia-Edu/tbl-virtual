@@ -7,12 +7,40 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+interface Suggestion {
+  title: string;
+  description: string;
+  category: "feature" | "improvement" | "bugfix" | "security" | "infrastructure";
+  priority: "high" | "medium" | "low";
+}
+
+interface SuggestRoadmapResponse {
+  ok: boolean;
+  count?: number;
+  suggestions?: Suggestion[];
+  error?: string;
+  code?: string;
+}
+
+const jsonHeaders = {
+  ...corsHeaders,
+  "Content-Type": "application/json",
+};
+
+const respond = (payload: SuggestRoadmapResponse) =>
+  new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: jsonHeaders,
+  });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing authorization");
+    if (!authHeader) {
+      return respond({ ok: false, error: "Missing authorization", code: "UNAUTHORIZED" });
+    }
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -21,26 +49,33 @@ serve(async (req) => {
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) throw new Error("Unauthorized");
+    if (authError || !user) {
+      return respond({ ok: false, error: "Unauthorized", code: "UNAUTHORIZED" });
+    }
 
-    // Check admin role
     const { data: roleData } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
       .eq("role", "admin")
       .maybeSingle();
-    if (!roleData) throw new Error("Admin access required");
 
-    // Fetch ALL existing updates (done + roadmap) to avoid duplicates
+    if (!roleData) {
+      return respond({ ok: false, error: "Admin access required", code: "ADMIN_REQUIRED" });
+    }
+
     const { data: existing } = await supabase
       .from("system_updates")
       .select("title, description, status, category");
 
-    const existingList = (existing || []).map((e: any) => `- [${e.status}] ${e.title}: ${e.description}`).join("\n");
+    const existingList = (existing || [])
+      .map((entry: any) => `- [${entry.status}] ${entry.title}: ${entry.description}`)
+      .join("\n");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!LOVABLE_API_KEY) {
+      return respond({ ok: false, error: "LOVABLE_API_KEY not configured", code: "MISSING_AI_KEY" });
+    }
 
     const systemPrompt = `Você é um consultor de produto especializado em plataformas educacionais de TBL (Team-Based Learning). 
 Sua tarefa é sugerir funcionalidades NOVAS e RELEVANTES para o roadmap de uma plataforma que possui:
@@ -117,39 +152,62 @@ Gere 5-6 sugestões de funcionalidades COMPLETAMENTE NOVAS que NÃO estejam na l
 
     if (!aiResponse.ok) {
       const status = aiResponse.status;
+
       if (status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Tente novamente em alguns segundos." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return respond({
+          ok: false,
+          error: "Rate limit exceeded. Tente novamente em alguns segundos.",
+          code: "RATE_LIMITED",
         });
       }
+
       if (status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Adicione fundos em Settings > Workspace > Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return respond({
+          ok: false,
+          error: "Créditos de IA esgotados. Adicione fundos em Settings > Workspace > Usage.",
+          code: "INSUFFICIENT_CREDITS",
         });
       }
+
+      if (status === 404) {
+        return respond({
+          ok: false,
+          error: "Modelo de IA indisponível no momento. Tente novamente em instantes.",
+          code: "MODEL_NOT_FOUND",
+        });
+      }
+
+      if (status === 410) {
+        return respond({
+          ok: false,
+          error: "Modelo de IA descontinuado. Atualize a configuração do modelo.",
+          code: "MODEL_DEPRECATED",
+        });
+      }
+
       const text = await aiResponse.text();
       console.error("AI error:", status, text);
-      throw new Error("AI gateway error");
+      return respond({ ok: false, error: "AI gateway error", code: "AI_GATEWAY_ERROR" });
     }
 
     const aiData = await aiResponse.json();
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error("No tool call in AI response");
+    if (!toolCall) {
+      return respond({ ok: false, error: "No tool call in AI response", code: "INVALID_AI_RESPONSE" });
+    }
 
     const parsed = JSON.parse(toolCall.function.arguments);
     const suggestions = parsed.suggestions || [];
 
-    // Double-check: filter out any that match existing titles
-    const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase().trim()));
-    const filtered = suggestions.filter((s: any) => !existingTitles.has(s.title.toLowerCase().trim()));
+    const existingTitles = new Set((existing || []).map((entry: any) => entry.title.toLowerCase().trim()));
+    const filtered = suggestions.filter((suggestion: Suggestion) => !existingTitles.has(suggestion.title.toLowerCase().trim()));
 
-    // Insert into DB
     if (filtered.length > 0) {
-      const payload = filtered.map((s: any) => ({
-        title: s.title,
-        description: s.description,
-        category: s.category,
-        priority: s.priority,
+      const payload = filtered.map((suggestion: Suggestion) => ({
+        title: suggestion.title,
+        description: suggestion.description,
+        category: suggestion.category,
+        priority: suggestion.priority,
         status: "idea",
         tags: ["ai-generated"],
       }));
@@ -158,20 +216,21 @@ Gere 5-6 sugestões de funcionalidades COMPLETAMENTE NOVAS que NÃO estejam na l
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
       );
+
       const { error: insertError } = await serviceClient.from("system_updates").insert(payload);
       if (insertError) {
         console.error("Insert error:", insertError);
-        throw new Error("Failed to insert suggestions");
+        return respond({ ok: false, error: "Failed to insert suggestions", code: "INSERT_FAILED" });
       }
     }
 
-    return new Response(JSON.stringify({ count: filtered.length, suggestions: filtered }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ ok: true, count: filtered.length, suggestions: filtered });
   } catch (e) {
     console.error("suggest-roadmap-ai error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return respond({
+      ok: false,
+      error: e instanceof Error ? e.message : "Unknown error",
+      code: "UNEXPECTED_ERROR",
     });
   }
 });
