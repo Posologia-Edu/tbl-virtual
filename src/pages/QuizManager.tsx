@@ -302,6 +302,20 @@ export default function QuizManager() {
     });
   };
 
+  const extractErrorMessage = (error: unknown) => {
+    if (!error) return 'Falha ao gerar questões com IA';
+
+    const message = typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: string }).message || '')
+      : String(error);
+
+    if (message.includes('Failed to fetch')) {
+      return 'A geração demorou demais ou a função falhou ao processar o arquivo. Tente novamente com um PDF menor ou em texto pesquisável.';
+    }
+
+    return message || 'Falha ao gerar questões com IA';
+  };
+
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const generateWithAI = async () => {
@@ -377,7 +391,7 @@ export default function QuizManager() {
       setViewMode('quiz-detail');
     } catch (err: any) {
       console.error('AI generation error:', err);
-      toast.error(err.message || 'Falha ao gerar questões com IA');
+      toast.error(extractErrorMessage(err));
     } finally {
       setAiLoading(false);
     }
@@ -428,7 +442,7 @@ export default function QuizManager() {
       await loadAppQuestions(selectedQuiz.id);
     } catch (err: any) {
       console.error('AI import error:', err);
-      toast.error(err.message || 'Falha ao gerar questões com IA');
+      toast.error(extractErrorMessage(err));
     } finally {
       setAiImportLoading(false);
     }
