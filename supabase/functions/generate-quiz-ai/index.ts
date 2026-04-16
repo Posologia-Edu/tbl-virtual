@@ -236,6 +236,12 @@ async function tryLovableAI(messages: any[]): Promise<AIResult> {
   return { content, provider: "lovable", model, tokensInput, tokensOutput };
 }
 
+async function getConfiguredApiKeys(supabaseClient: any) {
+  const { data, error } = await supabaseClient.from("ai_api_keys").select("provider, api_key");
+  if (error) throw error;
+  return data ?? [];
+}
+
 async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: string): Promise<{ limit: number; used: number; productId: string | null }> {
   const now = new Date();
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -417,7 +423,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     let aiResult: AIResult | null = null;
 
     try {
-      const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
+      const apiKeys = await getConfiguredApiKeys(adminClient);
       console.log(`[AI] Configured providers: ${apiKeys?.map((k: any) => k.provider).join(",") || "none"}`);
 
       if (apiKeys && apiKeys.length > 0) {
