@@ -383,8 +383,12 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
         }
       } catch (e: any) {
         console.error("[AI] PDF extraction failed:", e);
-        return new Response(JSON.stringify({ error: `Erro ao processar PDF: ${e.message}` }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        const message = e?.message === "TIMEOUT:PDF_EXTRACT"
+          ? "O PDF demorou demais para ser processado. Tente um arquivo menor ou com menos páginas."
+          : `Erro ao processar PDF: ${e.message}`;
+        const status = e?.message === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
+        return new Response(JSON.stringify({ error: message }), {
+          status, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
