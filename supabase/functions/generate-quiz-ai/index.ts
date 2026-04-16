@@ -1,6 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
+
+async function extractPdfText(base64: string): Promise<string> {
+  const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const pdf = await getDocumentProxy(binary);
+  const { text } = await extractText(pdf, { mergePages: true });
+  const cleaned = (Array.isArray(text) ? text.join("\n") : text).trim();
+  return cleaned.slice(0, 60000);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -291,11 +300,31 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ]
 }`;
 
-    const isTextContent = !mimeType || mimeType === 'text/plain';
+    const isPdf = mimeType === 'application/pdf';
+    const isTextContent = !mimeType || mimeType === 'text/plain' || isPdf;
+
+    let processedTextContent = fileContent;
+    if (isPdf) {
+      try {
+        console.log(`[AI] Extracting text from PDF: ${fileName}`);
+        processedTextContent = await extractPdfText(fileContent);
+        console.log(`[AI] Extracted ${processedTextContent.length} chars from PDF`);
+        if (!processedTextContent || processedTextContent.length < 50) {
+          return new Response(JSON.stringify({ error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada. Tente converter para texto antes." }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e: any) {
+        console.error("[AI] PDF extraction failed:", e);
+        return new Response(JSON.stringify({ error: `Erro ao processar PDF: ${e.message}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     let userContent: any;
     if (isTextContent) {
-      userContent = `Analise o seguinte material de apoio (arquivo: ${fileName}) e crie as questões conforme instruído:\n\n${fileContent}`;
+      userContent = `Analise o seguinte material de apoio (arquivo: ${fileName}) e crie as questões conforme instruído:\n\n${processedTextContent}`;
     } else {
       userContent = [
         { type: "text", text: `Analise o material de apoio anexado (arquivo: ${fileName}) e crie as questões conforme instruído.` },
@@ -315,7 +344,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
 
       if (apiKeys && apiKeys.length > 0) {
-        const preferredOrder = ["groq", "openai", "google", "openrouter", "anthropic"];
+        const preferredOrder = ["google", "openai", "groq", "openrouter", "anthropic"];
 
         for (const providerName of preferredOrder) {
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
