@@ -766,6 +766,21 @@ export default function TeacherDashboard() {
 
   const addQuestion = async () => {
     if (!qText.trim() || !optA || !optB || !optC || !optD) { toast.error('Preencha todos os campos'); return; }
+    if (editQuestionId) {
+      const { error } = await supabase.from('questions').update({
+        question_text: qText.trim(),
+        option_a: optA, option_b: optB, option_c: optC, option_d: optD,
+        correct_option: correct,
+      }).eq('id', editQuestionId);
+      if (error) { toast.error('Falha ao atualizar questão'); return; }
+      toast.success('Questão atualizada!');
+      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+      setEditQuestionId(null);
+      setAddQOpen(false);
+      const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
+      setQuestions((data as Question[]) || []);
+      return;
+    }
     const totalQ = questions.length + appQuestions.length;
     if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
       planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
@@ -787,6 +802,21 @@ export default function TeacherDashboard() {
 
   const addAppQuestionToQuiz = async () => {
     if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
+    if (editAppQuestionId) {
+      const { error } = await supabase.from('application_questions').update({
+        question_text: appQText.trim(),
+        option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+        correct_answer: appCorrectAnswer,
+      }).eq('id', editAppQuestionId);
+      if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
+      toast.success('Questão de aplicação atualizada!');
+      setAppQText(''); setAppCorrectAnswer('V');
+      setEditAppQuestionId(null);
+      setAddAppQOpen(false);
+      const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
+      setAppQuestions(data || []);
+      return;
+    }
     const totalQ = questions.length + appQuestions.length;
     if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
       planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
