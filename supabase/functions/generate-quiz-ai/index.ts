@@ -300,11 +300,31 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ]
 }`;
 
-    const isTextContent = !mimeType || mimeType === 'text/plain';
+    const isPdf = mimeType === 'application/pdf';
+    const isTextContent = !mimeType || mimeType === 'text/plain' || isPdf;
+
+    let processedTextContent = fileContent;
+    if (isPdf) {
+      try {
+        console.log(`[AI] Extracting text from PDF: ${fileName}`);
+        processedTextContent = await extractPdfText(fileContent);
+        console.log(`[AI] Extracted ${processedTextContent.length} chars from PDF`);
+        if (!processedTextContent || processedTextContent.length < 50) {
+          return new Response(JSON.stringify({ error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada. Tente converter para texto antes." }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e: any) {
+        console.error("[AI] PDF extraction failed:", e);
+        return new Response(JSON.stringify({ error: `Erro ao processar PDF: ${e.message}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     let userContent: any;
     if (isTextContent) {
-      userContent = `Analise o seguinte material de apoio (arquivo: ${fileName}) e crie as questões conforme instruído:\n\n${fileContent}`;
+      userContent = `Analise o seguinte material de apoio (arquivo: ${fileName}) e crie as questões conforme instruído:\n\n${processedTextContent}`;
     } else {
       userContent = [
         { type: "text", text: `Analise o material de apoio anexado (arquivo: ${fileName}) e crie as questões conforme instruído.` },
