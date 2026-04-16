@@ -8,7 +8,7 @@ async function extractPdfText(base64: string): Promise<string> {
   const pdf = await getDocumentProxy(binary);
   const { text } = await extractText(pdf, { mergePages: true });
   const cleaned = (Array.isArray(text) ? text.join("\n") : text).trim();
-  return cleaned.slice(0, 60000);
+  return cleaned.slice(0, 35000);
 }
 
 const corsHeaders = {
@@ -18,9 +18,10 @@ const corsHeaders = {
 };
 
 const PLAN_AI_LIMITS: Record<string, number> = {
-  "prod_U1oaoU5nQAqqW3": 0,    // Gratuito
-  "prod_U1oaz7iVie1pFU": 50,   // Pro
-  "prod_U1ob8n7iDfyGLT": Infinity, // Institucional
+  "prod_U1oaoU5nQAqqW3": 0,
+  "prod_U1oaz7iVie1pFU": 50,
+  "prod_U1ob8n7iDfyGLT": Infinity,
+  admin: Infinity,
 };
 
 const PROVIDER_CONFIGS: Record<string, { url: string; model: string; mapBody?: (body: any) => any }> = {
@@ -74,6 +75,67 @@ function estimateCost(model: string, tokensInput: number, tokensOutput: number):
   return (tokensInput * costs.input + tokensOutput * costs.output) / 1_000_000;
 }
 
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`TIMEOUT:${label}`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("PROVIDER_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function parseGeneratedQuestions(rawContent: string) {
+  const trimmed = rawContent.trim();
+  const candidates = [trimmed];
+
+  if (trimmed.startsWith("```")) {
+    candidates.push(trimmed.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim());
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed?.irat_questions) && Array.isArray(parsed?.application_questions)) {
+        return parsed;
+      }
+    } catch {
+      // ignore and try next candidate
+    }
+  }
+
+  throw new Error("INVALID_AI_JSON");
+}
+
 async function tryExternalProvider(
   provider: string,
   apiKey: string,
@@ -102,11 +164,11 @@ async function tryExternalProvider(
     const body = config.mapBody ? config.mapBody(baseBody) : baseBody;
 
     console.log(`[AI] Trying provider: ${provider}`);
-    const res = await fetch(url, {
+    const res = await fetchWithTimeout(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    });
+    }, 25000);
 
     if (!res.ok) {
       const t = await res.text();
@@ -145,14 +207,14 @@ async function tryLovableAI(messages: any[]): Promise<AIResult> {
 
   const model = "google/gemini-2.5-flash";
   console.log("[AI] Using Lovable AI (fallback)");
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ model, messages }),
-  });
+  }, 25000);
 
   if (!response.ok) {
     const t = await response.text();
@@ -179,6 +241,11 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
     .eq("user_id", userId)
     .gte("used_at", firstOfMonth);
 
+  const { data: isAdmin } = await supabaseClient.rpc("is_admin", { _user_id: userId });
+  if (isAdmin) {
+    return { limit: Infinity, used: used || 0, productId: "admin" };
+  }
+
   const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
   let productId: string | null = null;
 
@@ -202,9 +269,9 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
       .from("manual_subscriptions")
       .select("plan, expires_at")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (manualSub && manualSub.plan !== 'free') {
+    if (manualSub && manualSub.plan !== "free") {
       const isExpired = manualSub.expires_at && new Date(manualSub.expires_at) < now;
       if (!isExpired) {
         const planToProduct: Record<string, string> = {
@@ -307,7 +374,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     if (isPdf) {
       try {
         console.log(`[AI] Extracting text from PDF: ${fileName}`);
-        processedTextContent = await extractPdfText(fileContent);
+        processedTextContent = await withTimeout(extractPdfText(fileContent), 15000, "PDF_EXTRACT");
         console.log(`[AI] Extracted ${processedTextContent.length} chars from PDF`);
         if (!processedTextContent || processedTextContent.length < 50) {
           return new Response(JSON.stringify({ error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada. Tente converter para texto antes." }), {
@@ -342,11 +409,13 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
     try {
       const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
+      console.log(`[AI] Configured providers: ${apiKeys?.map((k: any) => k.provider).join(",") || "none"}`);
 
       if (apiKeys && apiKeys.length > 0) {
         const preferredOrder = ["google", "openai", "groq", "openrouter", "anthropic"];
 
         for (const providerName of preferredOrder) {
+          console.log(`[AI] Evaluating provider: ${providerName}`);
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
           if (!keyRow) continue;
 
@@ -383,6 +452,11 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+        if (e.message === "PROVIDER_TIMEOUT") {
+          return new Response(JSON.stringify({ error: "A IA demorou demais para responder. Tente novamente com um PDF menor ou mais objetivo." }), {
+            status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
         throw e;
       }
     }
@@ -407,21 +481,35 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     });
     console.log(`[AI] Usage logged: ${aiResult.provider}/${aiResult.model} | ${aiResult.tokensInput}+${aiResult.tokensOutput} tokens | $${cost.toFixed(6)}`);
 
-    // Parse JSON from response
-    let jsonStr = aiResult.content.trim();
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-    }
-
-    const questions = JSON.parse(jsonStr);
+    const questions = parseGeneratedQuestions(aiResult.content);
 
     return new Response(JSON.stringify(questions), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("generate-quiz-ai error:", e);
+    const message = e instanceof Error ? e.message : "Erro desconhecido";
+
+    if (message === "INVALID_AI_JSON") {
+      return new Response(JSON.stringify({ error: "A IA retornou um formato inválido. Tente novamente." }), {
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message.startsWith("TIMEOUT:PDF_EXTRACT")) {
+      return new Response(JSON.stringify({ error: "O PDF demorou demais para ser processado. Tente um arquivo menor ou com menos páginas." }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (message === "PROVIDER_TIMEOUT") {
+      return new Response(JSON.stringify({ error: "A IA demorou demais para responder. Tente novamente com um PDF menor ou em texto pesquisável." }), {
+        status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }),
+      JSON.stringify({ error: message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
