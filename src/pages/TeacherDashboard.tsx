@@ -1626,9 +1626,15 @@ export default function TeacherDashboard() {
         </Dialog>
 
         {/* iRAT/tRAT Question Dialog */}
-        <Dialog open={addQOpen} onOpenChange={setAddQOpen}>
+        <Dialog open={addQOpen} onOpenChange={(open) => {
+          setAddQOpen(open);
+          if (!open) {
+            setEditQuestionId(null);
+            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+          }
+        }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão iRAT/tRAT</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading">{editQuestionId ? 'Editar Questão iRAT/tRAT' : 'Adicionar Questão iRAT/tRAT'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
                 <Label>Questão</Label>
@@ -1648,15 +1654,21 @@ export default function TeacherDashboard() {
                   </div>
                 </div>
               ))}
-              <Button onClick={addQuestion} className="w-full">Adicionar Questão</Button>
+              <Button onClick={addQuestion} className="w-full">{editQuestionId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Application Question Dialog */}
-        <Dialog open={addAppQOpen} onOpenChange={setAddAppQOpen}>
+        <Dialog open={addAppQOpen} onOpenChange={(open) => {
+          setAddAppQOpen(open);
+          if (!open) {
+            setEditAppQuestionId(null);
+            setAppQText(''); setAppCorrectAnswer('V');
+          }
+        }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
                 <Label>Questão</Label>
@@ -1681,7 +1693,7 @@ export default function TeacherDashboard() {
                   ))}
                 </div>
               </div>
-              <Button onClick={addAppQuestionToQuiz} className="w-full">Adicionar Questão</Button>
+              <Button onClick={addAppQuestionToQuiz} className="w-full">{editAppQuestionId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
             </div>
           </DialogContent>
         </Dialog>
