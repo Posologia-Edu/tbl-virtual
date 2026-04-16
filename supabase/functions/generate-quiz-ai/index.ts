@@ -136,6 +136,10 @@ function parseGeneratedQuestions(rawContent: string) {
   throw new Error("INVALID_AI_JSON");
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function tryExternalProvider(
   provider: string,
   apiKey: string,
@@ -383,10 +387,11 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
         }
       } catch (e: any) {
         console.error("[AI] PDF extraction failed:", e);
-        const message = e?.message === "TIMEOUT:PDF_EXTRACT"
+        const errorMessage = getErrorMessage(e);
+        const message = errorMessage === "TIMEOUT:PDF_EXTRACT"
           ? "O PDF demorou demais para ser processado. Tente um arquivo menor ou com menos páginas."
-          : `Erro ao processar PDF: ${e.message}`;
-        const status = e?.message === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
+          : `Erro ao processar PDF: ${errorMessage}`;
+        const status = errorMessage === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
         return new Response(JSON.stringify({ error: message }), {
           status, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -441,22 +446,23 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       try {
         aiResult = await tryLovableAI(messages);
       } catch (e: any) {
-        if (e.message === "RATE_LIMIT") {
+        const errorMessage = getErrorMessage(e);
+        if (errorMessage === "RATE_LIMIT") {
           return new Response(JSON.stringify({ error: "Limite de requisições excedido. Tente novamente em alguns instantes." }), {
             status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (e.message === "PAYMENT_REQUIRED") {
+        if (errorMessage === "PAYMENT_REQUIRED") {
           return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
             status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (e.message === "CONTEXT_TOO_LARGE") {
+        if (errorMessage === "CONTEXT_TOO_LARGE") {
           return new Response(JSON.stringify({ error: "O arquivo é muito grande. Tente com um arquivo menor (máximo ~50 páginas)." }), {
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        if (e.message === "PROVIDER_TIMEOUT") {
+        if (errorMessage === "PROVIDER_TIMEOUT") {
           return new Response(JSON.stringify({ error: "A IA demorou demais para responder. Tente novamente com um PDF menor ou mais objetivo." }), {
             status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
@@ -492,7 +498,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     });
   } catch (e) {
     console.error("generate-quiz-ai error:", e);
-    const message = e instanceof Error ? e.message : "Erro desconhecido";
+    const message = getErrorMessage(e) || "Erro desconhecido";
 
     if (message === "INVALID_AI_JSON") {
       return new Response(JSON.stringify({ error: "A IA retornou um formato inválido. Tente novamente." }), {
