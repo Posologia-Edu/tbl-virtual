@@ -166,6 +166,10 @@ export default function TeacherDashboard() {
   const [appQText, setAppQText] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
 
+  // Edit question state
+  const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
+  const [editAppQuestionId, setEditAppQuestionId] = useState<string | null>(null);
+
   // Admin state
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
@@ -762,6 +766,21 @@ export default function TeacherDashboard() {
 
   const addQuestion = async () => {
     if (!qText.trim() || !optA || !optB || !optC || !optD) { toast.error('Preencha todos os campos'); return; }
+    if (editQuestionId) {
+      const { error } = await supabase.from('questions').update({
+        question_text: qText.trim(),
+        option_a: optA, option_b: optB, option_c: optC, option_d: optD,
+        correct_option: correct,
+      }).eq('id', editQuestionId);
+      if (error) { toast.error('Falha ao atualizar questão'); return; }
+      toast.success('Questão atualizada!');
+      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+      setEditQuestionId(null);
+      setAddQOpen(false);
+      const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
+      setQuestions((data as Question[]) || []);
+      return;
+    }
     const totalQ = questions.length + appQuestions.length;
     if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
       planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
@@ -783,6 +802,21 @@ export default function TeacherDashboard() {
 
   const addAppQuestionToQuiz = async () => {
     if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
+    if (editAppQuestionId) {
+      const { error } = await supabase.from('application_questions').update({
+        question_text: appQText.trim(),
+        option_a: 'V', option_b: 'F', option_c: null, option_d: null,
+        correct_answer: appCorrectAnswer,
+      }).eq('id', editAppQuestionId);
+      if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
+      toast.success('Questão de aplicação atualizada!');
+      setAppQText(''); setAppCorrectAnswer('V');
+      setEditAppQuestionId(null);
+      setAddAppQOpen(false);
+      const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
+      setAppQuestions(data || []);
+      return;
+    }
     const totalQ = questions.length + appQuestions.length;
     if (isFinite(planLimits.maxQuestionsPerQuiz) && totalQ >= planLimits.maxQuestionsPerQuiz) {
       planLimits.showUpgradeDialog('Questões ilimitadas por questionário');
@@ -1592,9 +1626,15 @@ export default function TeacherDashboard() {
         </Dialog>
 
         {/* iRAT/tRAT Question Dialog */}
-        <Dialog open={addQOpen} onOpenChange={setAddQOpen}>
+        <Dialog open={addQOpen} onOpenChange={(open) => {
+          setAddQOpen(open);
+          if (!open) {
+            setEditQuestionId(null);
+            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+          }
+        }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão iRAT/tRAT</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading">{editQuestionId ? 'Editar Questão iRAT/tRAT' : 'Adicionar Questão iRAT/tRAT'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
                 <Label>Questão</Label>
@@ -1614,15 +1654,21 @@ export default function TeacherDashboard() {
                   </div>
                 </div>
               ))}
-              <Button onClick={addQuestion} className="w-full">Adicionar Questão</Button>
+              <Button onClick={addQuestion} className="w-full">{editQuestionId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
             </div>
           </DialogContent>
         </Dialog>
 
         {/* Application Question Dialog */}
-        <Dialog open={addAppQOpen} onOpenChange={setAddAppQOpen}>
+        <Dialog open={addAppQOpen} onOpenChange={(open) => {
+          setAddAppQOpen(open);
+          if (!open) {
+            setEditAppQuestionId(null);
+            setAppQText(''); setAppCorrectAnswer('V');
+          }
+        }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
                 <Label>Questão</Label>
@@ -1647,7 +1693,7 @@ export default function TeacherDashboard() {
                   ))}
                 </div>
               </div>
-              <Button onClick={addAppQuestionToQuiz} className="w-full">Adicionar Questão</Button>
+              <Button onClick={addAppQuestionToQuiz} className="w-full">{editAppQuestionId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -1677,7 +1723,20 @@ export default function TeacherDashboard() {
                           ))}
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setEditQuestionId(q.id);
+                          setQText(q.question_text);
+                          setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
+                          setCorrect((q.correct_option as 'A' | 'B' | 'C' | 'D') || 'A');
+                          setAddQOpen(true);
+                        }} aria-label="Editar questão">
+                          <Pencil className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)} aria-label="Excluir questão">
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1710,7 +1769,19 @@ export default function TeacherDashboard() {
                           </span>
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setEditAppQuestionId(q.id);
+                          setAppQText(q.question_text);
+                          setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
+                          setAddAppQOpen(true);
+                        }} aria-label="Editar questão de aplicação">
+                          <Pencil className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)} aria-label="Excluir questão de aplicação">
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
