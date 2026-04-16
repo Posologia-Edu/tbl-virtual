@@ -1723,7 +1723,20 @@ export default function TeacherDashboard() {
                           ))}
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setEditQuestionId(q.id);
+                          setQText(q.question_text);
+                          setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
+                          setCorrect((q.correct_option as 'A' | 'B' | 'C' | 'D') || 'A');
+                          setAddQOpen(true);
+                        }} aria-label="Editar questão">
+                          <Pencil className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)} aria-label="Excluir questão">
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1756,7 +1769,19 @@ export default function TeacherDashboard() {
                           </span>
                         </p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setEditAppQuestionId(q.id);
+                          setAppQText(q.question_text);
+                          setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
+                          setAddAppQOpen(true);
+                        }} aria-label="Editar questão de aplicação">
+                          <Pencil className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)} aria-label="Excluir questão de aplicação">
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
