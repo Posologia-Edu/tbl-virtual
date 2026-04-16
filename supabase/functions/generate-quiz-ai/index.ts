@@ -1,6 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import Stripe from "https://esm.sh/stripe@18.5.0";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
+
+async function extractPdfText(base64: string): Promise<string> {
+  const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+  const pdf = await getDocumentProxy(binary);
+  const { text } = await extractText(pdf, { mergePages: true });
+  const cleaned = (Array.isArray(text) ? text.join("\n") : text).trim();
+  return cleaned.slice(0, 60000);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
