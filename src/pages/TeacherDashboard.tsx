@@ -166,6 +166,10 @@ export default function TeacherDashboard() {
   const [appQText, setAppQText] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
 
+  // Edit question state
+  const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
+  const [editAppQuestionId, setEditAppQuestionId] = useState<string | null>(null);
+
   // Admin state
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [adminSubscribers, setAdminSubscribers] = useState<any[]>([]);
