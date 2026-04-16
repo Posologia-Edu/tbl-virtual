@@ -344,7 +344,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
 
       if (apiKeys && apiKeys.length > 0) {
-        const preferredOrder = ["groq", "openai", "google", "openrouter", "anthropic"];
+        const preferredOrder = ["google", "openai", "groq", "openrouter", "anthropic"];
 
         for (const providerName of preferredOrder) {
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
