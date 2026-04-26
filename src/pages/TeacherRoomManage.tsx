@@ -537,7 +537,7 @@ export default function TeacherRoomManage() {
             {appQuestions.map((q: any, i: number) => (
               <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">Q{i + 1}. {q.question_text}</p>
+                  <p className="text-sm font-medium whitespace-pre-line">Q{i + 1}. {q.question_text}</p>
                   <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
                 </div>
                 <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
