@@ -882,34 +882,54 @@ export default function QuizManager() {
 
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Material de Apoio</Label>
+                <Label>Material(is) de Apoio</Label>
                 <input
                   ref={importFileInputRef}
                   type="file"
+                  multiple
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
                   className="hidden"
-                  onChange={e => setAiImportFile(e.target.files?.[0] || null)}
+                  onChange={e => {
+                    const picked = Array.from(e.target.files || []);
+                    if (picked.length) setAiImportFiles(prev => [...prev, ...picked]);
+                    e.target.value = '';
+                  }}
                 />
                 <div
                   onClick={() => !aiImportLoading && importFileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    aiImportFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    aiImportFiles.length > 0 ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
                   } ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}
                 >
-                  {aiImportFile ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <CheckCircle2 className="w-8 h-8 text-primary" />
-                      <p className="font-medium">{aiImportFile.name}</p>
-                      <p className="text-sm text-muted-foreground">{(aiImportFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Upload className="w-8 h-8 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
-                      <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
-                    </div>
-                  )}
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-8 h-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {aiImportFiles.length > 0 ? 'Clique para adicionar mais arquivos' : 'Clique para selecionar arquivos'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT — múltiplos arquivos permitidos</p>
+                  </div>
                 </div>
+                {aiImportFiles.length > 0 && (
+                  <div className="space-y-1">
+                    {aiImportFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-muted/30">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                          <span className="text-sm truncate">{f.name}</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAiImportFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          disabled={aiImportLoading}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {aiImportLoading && (
