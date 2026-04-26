@@ -67,7 +67,7 @@ export default function QuizManager() {
 
   // AI generation state
   const [showAiDialog, setShowAiDialog] = useState(false);
-  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiFiles, setAiFiles] = useState<File[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiQuizTitle, setAiQuizTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
