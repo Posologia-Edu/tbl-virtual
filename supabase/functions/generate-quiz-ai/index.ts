@@ -337,9 +337,14 @@ serve(async (req) => {
       }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { fileContent, fileName, mimeType } = await req.json();
+    const body = await req.json();
+    // Support both single-file (legacy) and multi-file payloads
+    type IncomingFile = { fileContent: string; fileName: string; mimeType?: string };
+    const files: IncomingFile[] = Array.isArray(body?.files) && body.files.length > 0
+      ? body.files
+      : (body?.fileContent ? [{ fileContent: body.fileContent, fileName: body.fileName, mimeType: body.mimeType }] : []);
 
-    if (!fileContent) {
+    if (files.length === 0) {
       return new Response(JSON.stringify({ error: "No file content provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
