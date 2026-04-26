@@ -842,7 +842,7 @@ export default function QuizManager() {
                 <span className="text-xs text-muted-foreground text-center">Questão V/F para aplicação</span>
               </button>
               <button
-                onClick={() => { setShowTypeDialog(false); setAiFile(null); setShowAiImportDialog(true); }}
+                onClick={() => { setShowTypeDialog(false); setAiImportFiles([]); setShowAiImportDialog(true); }}
                 className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-purple-300/40 hover:border-purple-400 hover:bg-purple-50 transition-all"
               >
                 <Sparkles className="w-10 h-10 text-purple-500" />
