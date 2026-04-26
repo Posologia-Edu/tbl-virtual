@@ -73,7 +73,7 @@ export default function QuizManager() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const [showAiImportDialog, setShowAiImportDialog] = useState(false);
-  const [aiImportFile, setAiImportFile] = useState<File | null>(null);
+  const [aiImportFiles, setAiImportFiles] = useState<File[]>([]);
   const [aiImportLoading, setAiImportLoading] = useState(false);
 
   // iRAT/tRAT Question form state
