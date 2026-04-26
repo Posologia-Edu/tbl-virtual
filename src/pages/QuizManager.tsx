@@ -318,25 +318,33 @@ export default function QuizManager() {
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+  const buildFilesPayload = async (files: File[]) => {
+    const payload: { fileContent: string; fileName: string; mimeType?: string }[] = [];
+    for (const f of files) {
+      const isTextFile = f.name.endsWith('.txt') || f.name.endsWith('.md') || f.name.endsWith('.csv');
+      const mimeType = getMimeType(f.name);
+      const fileContent = isTextFile ? await readFileAsText(f) : await readFileAsBase64(f);
+      payload.push({ fileContent, fileName: f.name, mimeType: isTextFile ? undefined : mimeType });
+    }
+    return payload;
+  };
+
   const generateWithAI = async () => {
-    if (!aiFile) { toast.error('Selecione um arquivo'); return; }
+    if (aiFiles.length === 0) { toast.error('Selecione ao menos um arquivo'); return; }
     if (!aiQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
     if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
       showUpgradeDialog('Questionários ilimitados');
       return;
     }
-    if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    const oversize = aiFiles.find(f => f.size > MAX_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
 
     setAiLoading(true);
     try {
-      const isTextFile = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md') || aiFile.name.endsWith('.csv');
-      const mimeType = getMimeType(aiFile.name);
-      let fileContent: string;
-      if (isTextFile) { fileContent = await readFileAsText(aiFile); }
-      else { fileContent = await readFileAsBase64(aiFile); }
+      const filesPayload = await buildFilesPayload(aiFiles);
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiFile.name, mimeType: isTextFile ? undefined : mimeType },
+        body: { files: filesPayload },
       });
 
       if (error) throw error;
@@ -380,7 +388,7 @@ export default function QuizManager() {
 
       toast.success(`Questionário criado com ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} questões de aplicação!`);
       setShowAiDialog(false);
-      setAiFile(null);
+      setAiFiles([]);
       setAiQuizTitle('');
       loadQuizzes();
 
@@ -398,18 +406,15 @@ export default function QuizManager() {
   };
 
   const generateForExistingQuiz = async () => {
-    if (!aiImportFile || !selectedQuiz) return;
-    if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    if (aiImportFiles.length === 0 || !selectedQuiz) return;
+    const oversize = aiImportFiles.find(f => f.size > MAX_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
     setAiImportLoading(true);
     try {
-      const isTextFile = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md') || aiImportFile.name.endsWith('.csv');
-      const mimeType = getMimeType(aiImportFile.name);
-      let fileContent: string;
-      if (isTextFile) { fileContent = await readFileAsText(aiImportFile); }
-      else { fileContent = await readFileAsBase64(aiImportFile); }
+      const filesPayload = await buildFilesPayload(aiImportFiles);
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiImportFile.name, mimeType: isTextFile ? undefined : mimeType },
+        body: { files: filesPayload },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -437,7 +442,7 @@ export default function QuizManager() {
 
       toast.success(`Adicionadas ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} de aplicação!`);
       setShowAiImportDialog(false);
-      setAiImportFile(null);
+      setAiImportFiles([]);
       await loadQuestions(selectedQuiz.id);
       await loadAppQuestions(selectedQuiz.id);
     } catch (err: any) {
