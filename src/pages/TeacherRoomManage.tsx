@@ -534,18 +534,42 @@ export default function TeacherRoomManage() {
         {appQuestions.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center">Nenhuma questão de aplicação ainda. Adicione antes de iniciar a fase de aplicação.</p>
         ) : (
-          <div className="space-y-2">
-            {appQuestions.map((q: any, i: number) => (
-              <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
-                <div>
-                  <ClinicalCaseQuestion text={q.question_text} questionNumber={i + 1} compact />
-                  <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+          <div className="space-y-4">
+            {(() => {
+              // Group consecutive questions that share the same clinical case
+              const groups: Array<{ caseText: string; items: Array<{ q: any; index: number }> }> = [];
+              appQuestions.forEach((q: any, i: number) => {
+                const { caseText } = splitClinicalCase(q.question_text || '');
+                const last = groups[groups.length - 1];
+                if (last && last.caseText === caseText && caseText !== '') {
+                  last.items.push({ q, index: i });
+                } else {
+                  groups.push({ caseText, items: [{ q, index: i }] });
+                }
+              });
+              return groups.map((g, gi) => (
+                <div key={`grp-${gi}`} className="space-y-2">
+                  {g.caseText && (
+                    <ClinicalCaseQuestion text={g.items[0].q.question_text} compact caseOnly />
+                  )}
+                  {g.items.map(({ q, index }) => (
+                    <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        {g.caseText ? (
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                        ) : (
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                        )}
+                        <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+                      </div>
+                      <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
+                        <X className="w-3 h-3 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-                <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
-                  <X className="w-3 h-3 text-destructive" />
-                </Button>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         )}
       </CardContent>
