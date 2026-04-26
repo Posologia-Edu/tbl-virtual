@@ -330,6 +330,9 @@ export default function QuizManager() {
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
+        if (!Array.isArray(data?.files) || !data.files[0]?.fileContent) {
+          throw new Error(`Não foi possível preparar o PDF "${f.name}" para a geração. Tente novamente em alguns instantes.`);
+        }
         payload.push(data.files[0]);
         continue;
       }
