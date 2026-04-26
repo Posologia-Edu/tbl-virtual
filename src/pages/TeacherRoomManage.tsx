@@ -1028,7 +1028,7 @@ export default function TeacherRoomManage() {
                 <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
               </div>
               <CardContent className="pt-6 space-y-5">
-                <p className="text-base leading-relaxed">{currentQ.question_text}</p>
+                <p className="text-base leading-relaxed whitespace-pre-line">{currentQ.question_text}</p>
                 <div className="grid grid-cols-2 gap-4">
                   {(['A', 'B'] as const).map(opt => {
                     const label = opt === 'A' ? (currentQ.option_a || 'V') : (currentQ.option_b || 'F');
