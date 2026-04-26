@@ -323,6 +323,16 @@ export default function QuizManager() {
     for (const f of files) {
       const isTextFile = f.name.endsWith('.txt') || f.name.endsWith('.md') || f.name.endsWith('.csv');
       const mimeType = getMimeType(f.name);
+      if (mimeType === 'application/pdf') {
+        const fileContent = await readFileAsBase64(f);
+        const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
+          body: { mode: 'extract_text', files: [{ fileContent, fileName: f.name, mimeType }] },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        payload.push(data.files[0]);
+        continue;
+      }
       const fileContent = isTextFile ? await readFileAsText(f) : await readFileAsBase64(f);
       payload.push({ fileContent, fileName: f.name, mimeType: isTextFile ? undefined : mimeType });
     }
