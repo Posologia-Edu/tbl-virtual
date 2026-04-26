@@ -482,7 +482,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
           if (!keyRow) continue;
 
-          if (!isTextContent && (providerName === "groq" || providerName === "anthropic")) continue;
+          if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
 
           aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages);
           if (aiResult) {
