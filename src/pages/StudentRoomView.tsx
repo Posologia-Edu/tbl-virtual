@@ -3,6 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ClinicalCaseQuestion } from '@/components/ClinicalCaseQuestion';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1446,7 +1447,7 @@ export default function StudentRoomView() {
             <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
           </div>
           <CardContent className="pt-6 space-y-5">
-            <p className="text-base leading-relaxed whitespace-pre-line">{q.question_text}</p>
+            <ClinicalCaseQuestion text={q.question_text} questionNumber={currentAppIdx + 1} />
             
             {alreadyAnswered ? (
               <div className="text-center space-y-3">
