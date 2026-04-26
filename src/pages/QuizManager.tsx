@@ -1112,7 +1112,7 @@ export default function QuizManager() {
             <Button variant="outline" onClick={() => setShowAiDialog(false)} disabled={aiLoading}>
               Cancelar
             </Button>
-            <Button onClick={generateWithAI} disabled={aiLoading || !aiFile || !aiQuizTitle.trim()}>
+            <Button onClick={generateWithAI} disabled={aiLoading || aiFiles.length === 0 || !aiQuizTitle.trim()}>
               {aiLoading ? (
                 <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</>
               ) : (
