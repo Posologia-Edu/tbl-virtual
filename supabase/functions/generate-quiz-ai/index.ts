@@ -396,11 +396,19 @@ NUNCA invente diretrizes, condutas ou dados que contradigam o material fornecido
 
 Você deve gerar EXATAMENTE:
 
-1. **10 questões de iRAT/tRAT** (4 alternativas A, B, C, D, apenas uma correta), distribuídas RIGOROSAMENTE por nível de dificuldade cognitiva (taxonomia de Bloom):
-   - **2 questões FÁCEIS**: lembrar/compreender; resposta direta a partir do material.
-   - **5 questões MEDIANAS**: aplicar/analisar; exigem integração de conceitos e raciocínio.
-   - **3 questões DIFÍCEIS**: avaliar/criar; exigem distinção fina entre alternativas plausíveis, raciocínio clínico/farmacológico e integração de múltiplos conceitos.
+1. **10 questões de iRAT/tRAT** (4 alternativas A, B, C, D, apenas uma correta). O iRAT serve para verificar se o aluno ESTUDOU o material com PROFUNDIDADE — exige memorização e compreensão sólidas, NÃO mero raciocínio dedutivo a partir do enunciado. Distribua por dificuldade cognitiva:
+   - **2 questões FÁCEIS**: lembrar/compreender conceito específico do material (mas NUNCA óbvias — ver regras abaixo).
+   - **5 questões MEDIANAS**: compreender em profundidade — mecanismos, classificações, critérios diagnósticos, doses, interações, contraindicações específicas.
+   - **3 questões DIFÍCEIS**: distinção fina entre conceitos próximos, detalhes técnicos que só quem estudou a fundo sabe (ex.: subtipos receptores, valores de corte, nomes de escalas, exceções a regras).
    Distribua os níveis ao longo das 10 questões e NÃO mencione o nível no enunciado.
+
+REGRAS ANTI-ÓBVIO (CRÍTICAS) PARA O iRAT:
+- **PROIBIDO** que o enunciado contenha a resposta de forma literal ou semântica. Exemplo PROIBIDO: "Qual o papel dos antagonistas de leucotrienos?" com resposta "Inibição da produção de leucotrienos" — a palavra-chave da resposta já está no enunciado.
+- **PROIBIDO** perguntas de definição tautológica ("O que é X?" → "É o que faz X"). Reformule para exigir conhecimento específico: dose, mecanismo molecular preciso, indicação restrita, efeito adverso característico, contraindicação, valor laboratorial de referência, critério diagnóstico, classificação, sequência de etapas, etc.
+- **PROIBIDO** que a resposta correta seja deduzível por eliminação trivial, por afinidade etimológica com o enunciado, ou por ser a "única tecnicamente plausível". As 4 alternativas devem ser TODAS plausíveis para quem NÃO estudou o material.
+- **OBRIGATÓRIO**: as 3 alternativas erradas (distratores) devem ser conceitos REAIS e VEROSSÍMEIS do mesmo domínio (ex.: outras classes farmacológicas usadas na mesma doença, outros mecanismos de ação reais, valores próximos mas incorretos, condutas alternativas defensáveis em cenários parecidos). NUNCA distratores absurdos ou não relacionados.
+- **OBRIGATÓRIO**: o enunciado deve testar um FATO específico que precisa ter sido estudado — não algo que se infere pelo nome do fármaco/conceito. Prefira perguntar "qual o mecanismo molecular", "qual o efeito adverso mais comum", "qual a dose inicial recomendada", "qual o critério diagnóstico segundo [diretriz]", "qual a contraindicação absoluta", em vez de "qual o papel de X".
+- Antes de finalizar cada questão do iRAT, faça uma checagem: "Um aluno que NÃO leu o material conseguiria acertar apenas lendo o enunciado e as alternativas?". Se sim, REESCREVA a questão.
 
 2. **EXATAMENTE 3 questões de aplicação (V/F) baseadas em UM ÚNICO caso clínico compartilhado** — padrão de prova de residência médica/concurso público de alto nível (USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC, Cebraspe).
 
