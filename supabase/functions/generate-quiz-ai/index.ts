@@ -397,41 +397,69 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ]
 }`;
 
-    const isPdf = mimeType === 'application/pdf';
-    const isTextContent = !mimeType || mimeType === 'text/plain' || isPdf;
+    // Process each uploaded file: extract text from PDFs, keep base64 for images.
+    type ProcessedFile = {
+      fileName: string;
+      mimeType?: string;
+      isTextContent: boolean;
+      textContent?: string;
+      base64?: string;
+    };
+    const processedFiles: ProcessedFile[] = [];
 
-    let processedTextContent = fileContent;
-    if (isPdf) {
-      try {
-        console.log(`[AI] Extracting text from PDF: ${fileName}`);
-        processedTextContent = await withTimeout(extractPdfText(fileContent), 15000, "PDF_EXTRACT");
-        console.log(`[AI] Extracted ${processedTextContent.length} chars from PDF`);
-        if (!processedTextContent || processedTextContent.length < 50) {
-          return new Response(JSON.stringify({ error: "Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada. Tente converter para texto antes." }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    for (const f of files) {
+      const fIsPdf = f.mimeType === 'application/pdf';
+      const fIsTextContent = !f.mimeType || f.mimeType === 'text/plain' || fIsPdf;
+
+      if (fIsPdf) {
+        try {
+          console.log(`[AI] Extracting text from PDF: ${f.fileName}`);
+          const text = await withTimeout(extractPdfText(f.fileContent), 15000, "PDF_EXTRACT");
+          console.log(`[AI] Extracted ${text.length} chars from PDF ${f.fileName}`);
+          if (!text || text.length < 50) {
+            return new Response(JSON.stringify({ error: `Não foi possível extrair texto do PDF "${f.fileName}". O arquivo pode ser uma imagem escaneada. Tente converter para texto antes.` }), {
+              status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          processedFiles.push({ fileName: f.fileName, mimeType: f.mimeType, isTextContent: true, textContent: text });
+        } catch (e: any) {
+          console.error("[AI] PDF extraction failed:", e);
+          const errorMessage = getErrorMessage(e);
+          const message = errorMessage === "TIMEOUT:PDF_EXTRACT"
+            ? `O PDF "${f.fileName}" demorou demais para ser processado. Tente um arquivo menor ou com menos páginas.`
+            : `Erro ao processar PDF "${f.fileName}": ${errorMessage}`;
+          const status = errorMessage === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
+          return new Response(JSON.stringify({ error: message }), {
+            status, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-      } catch (e: any) {
-        console.error("[AI] PDF extraction failed:", e);
-        const errorMessage = getErrorMessage(e);
-        const message = errorMessage === "TIMEOUT:PDF_EXTRACT"
-          ? "O PDF demorou demais para ser processado. Tente um arquivo menor ou com menos páginas."
-          : `Erro ao processar PDF: ${errorMessage}`;
-        const status = errorMessage === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
-        return new Response(JSON.stringify({ error: message }), {
-          status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      } else if (fIsTextContent) {
+        processedFiles.push({ fileName: f.fileName, mimeType: f.mimeType, isTextContent: true, textContent: f.fileContent });
+      } else {
+        processedFiles.push({ fileName: f.fileName, mimeType: f.mimeType, isTextContent: false, base64: f.fileContent });
       }
     }
 
+    const allText = processedFiles.every(p => p.isTextContent);
     let userContent: any;
-    if (isTextContent) {
-      userContent = `Analise o seguinte material de apoio (arquivo: ${fileName}) e crie as questões conforme instruído:\n\n${processedTextContent}`;
+    if (allText) {
+      const concatenated = processedFiles
+        .map((p, idx) => `===== MATERIAL ${idx + 1}: ${p.fileName} =====\n\n${p.textContent}`)
+        .join('\n\n');
+      const namesList = processedFiles.map(p => p.fileName).join(', ');
+      userContent = `Analise os seguintes ${processedFiles.length} material(is) de apoio (arquivos: ${namesList}) de forma INTEGRADA e crie as questões conforme instruído. As questões devem cobrir o conteúdo combinado de TODOS os materiais.\n\n${concatenated}`;
     } else {
-      userContent = [
-        { type: "text", text: `Analise o material de apoio anexado (arquivo: ${fileName}) e crie as questões conforme instruído.` },
-        { type: "image_url", image_url: { url: `data:${mimeType};base64,${fileContent}` } },
+      const parts: any[] = [
+        { type: "text", text: `Analise os ${processedFiles.length} material(is) de apoio anexado(s) (${processedFiles.map(p => p.fileName).join(', ')}) de forma INTEGRADA e crie as questões conforme instruído. As questões devem cobrir o conteúdo combinado de TODOS os materiais.` },
       ];
+      for (const p of processedFiles) {
+        if (p.isTextContent) {
+          parts.push({ type: "text", text: `\n===== MATERIAL: ${p.fileName} =====\n\n${p.textContent}` });
+        } else {
+          parts.push({ type: "image_url", image_url: { url: `data:${p.mimeType};base64,${p.base64}` } });
+        }
+      }
+      userContent = parts;
     }
 
     const messages = [
