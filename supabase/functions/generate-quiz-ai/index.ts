@@ -432,26 +432,27 @@ REGRAS OBRIGATÓRIAS PARA AS 3 AFIRMAÇÕES V/F:
 - Misture afirmações verdadeiras e falsas (não as três iguais). As falsas devem ter erro técnico defensável a partir do material.
 - A resposta correta deve ser inequivocamente defensável pelo material fornecido.
 
-FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO:
-- A **PRIMEIRA questão (índice 0)** deve conter o caso clínico completo no início, seguido da Afirmação 1. Use EXATAMENTE este formato em texto puro (SEM asteriscos, SEM markdown):
-  "CASO CLÍNICO (questões 1 a 3):\\n\\n[texto integral do caso, em parágrafos, 180-320 palavras]\\n\\n———\\n\\nAfirmação 1: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso."
-- A **SEGUNDA questão (índice 1)** deve conter APENAS a afirmação, SEM repetir o caso. Formato:
-  "Afirmação 2: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)"
-- A **TERCEIRA questão (índice 2)** segue o mesmo padrão da segunda:
-  "Afirmação 3: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)"
-- NÃO use asteriscos (**), traços markdown ou qualquer marcação. Apenas texto puro com quebras de linha (\\n).
+FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO (CRÍTICO):
+- As 3 questões compartilham o MESMO caso clínico. O caso deve aparecer integralmente em TODAS as 3 questões (o aluno responde cada afirmação separadamente e precisa ver o caso em cada tela).
+- Use EXATAMENTE o separador literal "|||AFIRMACAO|||" entre o caso clínico e a afirmação V/F. Não traduza, não altere, não adicione espaços ao separador.
+- Formato de cada question_text (texto puro, SEM asteriscos, SEM markdown):
+  "[texto integral do caso clínico, 180-320 palavras, em parágrafos]|||AFIRMACAO|||[afirmação específica desta questão, sem prefixo 'Afirmação X:', apenas a afirmação a ser julgada como V ou F]"
+- O TEXTO DO CASO CLÍNICO deve ser IDÊNTICO nas 3 questões (mesmo conteúdo, mesma pontuação, mesmas quebras de linha). Apenas a parte após "|||AFIRMACAO|||" muda.
+- NÃO inclua "CASO CLÍNICO:", "Afirmação 1:", "Julgue como Verdadeiro ou Falso", nem qualquer rótulo — o sistema renderiza isso automaticamente.
+- NÃO use asteriscos (**), markdown ou formatação. Apenas texto puro com quebras de linha (\\n) dentro do caso quando necessário.
 - Em "correct_answer", use apenas "V" ou "F".
 
 PROIBIDO:
-- Repetir o caso clínico nas questões 2 e 3 (o caso aparece UMA ÚNICA VEZ, na questão 1).
-- Gerar 3 casos clínicos diferentes (deve ser 1 caso compartilhado).
-- Usar asteriscos (**), markdown ou qualquer formatação além de texto puro com quebras de linha.
+- Omitir o caso clínico nas questões 2 e 3 (o caso DEVE estar nas 3, idêntico).
+- Gerar 3 casos clínicos diferentes (deve ser 1 caso, repetido literalmente).
+- Esquecer ou alterar o separador "|||AFIRMACAO|||".
+- Usar asteriscos, markdown, rótulos como "Afirmação X:" ou "CASO CLÍNICO:".
 - Caso genérico tipo "Paciente de 30 anos com asma leve...".
 - Caso com menos de 180 palavras.
 - Afirmações que sejam simples reformulação direta do enunciado sem exigir raciocínio.
 - Repetir o mesmo aspecto nas 3 afirmações.
 
-Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso aparece APENAS na questão 1? Não há asteriscos no texto? Se não, reescreva.
+Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há asteriscos nem rótulos? Se não, reescreva.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
@@ -468,15 +469,15 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ],
   "application_questions": [
     {
-      "question_text": "CASO CLÍNICO (questões 1 a 3):\\n\\n[caso clínico completo aqui, 180-320 palavras, em parágrafos, texto puro sem asteriscos]\\n\\n———\\n\\nAfirmação 1: [afirmação específica da questão 1]\\n\\nJulgue como Verdadeiro ou Falso.",
+      "question_text": "[CASO CLÍNICO INTEGRAL — 180-320 palavras]|||AFIRMACAO|||[afirmação 1, sem rótulo]",
       "correct_answer": "V"
     },
     {
-      "question_text": "Afirmação 2: [afirmação específica da questão 2]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
+      "question_text": "[MESMO CASO CLÍNICO INTEGRAL, IDÊNTICO ao da questão 1]|||AFIRMACAO|||[afirmação 2, sem rótulo]",
       "correct_answer": "F"
     },
     {
-      "question_text": "Afirmação 3: [afirmação específica da questão 3]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
+      "question_text": "[MESMO CASO CLÍNICO INTEGRAL, IDÊNTICO ao da questão 1]|||AFIRMACAO|||[afirmação 3, sem rótulo]",
       "correct_answer": "V"
     }
   ]
