@@ -890,6 +890,16 @@ export default function TeacherDashboard() {
     for (const file of files) {
       const isText = file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv');
       const mimeType = getMimeType(file.name);
+      if (mimeType === 'application/pdf') {
+        const fileContent = await readFileAsBase64(file);
+        const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
+          body: { mode: 'extract_text', files: [{ fileContent, fileName: file.name, mimeType }] },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        payload.push(data.files[0]);
+        continue;
+      }
       payload.push({
         fileContent: isText ? await readFileAsText(file) : await readFileAsBase64(file),
         fileName: file.name,
