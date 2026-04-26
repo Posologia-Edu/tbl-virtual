@@ -68,7 +68,7 @@ serve(async (req) => {
 
       logStep("Subscriptions found", {
         count: subscriptions.data.length,
-        statuses: subscriptions.data.map((s) => s.status),
+        statuses: subscriptions.data.map((s: any) => s.status),
       });
 
       const validSubscription = subscriptions.data.find(
