@@ -537,7 +537,7 @@ export default function TeacherRoomManage() {
             {appQuestions.map((q: any, i: number) => (
               <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">Q{i + 1}. {q.question_text}</p>
+                  <p className="text-sm font-medium whitespace-pre-line">Q{i + 1}. {q.question_text}</p>
                   <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
                 </div>
                 <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
@@ -1028,7 +1028,7 @@ export default function TeacherRoomManage() {
                 <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
               </div>
               <CardContent className="pt-6 space-y-5">
-                <p className="text-base leading-relaxed">{currentQ.question_text}</p>
+                <p className="text-base leading-relaxed whitespace-pre-line">{currentQ.question_text}</p>
                 <div className="grid grid-cols-2 gap-4">
                   {(['A', 'B'] as const).map(opt => {
                     const label = opt === 'A' ? (currentQ.option_a || 'V') : (currentQ.option_b || 'F');

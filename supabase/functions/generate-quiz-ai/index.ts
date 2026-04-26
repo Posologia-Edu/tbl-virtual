@@ -425,18 +425,25 @@ REGRAS OBRIGATÓRIAS PARA AS 3 AFIRMAÇÕES V/F:
 - A resposta correta deve ser inequivocamente defensável pelo material fornecido.
 
 FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO:
-- Em "question_text" de **CADA UMA das 3 questões**, repita INTEGRALMENTE o mesmo caso clínico no início, prefixado por "**Caso clínico (questões 1 a 3):**\\n\\n", seguido do texto do caso completo, depois uma linha em branco, e então a afirmação específica daquela questão prefixada por "**Afirmação 1:**" / "**Afirmação 2:**" / "**Afirmação 3:**" e terminada por "Julgue: ( ) Verdadeiro ( ) Falso".
-- O caso clínico deve ser EXATAMENTE IGUAL nas três questões (mesmo texto, palavra por palavra).
+- A **PRIMEIRA questão (índice 0)** deve conter o caso clínico completo no início, seguido da Afirmação 1. Use EXATAMENTE este formato em texto puro (SEM asteriscos, SEM markdown):
+  "CASO CLÍNICO (questões 1 a 3):\\n\\n[texto integral do caso, em parágrafos, 180-320 palavras]\\n\\n———\\n\\nAfirmação 1: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso."
+- A **SEGUNDA questão (índice 1)** deve conter APENAS a afirmação, SEM repetir o caso. Formato:
+  "Afirmação 2: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)"
+- A **TERCEIRA questão (índice 2)** segue o mesmo padrão da segunda:
+  "Afirmação 3: [afirmação específica]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)"
+- NÃO use asteriscos (**), traços markdown ou qualquer marcação. Apenas texto puro com quebras de linha (\\n).
 - Em "correct_answer", use apenas "V" ou "F".
 
 PROIBIDO:
+- Repetir o caso clínico nas questões 2 e 3 (o caso aparece UMA ÚNICA VEZ, na questão 1).
 - Gerar 3 casos clínicos diferentes (deve ser 1 caso compartilhado).
+- Usar asteriscos (**), markdown ou qualquer formatação além de texto puro com quebras de linha.
 - Caso genérico tipo "Paciente de 30 anos com asma leve...".
 - Caso com menos de 180 palavras.
 - Afirmações que sejam simples reformulação direta do enunciado sem exigir raciocínio.
 - Repetir o mesmo aspecto nas 3 afirmações.
 
-Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso está repetido idêntico nas 3 questões? Se não, reescreva.
+Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso aparece APENAS na questão 1? Não há asteriscos no texto? Se não, reescreva.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
@@ -453,15 +460,15 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ],
   "application_questions": [
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[caso completo aqui]\\n\\n**Afirmação 1:** [afirmação específica da questão 1]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "CASO CLÍNICO (questões 1 a 3):\\n\\n[caso clínico completo aqui, 180-320 palavras, em parágrafos, texto puro sem asteriscos]\\n\\n———\\n\\nAfirmação 1: [afirmação específica da questão 1]\\n\\nJulgue como Verdadeiro ou Falso.",
       "correct_answer": "V"
     },
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 2:** [afirmação específica da questão 2]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "Afirmação 2: [afirmação específica da questão 2]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
       "correct_answer": "F"
     },
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 3:** [afirmação específica da questão 3]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "Afirmação 3: [afirmação específica da questão 3]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
       "correct_answer": "V"
     }
   ]
