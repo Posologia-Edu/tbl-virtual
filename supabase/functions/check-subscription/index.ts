@@ -72,7 +72,7 @@ serve(async (req) => {
       });
 
       const validSubscription = subscriptions.data.find(
-        (sub) => sub.status === "active" || sub.status === "trialing"
+        (sub: any) => sub.status === "active" || sub.status === "trialing"
       );
 
       if (validSubscription) {
@@ -220,7 +220,7 @@ serve(async (req) => {
         status: 200,
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     logStep("ERROR", { message: error.message });
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

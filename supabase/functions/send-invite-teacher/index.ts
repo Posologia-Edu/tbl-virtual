@@ -40,7 +40,7 @@ serve(async (req) => {
         const customers = await stripe.customers.list({ email: callerEmail, limit: 1 });
         if (customers.data.length > 0) {
           const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, limit: 10 });
-          const validSub = subs.data.find(s => s.status === "active" || s.status === "trialing");
+          const validSub = subs.data.find((s: any) => s.status === "active" || s.status === "trialing");
           if (validSub) {
             const productId = typeof validSub.items?.data?.[0]?.price?.product === "string" 
               ? validSub.items.data[0].price.product 
