@@ -85,6 +85,7 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ success: true, email }), { headers: corsHeaders });
   } catch (err) {
     console.error("Error sending approval email:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: message }), { status: 500, headers: corsHeaders });
   }
 });

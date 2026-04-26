@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
-import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +40,7 @@ serve(async (req) => {
         const customers = await stripe.customers.list({ email: callerEmail, limit: 1 });
         if (customers.data.length > 0) {
           const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, limit: 10 });
-          const validSub = subs.data.find(s => s.status === "active" || s.status === "trialing");
+          const validSub = subs.data.find((s: any) => s.status === "active" || s.status === "trialing");
           if (validSub) {
             const productId = typeof validSub.items?.data?.[0]?.price?.product === "string" 
               ? validSub.items.data[0].price.product 

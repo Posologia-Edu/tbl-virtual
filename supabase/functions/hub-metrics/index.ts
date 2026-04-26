@@ -31,9 +31,10 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Contar usuários totais
-    const { count: totalUsers } = await supabase.auth.admin.listUsers({
+    const { data: firstPage } = await supabase.auth.admin.listUsers({
       perPage: 1, page: 1,
     });
+    const totalUsers = (firstPage as any)?.total ?? (firstPage as any)?.users?.length ?? 0;
 
     // Contar usuários ativos (últimos 7 dias)
     let activeUsers = 0;
