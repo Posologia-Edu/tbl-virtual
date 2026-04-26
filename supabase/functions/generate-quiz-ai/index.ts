@@ -389,31 +389,48 @@ serve(async (req) => {
       }
     }
 
-    const systemPrompt = `Você é um especialista em educação médica e TBL (Team-Based Learning). 
+    const systemPrompt = `Você é uma banca examinadora médica de alto nível, especializada em TBL (Team-Based Learning), residência médica e concursos públicos.
 Sua tarefa é analisar o material de apoio fornecido e criar questões baseadas EXCLUSIVAMENTE no conteúdo do material.
 
-NUNCA invente informações que não estejam no material fornecido.
+NUNCA invente diretrizes, condutas ou dados que contradigam o material fornecido.
 
 Você deve gerar EXATAMENTE:
 
 1. **10 questões de iRAT/tRAT** (4 alternativas A, B, C, D, apenas uma correta), distribuídas RIGOROSAMENTE por nível de dificuldade cognitiva (taxonomia de Bloom):
-   - **2 questões FÁCEIS (25% → 2 de 10... use exatamente 2)**: nível de "lembrar/compreender". Resposta direta, recuperação de fatos, definições ou conceitos explícitos no material. Aluno que apenas leu o material consegue responder.
-   - **5 questões MEDIANAS (50%)**: nível de "aplicar/analisar". Exigem compreensão consolidada e raciocínio para aplicar conceitos a situações concretas. Quem estudou o material responde, mas exige carga cognitiva relevante (não é apenas leitura superficial).
-   - **3 questões DIFÍCEIS (25%)**: nível de "avaliar/criar". Exigem integração de múltiplos conceitos, distinção fina entre alternativas plausíveis, raciocínio clínico ou inferências não explícitas no texto. Distratores devem ser fortes e parecer corretos à primeira vista.
-   Importante: distribua os níveis ao longo das 10 questões (não agrupe por dificuldade) e NÃO mencione o nível de dificuldade dentro do enunciado.
+   - **2 questões FÁCEIS**: lembrar/compreender; resposta direta a partir do material.
+   - **5 questões MEDIANAS**: aplicar/analisar; exigem integração de conceitos e raciocínio.
+   - **3 questões DIFÍCEIS**: avaliar/criar; exigem distinção fina entre alternativas plausíveis, raciocínio clínico/farmacológico e integração de múltiplos conceitos.
+   Distribua os níveis ao longo das 10 questões e NÃO mencione o nível no enunciado.
 
-2. **3 casos clínicos de aplicação (tRAT em equipe)** — devem seguir RIGOROSAMENTE o padrão de questões de **provas de concurso público de alto nível e residência médica** (estilo Revalida, USP, UNIFESP, UFRJ, UNICAMP, AMRIGS, ENARE, INEP, FCC, CESPE/Cebraspe). NÃO gere casos curtos ou simplistas como "Paciente de 10 anos com asma leve...". Cada caso clínico DEVE conter, no mínimo:
-   - **Identificação completa**: idade, sexo, profissão/ocupação quando relevante, procedência.
-   - **Queixa principal e HDA detalhada**: tempo de evolução, caracterização dos sintomas, fatores de melhora/piora, sintomas associados, uso prévio de medicações com doses e tempo de uso.
-   - **Antecedentes pessoais e familiares relevantes**: comorbidades, alergias, cirurgias, medicações em uso (com posologia), hábitos de vida (tabagismo, etilismo), histórico familiar pertinente.
-   - **Exame físico objetivo**: sinais vitais COMPLETOS (PA, FC, FR, Tax, SatO₂), dados antropométricos (peso, altura, IMC) quando pertinente, achados segmentares relevantes (ausculta, palpação, inspeção).
-   - **Exames complementares com valores numéricos**: hemograma, bioquímica, gasometria, ECG, imagens, espirometria etc., conforme o tema. Inclua valores de referência implícitos (números realistas).
-   - **Conduta já instituída ou contexto terapêutico** quando aplicável.
-   - **Extensão mínima**: cada caso clínico deve ter entre 120 e 220 palavras de contexto ANTES da afirmação a julgar.
-   - **Afirmação final (V ou F)**: deve exigir integração de múltiplos conceitos, raciocínio fisiopatológico, farmacológico ou diagnóstico diferencial — NUNCA mera recuperação de informação. A afirmação pode envolver: escolha terapêutica de primeira linha vs. alternativa, ajuste de dose, contraindicação relativa/absoluta, interpretação de exame, prognóstico, mecanismo de ação, interação medicamentosa, classificação de gravidade segundo diretriz citada.
-   - Os 3 casos devem abordar **temas e cenários distintos** entre si (variar gravidade, faixa etária, contexto clínico).
-   - Use linguagem técnica formal de prova médica. NÃO use frases simples do tipo "É correto iniciar...?" — prefira construções típicas de prova: "Diante do quadro descrito, a conduta mais adequada é a introdução de X na dose Y.", "A hipótese diagnóstica mais provável justifica a suspensão imediata de Z.", etc.
-   - Todos os dados clínicos e a resposta correta DEVEM derivar do material fornecido (não invente diretrizes).
+2. **3 casos clínicos de aplicação (V/F)** com padrão realista de prova de residência médica/concurso de alto nível.
+
+REGRAS OBRIGATÓRIAS PARA OS CASOS CLÍNICOS DE APLICAÇÃO:
+- Cada caso deve parecer uma questão que poderia entrar em banca como USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC ou Cebraspe.
+- O caso NÃO pode ser uma pergunta curta disfarçada. Ele deve ser uma vinheta clínica completa, contextualizada e com densidade técnica.
+- Cada caso deve ter **180 a 260 palavras no total**, antes do gabarito.
+- Cada caso deve conter, de forma natural no texto:
+  1) identificação: idade, sexo, contexto/procedência ou ocupação quando pertinente;
+  2) queixa principal e HDA com tempo de evolução, frequência, gravidade, fatores desencadeantes, sintomas associados e resposta a tratamentos prévios;
+  3) antecedentes relevantes, alergias, comorbidades, medicações em uso com dose/posologia quando aplicável, hábitos e história familiar pertinente;
+  4) exame físico objetivo com PA, FC, FR, temperatura, SatO₂ e achados segmentares;
+  5) pelo menos **dois dados complementares numéricos** quando o tema permitir (ex.: espirometria/CVF/VEF1, PFE, gasometria, hemograma, IgE/eosinófilos, radiografia, ECG, creatinina, potássio, glicemia, IMC etc.);
+  6) uma afirmação final para julgar V/F que exija conduta, classificação de gravidade, mecanismo farmacológico, contraindicação, escalonamento terapêutico, interpretação de exame ou diagnóstico diferencial.
+- Os 3 casos devem abordar cenários diferentes entre si: por exemplo, controle inadequado, exacerbação, contraindicação/interação, população especial, adesão/técnica inalatória, gravidade, comorbidade ou falha terapêutica.
+- A afirmação final deve ser tecnicamente defensável pelo material e não pode ser mera memorização.
+
+PROIBIDO NOS CASOS CLÍNICOS:
+- Frases genéricas como "Um paciente de 30 anos, com asma leve...".
+- Casos com apenas idade + diagnóstico + pergunta de conduta.
+- Perguntas do tipo "Qual é a conduta mais adequada?" sem vinheta rica.
+- Afirmar simplesmente que "corticoide inalatório em dose baixa é o tratamento de escolha" sem contexto clínico robusto.
+- Repetir o mesmo padrão de paciente mudando apenas idade ou gravidade.
+- Casos com menos de 180 palavras.
+
+FORMATO DOS CASOS:
+- Em "question_text", escreva o caso completo e termine com uma frase declarativa para julgamento, por exemplo: "Diante desse quadro, é correto afirmar que ...".
+- Em "correct_answer", use apenas "V" ou "F".
+
+Antes de responder, faça uma checagem interna: se qualquer caso parecer simples demais para uma prova de residência/concurso, reescreva-o até atingir o padrão exigido.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
@@ -422,7 +439,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     {
       "question_text": "Enunciado da questão",
       "option_a": "Alternativa A",
-      "option_b": "Alternativa B", 
+      "option_b": "Alternativa B",
       "option_c": "Alternativa C",
       "option_d": "Alternativa D",
       "correct_option": "A"
@@ -430,7 +447,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ],
   "application_questions": [
     {
-      "question_text": "Caso clínico detalhado com afirmação para julgar V ou F",
+      "question_text": "Vinheta clínica completa, densa e contextualizada, terminando com afirmação V/F",
       "correct_answer": "V"
     }
   ]
