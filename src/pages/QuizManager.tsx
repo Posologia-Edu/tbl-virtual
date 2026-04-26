@@ -947,7 +947,7 @@ export default function QuizManager() {
               <Button variant="outline" onClick={() => setShowAiImportDialog(false)} disabled={aiImportLoading}>
                 Cancelar
               </Button>
-              <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || !aiImportFile}>
+              <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || aiImportFiles.length === 0}>
                 {aiImportLoading ? (
                   <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</>
                 ) : (
