@@ -43,6 +43,7 @@ import AdminApiKeys from '@/components/AdminApiKeys';
 import UpgradeDialog from '@/components/UpgradeDialog';
 import SystemUpdates from '@/components/SystemUpdates';
 import PipelineNotification from '@/components/PipelineNotification';
+import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
@@ -1776,37 +1777,59 @@ export default function TeacherDashboard() {
           {appQuestions.length === 0 ? (
             <p className="text-muted-foreground text-center py-4 text-sm">Nenhuma questão de aplicação adicionada.</p>
           ) : (
-            <div className="space-y-3">
-              {appQuestions.map((q: any, i: number) => (
-                <Card key={q.id} className="border-l-4 border-l-orange-400">
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">A{i + 1}.</span>{q.question_text}</p>
-                        <p className="text-sm">
-                          <span className="font-semibold">Gabarito: </span>
-                          <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-green-600' : q.correct_answer?.trim() === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                            {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : 'Não definido'}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => {
-                          setEditAppQuestionId(q.id);
-                          setAppQText(q.question_text);
-                          setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
-                          setAddAppQOpen(true);
-                        }} aria-label="Editar questão de aplicação">
-                          <Pencil className="w-4 h-4 text-muted-foreground" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)} aria-label="Excluir questão de aplicação">
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="space-y-4">
+              {(() => {
+                const groups: Array<{ caseText: string; items: Array<{ q: any; index: number }> }> = [];
+                appQuestions.forEach((q: any, i: number) => {
+                  const { caseText } = splitClinicalCase(q.question_text || '');
+                  const last = groups[groups.length - 1];
+                  if (caseText && last?.caseText === caseText) {
+                    last.items.push({ q, index: i });
+                  } else {
+                    groups.push({ caseText, items: [{ q, index: i }] });
+                  }
+                });
+
+                return groups.map((group, groupIndex) => (
+                  <div key={`app-group-${groupIndex}`} className="space-y-3">
+                    {group.caseText && <ClinicalCaseQuestion text={group.items[0].q.question_text} compact caseOnly />}
+                    {group.items.map(({ q, index }) => (
+                      <Card key={q.id} className="border-l-4 border-l-primary">
+                        <CardContent className="pt-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 space-y-2">
+                              {group.caseText ? (
+                                <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                              ) : (
+                                <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                              )}
+                              <p className="text-sm">
+                                <span className="font-semibold">Gabarito: </span>
+                                <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-primary' : q.correct_answer?.trim() === 'F' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                  {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : 'Não definido'}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button variant="ghost" size="icon" onClick={() => {
+                                setEditAppQuestionId(q.id);
+                                setAppQText(q.question_text);
+                                setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
+                                setAddAppQOpen(true);
+                              }} aria-label="Editar questão de aplicação">
+                                <Pencil className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => deleteAppQuestionFromQuiz(q.id)} aria-label="Excluir questão de aplicação">
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </div>

@@ -14,6 +14,7 @@ import { Plus, Trash2, ArrowLeft, PencilLine, CheckCircle2, XCircle, CirclePlus,
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import UpgradeDialog from '@/components/UpgradeDialog';
+import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
 
 type Question = {
   id: string;
@@ -734,27 +735,55 @@ export default function QuizManager() {
                           </tr>
                         </thead>
                         <tbody>
-                          {appQuestions.map((q, i) => (
-                            <tr key={q.id} className="border-t hover:bg-muted/30">
-                              <td className="px-4 py-2">{i + 1}</td>
-                              <td className="px-4 py-2">{q.question_text}</td>
-                              <td className="px-4 py-2 text-center">
-                                <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-green-600' : q.correct_answer?.trim() === 'F' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                                  {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : '—'}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-center">
-                                <div className="flex justify-center gap-2">
-                                  <button onClick={() => startEditAppQuestion(q)} className="hover:text-primary">
-                                    <PencilLine className="w-5 h-5" />
-                                  </button>
-                                  <button onClick={() => deleteAppQuestion(q.id)} className="hover:text-destructive">
-                                    <Trash2 className="w-5 h-5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {(() => {
+                            const groups: Array<{ caseText: string; items: Array<{ q: AppQuestion; index: number }> }> = [];
+                            appQuestions.forEach((q, i) => {
+                              const { caseText } = splitClinicalCase(q.question_text || '');
+                              const last = groups[groups.length - 1];
+                              if (caseText && last?.caseText === caseText) {
+                                last.items.push({ q, index: i });
+                              } else {
+                                groups.push({ caseText, items: [{ q, index: i }] });
+                              }
+                            });
+
+                            return groups.flatMap((group, groupIndex) => [
+                              ...(group.caseText ? [
+                                <tr key={`case-${groupIndex}`} className="border-t bg-muted/20">
+                                  <td className="px-4 py-3" colSpan={4}>
+                                    <ClinicalCaseQuestion text={group.items[0].q.question_text} compact caseOnly />
+                                  </td>
+                                </tr>
+                              ] : []),
+                              ...group.items.map(({ q, index }) => (
+                                <tr key={q.id} className="border-t hover:bg-muted/30">
+                                  <td className="px-4 py-2">{index + 1}</td>
+                                  <td className="px-4 py-2">
+                                    {group.caseText ? (
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                                    ) : (
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-2 text-center">
+                                    <span className={`font-bold ${q.correct_answer?.trim() === 'V' ? 'text-primary' : q.correct_answer?.trim() === 'F' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                      {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : '—'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-center">
+                                    <div className="flex justify-center gap-2">
+                                      <button onClick={() => startEditAppQuestion(q)} className="hover:text-primary">
+                                        <PencilLine className="w-5 h-5" />
+                                      </button>
+                                      <button onClick={() => deleteAppQuestion(q.id)} className="hover:text-destructive">
+                                        <Trash2 className="w-5 h-5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            ]);
+                          })()}
                         </tbody>
                       </table>
                     </div>
