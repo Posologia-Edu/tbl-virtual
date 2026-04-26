@@ -986,7 +986,7 @@ export default function QuizManager() {
                 showUpgradeDialog('Questionários ilimitados');
                 return;
               }
-              setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true);
+              setAiQuizTitle(''); setAiFiles([]); setShowAiDialog(true);
             }}>
               <Sparkles className="w-4 h-4 mr-1" /> Criar com IA
             </Button>
