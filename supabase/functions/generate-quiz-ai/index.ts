@@ -402,35 +402,41 @@ Você deve gerar EXATAMENTE:
    - **3 questões DIFÍCEIS**: avaliar/criar; exigem distinção fina entre alternativas plausíveis, raciocínio clínico/farmacológico e integração de múltiplos conceitos.
    Distribua os níveis ao longo das 10 questões e NÃO mencione o nível no enunciado.
 
-2. **3 casos clínicos de aplicação (V/F)** com padrão realista de prova de residência médica/concurso de alto nível.
+2. **EXATAMENTE 3 questões de aplicação (V/F) baseadas em UM ÚNICO caso clínico compartilhado** — padrão de prova de residência médica/concurso público de alto nível (USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC, Cebraspe).
 
-REGRAS OBRIGATÓRIAS PARA OS CASOS CLÍNICOS DE APLICAÇÃO:
-- Cada caso deve parecer uma questão que poderia entrar em banca como USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC ou Cebraspe.
-- O caso NÃO pode ser uma pergunta curta disfarçada. Ele deve ser uma vinheta clínica completa, contextualizada e com densidade técnica.
-- Cada caso deve ter **180 a 260 palavras no total**, antes do gabarito.
-- Cada caso deve conter, de forma natural no texto:
-  1) identificação: idade, sexo, contexto/procedência ou ocupação quando pertinente;
-  2) queixa principal e HDA com tempo de evolução, frequência, gravidade, fatores desencadeantes, sintomas associados e resposta a tratamentos prévios;
-  3) antecedentes relevantes, alergias, comorbidades, medicações em uso com dose/posologia quando aplicável, hábitos e história familiar pertinente;
-  4) exame físico objetivo com PA, FC, FR, temperatura, SatO₂ e achados segmentares;
-  5) pelo menos **dois dados complementares numéricos** quando o tema permitir (ex.: espirometria/CVF/VEF1, PFE, gasometria, hemograma, IgE/eosinófilos, radiografia, ECG, creatinina, potássio, glicemia, IMC etc.);
-  6) uma afirmação final para julgar V/F que exija conduta, classificação de gravidade, mecanismo farmacológico, contraindicação, escalonamento terapêutico, interpretação de exame ou diagnóstico diferencial.
-- Os 3 casos devem abordar cenários diferentes entre si: por exemplo, controle inadequado, exacerbação, contraindicação/interação, população especial, adesão/técnica inalatória, gravidade, comorbidade ou falha terapêutica.
-- A afirmação final deve ser tecnicamente defensável pelo material e não pode ser mera memorização.
+REGRAS OBRIGATÓRIAS PARA O CASO CLÍNICO COMPARTILHADO:
+- Gere **UM ÚNICO caso clínico** rico, denso e tecnicamente sofisticado que sirva de base para as **3 afirmações V/F**.
+- O caso deve ter **180 a 320 palavras**, com narrativa fluida em parágrafos (não em bullets).
+- Use linguagem técnica de banca: terminologia médica/farmacológica precisa, sinais e sintomas descritos com propriedade, dados quantitativos plausíveis.
+- O caso deve conter, de forma natural no texto, conforme o tema permitir:
+  1) identificação: idade, sexo, contexto/procedência, ocupação;
+  2) queixa principal e HDA com tempo de evolução, evolução temporal, fatores desencadeantes/atenuantes, sintomas associados, resposta a tratamentos prévios;
+  3) antecedentes pessoais e familiares, comorbidades, alergias, medicações em uso com dose/posologia, hábitos;
+  4) exame físico objetivo com sinais vitais (PA, FC, FR, T, SatO₂) e achados segmentares;
+  5) pelo menos **dois dados complementares numéricos** quando aplicável (espirometria/VEF1/CVF, gasometria, hemograma, IgE/eosinófilos, ECG, creatinina, glicemia, escalas validadas, etc.).
+- Inspire-se no padrão deste exemplo real de banca (estilo, densidade, riqueza de detalhes psicopatológicos/clínicos):
+"Homem, 21 anos, estudante universitário, refere estar ansioso, angustiado, desanimado e com insônia inicial há 2 meses, em razão de sentimentos de estranheza com relação ao mundo, percebe o clima ao seu redor como ameaçador e tem a sensação de que alguma coisa está para acontecer, que 'não há escapatória'... Na segunda consulta psiquiátrica, após 4 meses do primeiro atendimento, relata que os professores estão perseguindo, realizam reuniões para difamá-lo e estão criando estratégias para reprová-lo... O paciente conclui sua fala, dizendo: 'Lembro-me de que, quando eu era criança, ganhei uma Bíblia do meu professor de religião. Por isso, os professores estão me perseguindo'."
 
-PROIBIDO NOS CASOS CLÍNICOS:
-- Frases genéricas como "Um paciente de 30 anos, com asma leve...".
-- Casos com apenas idade + diagnóstico + pergunta de conduta.
-- Perguntas do tipo "Qual é a conduta mais adequada?" sem vinheta rica.
-- Afirmar simplesmente que "corticoide inalatório em dose baixa é o tratamento de escolha" sem contexto clínico robusto.
-- Repetir o mesmo padrão de paciente mudando apenas idade ou gravidade.
-- Casos com menos de 180 palavras.
+REGRAS OBRIGATÓRIAS PARA AS 3 AFIRMAÇÕES V/F:
+- As **3 afirmações compartilham o MESMO caso** (como questões 01, 02, 03 numa prova).
+- Cada afirmação deve abordar um aspecto DIFERENTE do caso: por exemplo, (a) diagnóstico/classificação/psicopatologia, (b) conduta terapêutica/farmacológica/contraindicação, (c) interpretação de dado/mecanismo/diagnóstico diferencial/prognóstico.
+- Cada afirmação deve exigir raciocínio clínico-farmacológico, NÃO pura memorização.
+- Misture afirmações verdadeiras e falsas (não as três iguais). As falsas devem ter erro técnico defensável a partir do material.
+- A resposta correta deve ser inequivocamente defensável pelo material fornecido.
 
-FORMATO DOS CASOS:
-- Em "question_text", escreva o caso completo e termine com uma frase declarativa para julgamento, por exemplo: "Diante desse quadro, é correto afirmar que ...".
+FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO:
+- Em "question_text" de **CADA UMA das 3 questões**, repita INTEGRALMENTE o mesmo caso clínico no início, prefixado por "**Caso clínico (questões 1 a 3):**\\n\\n", seguido do texto do caso completo, depois uma linha em branco, e então a afirmação específica daquela questão prefixada por "**Afirmação 1:**" / "**Afirmação 2:**" / "**Afirmação 3:**" e terminada por "Julgue: ( ) Verdadeiro ( ) Falso".
+- O caso clínico deve ser EXATAMENTE IGUAL nas três questões (mesmo texto, palavra por palavra).
 - Em "correct_answer", use apenas "V" ou "F".
 
-Antes de responder, faça uma checagem interna: se qualquer caso parecer simples demais para uma prova de residência/concurso, reescreva-o até atingir o padrão exigido.
+PROIBIDO:
+- Gerar 3 casos clínicos diferentes (deve ser 1 caso compartilhado).
+- Caso genérico tipo "Paciente de 30 anos com asma leve...".
+- Caso com menos de 180 palavras.
+- Afirmações que sejam simples reformulação direta do enunciado sem exigir raciocínio.
+- Repetir o mesmo aspecto nas 3 afirmações.
+
+Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso está repetido idêntico nas 3 questões? Se não, reescreva.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
@@ -447,7 +453,15 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ],
   "application_questions": [
     {
-      "question_text": "Vinheta clínica completa, densa e contextualizada, terminando com afirmação V/F",
+      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[caso completo aqui]\\n\\n**Afirmação 1:** [afirmação específica da questão 1]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "correct_answer": "V"
+    },
+    {
+      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 2:** [afirmação específica da questão 2]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "correct_answer": "F"
+    },
+    {
+      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 3:** [afirmação específica da questão 3]\\nJulgue: ( ) Verdadeiro ( ) Falso",
       "correct_answer": "V"
     }
   ]
