@@ -67,13 +67,13 @@ export default function QuizManager() {
 
   // AI generation state
   const [showAiDialog, setShowAiDialog] = useState(false);
-  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiFiles, setAiFiles] = useState<File[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiQuizTitle, setAiQuizTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFileInputRef = useRef<HTMLInputElement>(null);
   const [showAiImportDialog, setShowAiImportDialog] = useState(false);
-  const [aiImportFile, setAiImportFile] = useState<File | null>(null);
+  const [aiImportFiles, setAiImportFiles] = useState<File[]>([]);
   const [aiImportLoading, setAiImportLoading] = useState(false);
 
   // iRAT/tRAT Question form state
@@ -318,25 +318,33 @@ export default function QuizManager() {
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+  const buildFilesPayload = async (files: File[]) => {
+    const payload: { fileContent: string; fileName: string; mimeType?: string }[] = [];
+    for (const f of files) {
+      const isTextFile = f.name.endsWith('.txt') || f.name.endsWith('.md') || f.name.endsWith('.csv');
+      const mimeType = getMimeType(f.name);
+      const fileContent = isTextFile ? await readFileAsText(f) : await readFileAsBase64(f);
+      payload.push({ fileContent, fileName: f.name, mimeType: isTextFile ? undefined : mimeType });
+    }
+    return payload;
+  };
+
   const generateWithAI = async () => {
-    if (!aiFile) { toast.error('Selecione um arquivo'); return; }
+    if (aiFiles.length === 0) { toast.error('Selecione ao menos um arquivo'); return; }
     if (!aiQuizTitle.trim()) { toast.error('Informe o nome do questionário'); return; }
     if (isFinite(maxQuizzes) && quizzes.length >= maxQuizzes) {
       showUpgradeDialog('Questionários ilimitados');
       return;
     }
-    if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    const oversize = aiFiles.find(f => f.size > MAX_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
 
     setAiLoading(true);
     try {
-      const isTextFile = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md') || aiFile.name.endsWith('.csv');
-      const mimeType = getMimeType(aiFile.name);
-      let fileContent: string;
-      if (isTextFile) { fileContent = await readFileAsText(aiFile); }
-      else { fileContent = await readFileAsBase64(aiFile); }
+      const filesPayload = await buildFilesPayload(aiFiles);
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiFile.name, mimeType: isTextFile ? undefined : mimeType },
+        body: { files: filesPayload },
       });
 
       if (error) throw error;
@@ -380,7 +388,7 @@ export default function QuizManager() {
 
       toast.success(`Questionário criado com ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} questões de aplicação!`);
       setShowAiDialog(false);
-      setAiFile(null);
+      setAiFiles([]);
       setAiQuizTitle('');
       loadQuizzes();
 
@@ -398,18 +406,15 @@ export default function QuizManager() {
   };
 
   const generateForExistingQuiz = async () => {
-    if (!aiImportFile || !selectedQuiz) return;
-    if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    if (aiImportFiles.length === 0 || !selectedQuiz) return;
+    const oversize = aiImportFiles.find(f => f.size > MAX_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
     setAiImportLoading(true);
     try {
-      const isTextFile = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md') || aiImportFile.name.endsWith('.csv');
-      const mimeType = getMimeType(aiImportFile.name);
-      let fileContent: string;
-      if (isTextFile) { fileContent = await readFileAsText(aiImportFile); }
-      else { fileContent = await readFileAsBase64(aiImportFile); }
+      const filesPayload = await buildFilesPayload(aiImportFiles);
 
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { fileContent, fileName: aiImportFile.name, mimeType: isTextFile ? undefined : mimeType },
+        body: { files: filesPayload },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -437,7 +442,7 @@ export default function QuizManager() {
 
       toast.success(`Adicionadas ${data.irat_questions?.length || 0} questões iRAT/tRAT e ${data.application_questions?.length || 0} de aplicação!`);
       setShowAiImportDialog(false);
-      setAiImportFile(null);
+      setAiImportFiles([]);
       await loadQuestions(selectedQuiz.id);
       await loadAppQuestions(selectedQuiz.id);
     } catch (err: any) {
@@ -837,7 +842,7 @@ export default function QuizManager() {
                 <span className="text-xs text-muted-foreground text-center">Questão V/F para aplicação</span>
               </button>
               <button
-                onClick={() => { setShowTypeDialog(false); setAiFile(null); setShowAiImportDialog(true); }}
+                onClick={() => { setShowTypeDialog(false); setAiImportFiles([]); setShowAiImportDialog(true); }}
                 className="flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-purple-300/40 hover:border-purple-400 hover:bg-purple-50 transition-all"
               >
                 <Sparkles className="w-10 h-10 text-purple-500" />
@@ -877,34 +882,54 @@ export default function QuizManager() {
 
             <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label>Material de Apoio</Label>
+                <Label>Material(is) de Apoio</Label>
                 <input
                   ref={importFileInputRef}
                   type="file"
+                  multiple
                   accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
                   className="hidden"
-                  onChange={e => setAiImportFile(e.target.files?.[0] || null)}
+                  onChange={e => {
+                    const picked = Array.from(e.target.files || []);
+                    if (picked.length) setAiImportFiles(prev => [...prev, ...picked]);
+                    e.target.value = '';
+                  }}
                 />
                 <div
                   onClick={() => !aiImportLoading && importFileInputRef.current?.click()}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                    aiImportFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    aiImportFiles.length > 0 ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
                   } ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}
                 >
-                  {aiImportFile ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <CheckCircle2 className="w-8 h-8 text-primary" />
-                      <p className="font-medium">{aiImportFile.name}</p>
-                      <p className="text-sm text-muted-foreground">{(aiImportFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Upload className="w-8 h-8 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
-                      <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
-                    </div>
-                  )}
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-8 h-8 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {aiImportFiles.length > 0 ? 'Clique para adicionar mais arquivos' : 'Clique para selecionar arquivos'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT — múltiplos arquivos permitidos</p>
+                  </div>
                 </div>
+                {aiImportFiles.length > 0 && (
+                  <div className="space-y-1">
+                    {aiImportFiles.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-muted/30">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                          <span className="text-sm truncate">{f.name}</span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAiImportFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          disabled={aiImportLoading}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {aiImportLoading && (
@@ -922,7 +947,7 @@ export default function QuizManager() {
               <Button variant="outline" onClick={() => setShowAiImportDialog(false)} disabled={aiImportLoading}>
                 Cancelar
               </Button>
-              <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || !aiImportFile}>
+              <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || aiImportFiles.length === 0}>
                 {aiImportLoading ? (
                   <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</>
                 ) : (
@@ -961,7 +986,7 @@ export default function QuizManager() {
                 showUpgradeDialog('Questionários ilimitados');
                 return;
               }
-              setAiQuizTitle(''); setAiFile(null); setShowAiDialog(true);
+              setAiQuizTitle(''); setAiFiles([]); setShowAiDialog(true);
             }}>
               <Sparkles className="w-4 h-4 mr-1" /> Criar com IA
             </Button>
@@ -1022,34 +1047,54 @@ export default function QuizManager() {
             </div>
 
             <div className="space-y-2">
-              <Label>Material de Apoio</Label>
+              <Label>Material(is) de Apoio</Label>
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
                 className="hidden"
-                onChange={e => setAiFile(e.target.files?.[0] || null)}
+                onChange={e => {
+                  const picked = Array.from(e.target.files || []);
+                  if (picked.length) setAiFiles(prev => [...prev, ...picked]);
+                  e.target.value = '';
+                }}
               />
               <div
                 onClick={() => !aiLoading && fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                  aiFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                  aiFiles.length > 0 ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
                 } ${aiLoading ? 'opacity-50 pointer-events-none' : ''}`}
               >
-                {aiFile ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <CheckCircle2 className="w-8 h-8 text-primary" />
-                    <p className="font-medium">{aiFile.name}</p>
-                    <p className="text-sm text-muted-foreground">{(aiFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <Upload className="w-8 h-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
-                    <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
-                  </div>
-                )}
+                <div className="flex flex-col items-center gap-2">
+                  <Upload className="w-8 h-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {aiFiles.length > 0 ? 'Clique para adicionar mais arquivos' : 'Clique para selecionar arquivos'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT — múltiplos arquivos permitidos</p>
+                </div>
               </div>
+              {aiFiles.length > 0 && (
+                <div className="space-y-1">
+                  {aiFiles.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-muted/30">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
+                        <span className="text-sm truncate">{f.name}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiFiles(prev => prev.filter((_, idx) => idx !== i))}
+                        disabled={aiLoading}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {aiLoading && (
@@ -1067,7 +1112,7 @@ export default function QuizManager() {
             <Button variant="outline" onClick={() => setShowAiDialog(false)} disabled={aiLoading}>
               Cancelar
             </Button>
-            <Button onClick={generateWithAI} disabled={aiLoading || !aiFile || !aiQuizTitle.trim()}>
+            <Button onClick={generateWithAI} disabled={aiLoading || aiFiles.length === 0 || !aiQuizTitle.trim()}>
               {aiLoading ? (
                 <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</>
               ) : (
