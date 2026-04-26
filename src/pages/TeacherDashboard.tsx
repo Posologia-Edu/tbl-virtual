@@ -203,12 +203,12 @@ export default function TeacherDashboard() {
 
   // AI generation state
   const [showAiDialog, setShowAiDialog] = useState(false);
-  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiFile, setAiFile] = useState<File[] | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiQuizTitle, setAiQuizTitle] = useState('');
   const aiFileInputRef = useRef<HTMLInputElement>(null);
   const [showAiImportDialog, setShowAiImportDialog] = useState(false);
-  const [aiImportFile, setAiImportFile] = useState<File | null>(null);
+  const [aiImportFile, setAiImportFile] = useState<File[] | null>(null);
   const [aiImportLoading, setAiImportLoading] = useState(false);
   const aiImportFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -885,24 +885,35 @@ export default function TeacherDashboard() {
 
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+  const buildFilesPayload = async (files: File[]) => {
+    const payload: { fileContent: string; fileName: string; mimeType?: string }[] = [];
+    for (const file of files) {
+      const isText = file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv');
+      const mimeType = getMimeType(file.name);
+      payload.push({
+        fileContent: isText ? await readFileAsText(file) : await readFileAsBase64(file),
+        fileName: file.name,
+        mimeType: isText ? undefined : mimeType,
+      });
+    }
+    return payload;
+  };
+
   const generateWithAI = async () => {
-    if (!aiFile || !aiQuizTitle.trim()) return;
+    const selectedFiles = aiFile ?? [];
+    if (selectedFiles.length === 0 || !aiQuizTitle.trim()) return;
     if (isFinite(planLimits.maxQuizzes) && quizzes.length >= planLimits.maxQuizzes) {
       planLimits.showUpgradeDialog('Questionários ilimitados');
       return;
     }
     if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
     if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
-    if (aiFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    const oversized = selectedFiles.find(file => file.size > MAX_FILE_SIZE);
+    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo 10MB por arquivo.`); return; }
     setAiLoading(true);
     try {
-      const isText = aiFile.name.endsWith('.txt') || aiFile.name.endsWith('.md');
-      const mimeType = getMimeType(aiFile.name);
-      let fileContent: string;
-      if (isText) { fileContent = await readFileAsText(aiFile); }
-      else { fileContent = await readFileAsBase64(aiFile); }
-
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiFile.name, mimeType: isText ? undefined : mimeType } });
+      const filesPayload = await buildFilesPayload(selectedFiles);
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
       if (error) throw error;
       if (data?.error) {
         if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiLoading(false); return; }
@@ -946,19 +957,16 @@ export default function TeacherDashboard() {
   };
 
   const generateForExistingQuiz = async () => {
-    if (!aiImportFile || !selectedQuiz) return;
+    const selectedFiles = aiImportFile ?? [];
+    if (selectedFiles.length === 0 || !selectedQuiz) return;
     if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
     if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
-    if (aiImportFile.size > MAX_FILE_SIZE) { toast.error('Arquivo muito grande. Máximo 10MB.'); return; }
+    const oversized = selectedFiles.find(file => file.size > MAX_FILE_SIZE);
+    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo 10MB por arquivo.`); return; }
     setAiImportLoading(true);
     try {
-      const isText = aiImportFile.name.endsWith('.txt') || aiImportFile.name.endsWith('.md');
-      const mimeType = getMimeType(aiImportFile.name);
-      let fileContent: string;
-      if (isText) { fileContent = await readFileAsText(aiImportFile); }
-      else { fileContent = await readFileAsBase64(aiImportFile); }
-
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { fileContent, fileName: aiImportFile.name, mimeType: isText ? undefined : mimeType } });
+      const filesPayload = await buildFilesPayload(selectedFiles);
+      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
       if (error) throw error;
       if (data?.error) {
         if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiImportLoading(false); return; }
@@ -2837,7 +2845,7 @@ export default function TeacherDashboard() {
             <Sparkles className="w-5 h-5 text-primary" /> Criar Questionário com IA
           </DialogTitle>
           <DialogDescription>
-            Envie um material de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
+            Envie um ou mais materiais de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -2846,23 +2854,16 @@ export default function TeacherDashboard() {
             <Input value={aiQuizTitle} onChange={e => setAiQuizTitle(e.target.value)} placeholder="Ex: Farmacologia - Antibióticos" disabled={aiLoading} />
           </div>
           <div className="space-y-2">
-            <Label>Material de Apoio</Label>
-            <input ref={aiFileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => setAiFile(e.target.files?.[0] || null)} />
-            <div onClick={() => !aiLoading && aiFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${aiFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiLoading ? 'opacity-50 pointer-events-none' : ''}`}>
-              {aiFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <CheckCircle2 className="w-8 h-8 text-primary" />
-                  <p className="font-medium">{aiFile.name}</p>
-                  <p className="text-sm text-muted-foreground">{(aiFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="w-8 h-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
-                  <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
-                </div>
-              )}
+            <Label>Material(is) de Apoio</Label>
+            <input ref={aiFileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => { const picked = Array.from(e.target.files || []); if (picked.length) setAiFile(prev => [...(prev ?? []), ...picked]); e.target.value = ''; }} />
+            <div onClick={() => !aiLoading && aiFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${(aiFile?.length ?? 0) > 0 ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">{(aiFile?.length ?? 0) > 0 ? 'Clique para adicionar mais arquivos' : 'Clique para selecionar arquivos'}</p>
+                <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT — múltiplos arquivos permitidos</p>
+              </div>
             </div>
+            {(aiFile?.length ?? 0) > 0 && <div className="space-y-1">{aiFile!.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-muted/30"><div className="flex items-center gap-2 min-w-0"><CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" /><span className="text-sm truncate">{file.name}</span><span className="text-xs text-muted-foreground flex-shrink-0">{(file.size / 1024 / 1024).toFixed(2)} MB</span></div><button type="button" onClick={() => setAiFile(prev => (prev ?? []).filter((_, idx) => idx !== index))} disabled={aiLoading} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></div>)}</div>}
           </div>
           {aiLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -2872,7 +2873,7 @@ export default function TeacherDashboard() {
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setShowAiDialog(false)} disabled={aiLoading}>Cancelar</Button>
-          <Button onClick={generateWithAI} disabled={aiLoading || !aiFile || !aiQuizTitle.trim()}>
+          <Button onClick={generateWithAI} disabled={aiLoading || (aiFile?.length ?? 0) === 0 || !aiQuizTitle.trim()}>
             {aiLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Questões</>}
           </Button>
         </div>
@@ -2887,28 +2888,21 @@ export default function TeacherDashboard() {
             <Sparkles className="w-5 h-5 text-purple-500" /> Gerar Questões com IA
           </DialogTitle>
           <DialogDescription>
-            Envie um material de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
+            Envie um ou mais materiais de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label>Material de Apoio</Label>
-            <input ref={aiImportFileInputRef} type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => setAiImportFile(e.target.files?.[0] || null)} />
-            <div onClick={() => !aiImportLoading && aiImportFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${aiImportFile ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}>
-              {aiImportFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <CheckCircle2 className="w-8 h-8 text-primary" />
-                  <p className="font-medium">{aiImportFile.name}</p>
-                  <p className="text-sm text-muted-foreground">{(aiImportFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <Upload className="w-8 h-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
-                  <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT</p>
-                </div>
-              )}
+            <Label>Material(is) de Apoio</Label>
+            <input ref={aiImportFileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => { const picked = Array.from(e.target.files || []); if (picked.length) setAiImportFile(prev => [...(prev ?? []), ...picked]); e.target.value = ''; }} />
+            <div onClick={() => !aiImportLoading && aiImportFileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${(aiImportFile?.length ?? 0) > 0 ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'} ${aiImportLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">{(aiImportFile?.length ?? 0) > 0 ? 'Clique para adicionar mais arquivos' : 'Clique para selecionar arquivos'}</p>
+                <p className="text-xs text-muted-foreground">PDF, Word, PowerPoint ou TXT — múltiplos arquivos permitidos</p>
+              </div>
             </div>
+            {(aiImportFile?.length ?? 0) > 0 && <div className="space-y-1">{aiImportFile!.map((file, index) => <div key={`${file.name}-${index}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border bg-muted/30"><div className="flex items-center gap-2 min-w-0"><CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" /><span className="text-sm truncate">{file.name}</span><span className="text-xs text-muted-foreground flex-shrink-0">{(file.size / 1024 / 1024).toFixed(2)} MB</span></div><button type="button" onClick={() => setAiImportFile(prev => (prev ?? []).filter((_, idx) => idx !== index))} disabled={aiImportLoading} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></div>)}</div>}
           </div>
           {aiImportLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -2918,7 +2912,7 @@ export default function TeacherDashboard() {
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setShowAiImportDialog(false)} disabled={aiImportLoading}>Cancelar</Button>
-          <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || !aiImportFile}>
+          <Button onClick={generateForExistingQuiz} disabled={aiImportLoading || (aiImportFile?.length ?? 0) === 0}>
             {aiImportLoading ? <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-1" /> Gerar Questões</>}
           </Button>
         </div>
