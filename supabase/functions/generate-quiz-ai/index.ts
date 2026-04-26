@@ -350,6 +350,45 @@ serve(async (req) => {
       });
     }
 
+    if (body?.mode === "extract_text") {
+      if (files.length !== 1) {
+        return new Response(JSON.stringify({ error: "Envie apenas um arquivo por extração de texto." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const file = files[0];
+      if (file.mimeType !== "application/pdf") {
+        return new Response(JSON.stringify({ files }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        console.log(`[AI] Extracting text from single PDF: ${file.fileName}`);
+        const text = await withTimeout(extractPdfText(file.fileContent), 15000, "PDF_EXTRACT");
+        console.log(`[AI] Extracted ${text.length} chars from single PDF ${file.fileName}`);
+        if (!text || text.length < 50) {
+          return new Response(JSON.stringify({ error: `Não foi possível extrair texto do PDF "${file.fileName}". O arquivo pode ser uma imagem escaneada. Tente converter para texto antes.` }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ files: [{ fileContent: text, fileName: file.fileName }] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        console.error("[AI] Single PDF extraction failed:", e);
+        const errorMessage = getErrorMessage(e);
+        const message = errorMessage === "TIMEOUT:PDF_EXTRACT"
+          ? `O PDF "${file.fileName}" demorou demais para ser processado. Tente um arquivo menor ou com menos páginas.`
+          : `Erro ao processar PDF "${file.fileName}": ${errorMessage}`;
+        const status = errorMessage === "TIMEOUT:PDF_EXTRACT" ? 504 : 400;
+        return new Response(JSON.stringify({ error: message }), {
+          status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const systemPrompt = `Você é um especialista em educação médica e TBL (Team-Based Learning). 
 Sua tarefa é analisar o material de apoio fornecido e criar questões baseadas EXCLUSIVAMENTE no conteúdo do material.
 
