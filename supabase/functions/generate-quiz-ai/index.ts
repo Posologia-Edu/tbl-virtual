@@ -460,15 +460,15 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   ],
   "application_questions": [
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[caso completo aqui]\\n\\n**Afirmação 1:** [afirmação específica da questão 1]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "CASO CLÍNICO (questões 1 a 3):\\n\\n[caso clínico completo aqui, 180-320 palavras, em parágrafos, texto puro sem asteriscos]\\n\\n———\\n\\nAfirmação 1: [afirmação específica da questão 1]\\n\\nJulgue como Verdadeiro ou Falso.",
       "correct_answer": "V"
     },
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 2:** [afirmação específica da questão 2]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "Afirmação 2: [afirmação específica da questão 2]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
       "correct_answer": "F"
     },
     {
-      "question_text": "**Caso clínico (questões 1 a 3):**\\n\\n[MESMO caso completo, idêntico]\\n\\n**Afirmação 3:** [afirmação específica da questão 3]\\nJulgue: ( ) Verdadeiro ( ) Falso",
+      "question_text": "Afirmação 3: [afirmação específica da questão 3]\\n\\nJulgue como Verdadeiro ou Falso. (Baseie-se no caso clínico apresentado na questão 1.)",
       "correct_answer": "V"
     }
   ]
