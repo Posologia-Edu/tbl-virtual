@@ -358,7 +358,18 @@ Você deve gerar EXATAMENTE:
    - **3 questões DIFÍCEIS (25%)**: nível de "avaliar/criar". Exigem integração de múltiplos conceitos, distinção fina entre alternativas plausíveis, raciocínio clínico ou inferências não explícitas no texto. Distratores devem ser fortes e parecer corretos à primeira vista.
    Importante: distribua os níveis ao longo das 10 questões (não agrupe por dificuldade) e NÃO mencione o nível de dificuldade dentro do enunciado.
 
-2. **3 casos clínicos de aplicação (tRAT em equipe — SEMPRE casos clínicos COMPLEXOS)**: Cada item deve ser um caso clínico rico, contextualizado e detalhado (com dados como idade, sexo, queixa, antecedentes, exame físico, exames complementares quando pertinente), de ALTA complexidade cognitiva. As afirmações devem exigir associação entre múltiplos conceitos do material, inferência e raciocínio clínico — NUNCA apenas reconhecimento direto do texto. O aluno que somente leu o material deve ter dificuldade; só responde com segurança quem domina o conteúdo e consegue integrá-lo. Cada caso traz uma afirmação para julgar como Verdadeiro (V) ou Falso (F).
+2. **3 casos clínicos de aplicação (tRAT em equipe)** — devem seguir RIGOROSAMENTE o padrão de questões de **provas de concurso público de alto nível e residência médica** (estilo Revalida, USP, UNIFESP, UFRJ, UNICAMP, AMRIGS, ENARE, INEP, FCC, CESPE/Cebraspe). NÃO gere casos curtos ou simplistas como "Paciente de 10 anos com asma leve...". Cada caso clínico DEVE conter, no mínimo:
+   - **Identificação completa**: idade, sexo, profissão/ocupação quando relevante, procedência.
+   - **Queixa principal e HDA detalhada**: tempo de evolução, caracterização dos sintomas, fatores de melhora/piora, sintomas associados, uso prévio de medicações com doses e tempo de uso.
+   - **Antecedentes pessoais e familiares relevantes**: comorbidades, alergias, cirurgias, medicações em uso (com posologia), hábitos de vida (tabagismo, etilismo), histórico familiar pertinente.
+   - **Exame físico objetivo**: sinais vitais COMPLETOS (PA, FC, FR, Tax, SatO₂), dados antropométricos (peso, altura, IMC) quando pertinente, achados segmentares relevantes (ausculta, palpação, inspeção).
+   - **Exames complementares com valores numéricos**: hemograma, bioquímica, gasometria, ECG, imagens, espirometria etc., conforme o tema. Inclua valores de referência implícitos (números realistas).
+   - **Conduta já instituída ou contexto terapêutico** quando aplicável.
+   - **Extensão mínima**: cada caso clínico deve ter entre 120 e 220 palavras de contexto ANTES da afirmação a julgar.
+   - **Afirmação final (V ou F)**: deve exigir integração de múltiplos conceitos, raciocínio fisiopatológico, farmacológico ou diagnóstico diferencial — NUNCA mera recuperação de informação. A afirmação pode envolver: escolha terapêutica de primeira linha vs. alternativa, ajuste de dose, contraindicação relativa/absoluta, interpretação de exame, prognóstico, mecanismo de ação, interação medicamentosa, classificação de gravidade segundo diretriz citada.
+   - Os 3 casos devem abordar **temas e cenários distintos** entre si (variar gravidade, faixa etária, contexto clínico).
+   - Use linguagem técnica formal de prova médica. NÃO use frases simples do tipo "É correto iniciar...?" — prefira construções típicas de prova: "Diante do quadro descrito, a conduta mais adequada é a introdução de X na dose Y.", "A hipótese diagnóstica mais provável justifica a suspensão imediata de Z.", etc.
+   - Todos os dados clínicos e a resposta correta DEVEM derivar do material fornecido (não invente diretrizes).
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
