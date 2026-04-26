@@ -352,9 +352,13 @@ NUNCA invente informações que não estejam no material fornecido.
 
 Você deve gerar EXATAMENTE:
 
-1. **10 questões de iRAT/tRAT**: Cada uma com 4 alternativas (A, B, C, D), sendo apenas uma correta. As questões devem testar compreensão e aplicação dos conceitos do material.
+1. **10 questões de iRAT/tRAT** (4 alternativas A, B, C, D, apenas uma correta), distribuídas RIGOROSAMENTE por nível de dificuldade cognitiva (taxonomia de Bloom):
+   - **2 questões FÁCEIS (25% → 2 de 10... use exatamente 2)**: nível de "lembrar/compreender". Resposta direta, recuperação de fatos, definições ou conceitos explícitos no material. Aluno que apenas leu o material consegue responder.
+   - **5 questões MEDIANAS (50%)**: nível de "aplicar/analisar". Exigem compreensão consolidada e raciocínio para aplicar conceitos a situações concretas. Quem estudou o material responde, mas exige carga cognitiva relevante (não é apenas leitura superficial).
+   - **3 questões DIFÍCEIS (25%)**: nível de "avaliar/criar". Exigem integração de múltiplos conceitos, distinção fina entre alternativas plausíveis, raciocínio clínico ou inferências não explícitas no texto. Distratores devem ser fortes e parecer corretos à primeira vista.
+   Importante: distribua os níveis ao longo das 10 questões (não agrupe por dificuldade) e NÃO mencione o nível de dificuldade dentro do enunciado.
 
-2. **3 casos clínicos de aplicação**: Cada caso deve ser um cenário clínico detalhado e contextualizado baseado no material, com uma afirmação que o aluno deve julgar como Verdadeiro (V) ou Falso (F).
+2. **3 casos clínicos de aplicação (tRAT em equipe — SEMPRE casos clínicos COMPLEXOS)**: Cada item deve ser um caso clínico rico, contextualizado e detalhado (com dados como idade, sexo, queixa, antecedentes, exame físico, exames complementares quando pertinente), de ALTA complexidade cognitiva. As afirmações devem exigir associação entre múltiplos conceitos do material, inferência e raciocínio clínico — NUNCA apenas reconhecimento direto do texto. O aluno que somente leu o material deve ter dificuldade; só responde com segurança quem domina o conteúdo e consegue integrá-lo. Cada caso traz uma afirmação para julgar como Verdadeiro (V) ou Falso (F).
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
