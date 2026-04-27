@@ -381,6 +381,11 @@ export default function StudentRoomView() {
     }
   }, [room?.current_stage, room?.current_app_question_index, room?.app_alternatives_released, membership?.team_id, loadAppData]);
 
+  // Reset preview navigation when teacher releases alternatives or advances the question
+  useEffect(() => {
+    setAppPreviewIdx(null);
+  }, [room?.current_app_question_index, room?.app_alternatives_released]);
+
   // Determine tRAT step based on state
   useEffect(() => {
     if (room?.current_stage !== 'trat_open') return;
