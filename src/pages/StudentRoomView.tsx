@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash2, Zap, BookOpen, UsersRound, MessageSquarePlus, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Clock, Users, Search, UserPlus, Trash2, Zap, BookOpen, UsersRound, MessageSquarePlus, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
