@@ -131,8 +131,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
 
   const loadClassDetails = async (classId: string) => {
     const [{ data: classRooms }, { data: allRooms }, { data: classStudents }] = await Promise.all([
-      supabase.from('rooms').select('id, name, code, current_stage, created_at, class_id').eq('class_id', classId).order('created_at', { ascending: false }),
-      supabase.from('rooms').select('id, name, code, current_stage, created_at, class_id').eq('teacher_id', userId).is('class_id', null).order('created_at', { ascending: false }),
+      supabase.from('rooms').select('id, name, code, current_stage, created_at, class_id').eq('class_id', classId).is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from('rooms').select('id, name, code, current_stage, created_at, class_id').eq('teacher_id', userId).is('class_id', null).is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('class_students').select('id, student_id, enrolled_at').eq('class_id', classId),
     ]);
     setRooms((classRooms as RoomInClass[]) || []);
