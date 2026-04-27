@@ -152,6 +152,7 @@ export default function StudentRoomView() {
   const [tratFeedback, setTratFeedback] = useState<{ correct: boolean; option: string; points: number } | null>(null);
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<Record<string, string>>({});
+  const [appPreviewIdx, setAppPreviewIdx] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [myTeam, setMyTeam] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
