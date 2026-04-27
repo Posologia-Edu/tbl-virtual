@@ -1413,8 +1413,13 @@ export default function StudentRoomView() {
     }
 
     // Use professor-controlled question index from room
-    const currentAppIdx = room?.current_app_question_index ?? 0;
+    const officialAppIdx = room?.current_app_question_index ?? 0;
     const alternativesReleased = room?.app_alternatives_released ?? false;
+    // While alternatives are locked, the team can preview/navigate any question to discuss.
+    // Once released, force the index controlled by the teacher.
+    const currentAppIdx = alternativesReleased
+      ? officialAppIdx
+      : (appPreviewIdx ?? officialAppIdx);
     const q = appQuestions[currentAppIdx];
     if (!q) {
       return (
@@ -1429,6 +1434,8 @@ export default function StudentRoomView() {
 
     const currentResponse = appResponses[q.id];
     const alreadyAnswered = !!currentResponse;
+    const canNavigate = !alternativesReleased;
+    const isPreviewing = !alternativesReleased && currentAppIdx !== officialAppIdx;
 
     return (
       <div className="space-y-4">
@@ -1446,10 +1453,48 @@ export default function StudentRoomView() {
         <Card className="overflow-hidden">
           <div className="bg-muted py-3 text-center border-b">
             <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
+            {canNavigate && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Leiam e discutam em equipe. Naveguem livremente entre as questões enquanto aguardam o professor liberar as alternativas.
+              </p>
+            )}
           </div>
           <CardContent className="pt-6 space-y-5">
             <ClinicalCaseQuestion text={q.question_text} questionNumber={currentAppIdx + 1} />
-            
+
+            {canNavigate && appQuestions.length > 1 && (
+              <div className="flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAppPreviewIdx(Math.max(0, currentAppIdx - 1))}
+                  disabled={currentAppIdx === 0}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+                </Button>
+                {isPreviewing && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAppPreviewIdx(officialAppIdx)}
+                  >
+                    Ir para questão atual ({officialAppIdx + 1})
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAppPreviewIdx(Math.min(appQuestions.length - 1, currentAppIdx + 1))}
+                  disabled={currentAppIdx >= appQuestions.length - 1}
+                >
+                  Próxima <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            )}
+
             {alreadyAnswered ? (
               <div className="text-center space-y-3">
                 <CheckCircle2 className="w-10 h-10 mx-auto text-success" />
@@ -1490,10 +1535,16 @@ export default function StudentRoomView() {
 
         <div className="flex justify-center gap-1.5 pt-2">
           {appQuestions.map((_, i) => (
-            <div key={i}
+            <button
+              key={i}
+              type="button"
+              onClick={() => canNavigate && setAppPreviewIdx(i)}
+              disabled={!canNavigate}
               className={`w-2.5 h-2.5 rounded-full transition-all ${
-                i === currentAppIdx ? 'bg-primary scale-125' : i < currentAppIdx ? 'bg-success' : 'bg-border'
-              }`} />
+                i === currentAppIdx ? 'bg-primary scale-125' : i === officialAppIdx ? 'bg-primary/50' : i < officialAppIdx ? 'bg-success' : 'bg-border'
+              } ${canNavigate ? 'cursor-pointer hover:scale-110' : 'cursor-default'}`}
+              aria-label={`Ir para questão ${i + 1}`}
+            />
           ))}
         </div>
       </div>
