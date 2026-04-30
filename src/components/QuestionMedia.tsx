@@ -324,7 +324,7 @@ export function QuestionMediaEditor({ value, onChange, ownerId }: EditorProps) {
 export function RichTextHelp() {
   return (
     <p className="text-[11px] text-muted-foreground leading-snug">
-      Suporta Markdown (negrito **, listas, tabelas |) e LaTeX entre $…$ ou $$…$$. Ex.: $K_a = 1{,}8 \times 10^{-5}$.
+      {"Suporta Markdown (negrito **, listas, tabelas |) e LaTeX entre $…$ ou $$…$$. Ex.: $K_a = 1{,}8 \\times 10^{-5}$."}
     </p>
   );
 }
