@@ -44,6 +44,7 @@ import UpgradeDialog from '@/components/UpgradeDialog';
 import SystemUpdates from '@/components/SystemUpdates';
 import PipelineNotification from '@/components/PipelineNotification';
 import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
@@ -160,12 +161,14 @@ export default function TeacherDashboard() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
 
   // Application question state
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [addAppQOpen, setAddAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
   // Edit question state
   const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
