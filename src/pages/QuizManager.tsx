@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import UpgradeDialog from '@/components/UpgradeDialog';
 import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 
 type Question = {
   id: string;
@@ -85,6 +86,7 @@ export default function QuizManager() {
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
 
   // Application question form state
   const [appQText, setAppQText] = useState('');
@@ -94,6 +96,7 @@ export default function QuizManager() {
   const [appOptD, setAppOptD] = useState('');
   const [editingAppQuestion, setEditingAppQuestion] = useState<AppQuestion | null>(null);
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
   useEffect(() => {
     if (user) loadQuizzes();
@@ -139,12 +142,12 @@ export default function QuizManager() {
 
   const resetQuestionForm = () => {
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
-    setEditingQuestion(null);
+    setEditingQuestion(null); setQMedia([]);
   };
 
   const resetAppQuestionForm = () => {
     setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
-    setEditingAppQuestion(null); setAppCorrectAnswer('V');
+    setEditingAppQuestion(null); setAppCorrectAnswer('V'); setAppQMedia([]);
   };
 
   const saveQuestion = async () => {
@@ -162,6 +165,7 @@ export default function QuizManager() {
         question_text: qText.trim(),
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
+        media: qMedia as any,
       }).eq('id', editingQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
@@ -172,6 +176,7 @@ export default function QuizManager() {
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
         sort_order: questions.length,
+        media: qMedia as any,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão salva!');
@@ -196,6 +201,7 @@ export default function QuizManager() {
         question_text: appQText.trim(),
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
+        media: appQMedia as any,
       }).eq('id', editingAppQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão de aplicação atualizada!');
@@ -206,6 +212,7 @@ export default function QuizManager() {
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
         sort_order: appQuestions.length,
+        media: appQMedia as any,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão de aplicação salva!');
@@ -220,6 +227,7 @@ export default function QuizManager() {
     setQText(q.question_text);
     setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
     setCorrect(q.correct_option as 'A' | 'B' | 'C' | 'D');
+    setQMedia(parseMedia((q as any).media));
     setViewMode('edit-question');
   };
 
@@ -228,6 +236,7 @@ export default function QuizManager() {
     setAppQText(q.question_text);
     setAppOptA(q.option_a || ''); setAppOptB(q.option_b || ''); setAppOptC(q.option_c || ''); setAppOptD(q.option_d || '');
     setAppCorrectAnswer((q.correct_answer?.trim() as 'V' | 'F') || 'V');
+    setAppQMedia(parseMedia((q as any).media));
     setViewMode('edit-app-question');
   };
 
