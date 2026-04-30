@@ -556,9 +556,9 @@ export default function TeacherRoomManage() {
                     <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
                       <div className="flex-1">
                         {g.caseText ? (
-                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly media={(q as any).media} />
                         ) : (
-                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                         )}
                         <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
                       </div>
