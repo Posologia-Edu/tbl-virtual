@@ -435,24 +435,28 @@ REGRAS OBRIGATÓRIAS PARA AS 3 AFIRMAÇÕES V/F:
 FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO (CRÍTICO):
 - As 3 questões compartilham o MESMO caso clínico. O caso deve aparecer integralmente em TODAS as 3 questões (o aluno responde cada afirmação separadamente e precisa ver o caso em cada tela).
 - Use EXATAMENTE o separador literal "|||AFIRMACAO|||" entre o caso clínico e a afirmação V/F. Não traduza, não altere, não adicione espaços ao separador.
-- Formato de cada question_text (texto puro, SEM asteriscos, SEM markdown):
+- Formato de cada question_text:
   "[texto integral do caso clínico, 180-320 palavras, em parágrafos]|||AFIRMACAO|||[afirmação específica desta questão, sem prefixo 'Afirmação X:', apenas a afirmação a ser julgada como V ou F]"
 - O TEXTO DO CASO CLÍNICO deve ser IDÊNTICO nas 3 questões (mesmo conteúdo, mesma pontuação, mesmas quebras de linha). Apenas a parte após "|||AFIRMACAO|||" muda.
 - NÃO inclua "CASO CLÍNICO:", "Afirmação 1:", "Julgue como Verdadeiro ou Falso", nem qualquer rótulo — o sistema renderiza isso automaticamente.
-- NÃO use asteriscos (**), markdown ou formatação. Apenas texto puro com quebras de linha (\\n) dentro do caso quando necessário.
+- O enunciado é renderizado como Markdown (GFM) com KaTeX. Você PODE (opcionalmente) usar:
+  • Tabelas markdown ( | col | col | + linha de --- ) para apresentar dados clínicos/laboratoriais quando fizer sentido.
+  • Fórmulas LaTeX entre $...$ (inline) ou $$...$$ (bloco), ex.: $K_a = 1{,}8 \\times 10^{-5}$.
+  • Listas (-, 1.) e ênfase moderada (**negrito**, *itálico*) quando agregar clareza.
+  Use formatação SOMENTE quando ela melhorar a compreensão clínica/científica; texto comum ainda é o padrão.
 - Em "correct_answer", use apenas "V" ou "F".
 
 PROIBIDO:
 - Omitir o caso clínico nas questões 2 e 3 (o caso DEVE estar nas 3, idêntico).
 - Gerar 3 casos clínicos diferentes (deve ser 1 caso, repetido literalmente).
 - Esquecer ou alterar o separador "|||AFIRMACAO|||".
-- Usar asteriscos, markdown, rótulos como "Afirmação X:" ou "CASO CLÍNICO:".
+- Inserir rótulos como "Afirmação X:" ou "CASO CLÍNICO:".
 - Caso genérico tipo "Paciente de 30 anos com asma leve...".
 - Caso com menos de 180 palavras.
 - Afirmações que sejam simples reformulação direta do enunciado sem exigir raciocínio.
 - Repetir o mesmo aspecto nas 3 afirmações.
 
-Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há asteriscos nem rótulos? Se não, reescreva.
+Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há rótulos como "Afirmação X:" ou "CASO CLÍNICO:"? Se não, reescreva.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 

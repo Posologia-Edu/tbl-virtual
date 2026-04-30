@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import UpgradeDialog from '@/components/UpgradeDialog';
 import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 
 type Question = {
   id: string;
@@ -85,6 +86,7 @@ export default function QuizManager() {
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
 
   // Application question form state
   const [appQText, setAppQText] = useState('');
@@ -94,6 +96,7 @@ export default function QuizManager() {
   const [appOptD, setAppOptD] = useState('');
   const [editingAppQuestion, setEditingAppQuestion] = useState<AppQuestion | null>(null);
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
   useEffect(() => {
     if (user) loadQuizzes();
@@ -139,12 +142,12 @@ export default function QuizManager() {
 
   const resetQuestionForm = () => {
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
-    setEditingQuestion(null);
+    setEditingQuestion(null); setQMedia([]);
   };
 
   const resetAppQuestionForm = () => {
     setAppQText(''); setAppOptA(''); setAppOptB(''); setAppOptC(''); setAppOptD('');
-    setEditingAppQuestion(null); setAppCorrectAnswer('V');
+    setEditingAppQuestion(null); setAppCorrectAnswer('V'); setAppQMedia([]);
   };
 
   const saveQuestion = async () => {
@@ -162,6 +165,7 @@ export default function QuizManager() {
         question_text: qText.trim(),
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
+        media: qMedia as any,
       }).eq('id', editingQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
@@ -172,6 +176,7 @@ export default function QuizManager() {
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
         sort_order: questions.length,
+        media: qMedia as any,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão salva!');
@@ -196,6 +201,7 @@ export default function QuizManager() {
         question_text: appQText.trim(),
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
+        media: appQMedia as any,
       }).eq('id', editingAppQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão de aplicação atualizada!');
@@ -206,6 +212,7 @@ export default function QuizManager() {
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
         sort_order: appQuestions.length,
+        media: appQMedia as any,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão de aplicação salva!');
@@ -220,6 +227,7 @@ export default function QuizManager() {
     setQText(q.question_text);
     setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
     setCorrect(q.correct_option as 'A' | 'B' | 'C' | 'D');
+    setQMedia(parseMedia((q as any).media));
     setViewMode('edit-question');
   };
 
@@ -228,6 +236,7 @@ export default function QuizManager() {
     setAppQText(q.question_text);
     setAppOptA(q.option_a || ''); setAppOptB(q.option_b || ''); setAppOptC(q.option_c || ''); setAppOptD(q.option_d || '');
     setAppCorrectAnswer((q.correct_answer?.trim() as 'V' | 'F') || 'V');
+    setAppQMedia(parseMedia((q as any).media));
     setViewMode('edit-app-question');
   };
 
@@ -492,9 +501,15 @@ export default function QuizManager() {
               <Textarea
                 value={qText}
                 onChange={e => setQText(e.target.value)}
-                placeholder="Informe o Enunciado da questão."
+                placeholder="Informe o Enunciado. Suporta Markdown e LaTeX."
                 className="min-h-[150px]"
               />
+              <RichTextHelp />
+            </div>
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Mídia (opcional)</Label>
+              <QuestionMediaEditor value={qMedia} onChange={setQMedia} ownerId={user?.id} />
             </div>
 
             {optionLabels.map((opt) => {
@@ -577,9 +592,15 @@ export default function QuizManager() {
               <Textarea
                 value={appQText}
                 onChange={e => setAppQText(e.target.value)}
-                placeholder="Informe o enunciado da questão de aplicação (V ou F)."
+                placeholder="Informe o enunciado da questão de aplicação (V ou F). Suporta Markdown e LaTeX."
                 className="min-h-[150px]"
               />
+              <RichTextHelp />
+            </div>
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Mídia (opcional)</Label>
+              <QuestionMediaEditor value={appQMedia} onChange={setAppQMedia} ownerId={user?.id} />
             </div>
 
             <div className="space-y-3">
@@ -692,7 +713,7 @@ export default function QuizManager() {
                           {questions.map((q, i) => (
                             <tr key={q.id} className="border-t hover:bg-muted/30">
                               <td className="px-4 py-2">{i + 1}</td>
-                              <td className="px-4 py-2">{q.question_text}</td>
+                              <td className="px-4 py-2"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></td>
                               <td className="px-4 py-2 text-center font-bold text-green-600">{q.correct_option}</td>
                               <td className="px-4 py-2 text-center">
                                 <div className="flex justify-center gap-2">
@@ -760,9 +781,9 @@ export default function QuizManager() {
                                   <td className="px-4 py-2">{index + 1}</td>
                                   <td className="px-4 py-2">
                                     {group.caseText ? (
-                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly media={(q as any).media} />
                                     ) : (
-                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                                     )}
                                   </td>
                                   <td className="px-4 py-2 text-center">

@@ -44,6 +44,7 @@ import UpgradeDialog from '@/components/UpgradeDialog';
 import SystemUpdates from '@/components/SystemUpdates';
 import PipelineNotification from '@/components/PipelineNotification';
 import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
   id: string;
@@ -160,12 +161,14 @@ export default function TeacherDashboard() {
   const [optC, setOptC] = useState('');
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
 
   // Application question state
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [addAppQOpen, setAddAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
   // Edit question state
   const [editQuestionId, setEditQuestionId] = useState<string | null>(null);
@@ -772,10 +775,11 @@ export default function TeacherDashboard() {
         question_text: qText.trim(),
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
+        media: qMedia as any,
       }).eq('id', editQuestionId);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
-      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
       setEditQuestionId(null);
       setAddQOpen(false);
       const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -791,10 +795,11 @@ export default function TeacherDashboard() {
       quiz_id: selectedQuiz!.id, question_text: qText.trim(),
       option_a: optA, option_b: optB, option_c: optC, option_d: optD,
       correct_option: correct, sort_order: questions.length,
+      media: qMedia as any,
     });
     if (error) { toast.error('Falha ao adicionar questão'); return; }
     toast.success('Questão adicionada!');
-    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
     setAddQOpen(false);
     const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setQuestions((data as Question[]) || []);
@@ -808,10 +813,11 @@ export default function TeacherDashboard() {
         question_text: appQText.trim(),
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
+        media: appQMedia as any,
       }).eq('id', editAppQuestionId);
       if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
       toast.success('Questão de aplicação atualizada!');
-      setAppQText(''); setAppCorrectAnswer('V');
+      setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
       setEditAppQuestionId(null);
       setAddAppQOpen(false);
       const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -828,10 +834,11 @@ export default function TeacherDashboard() {
       option_a: 'V', option_b: 'F', option_c: null, option_d: null,
       correct_answer: appCorrectAnswer,
       sort_order: appQuestions.length,
+      media: appQMedia as any,
     });
     if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
     toast.success('Questão de aplicação adicionada!');
-    setAppQText(''); setAppCorrectAnswer('V');
+    setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
     setAddAppQOpen(false);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setAppQuestions(data || []);
@@ -1652,15 +1659,20 @@ export default function TeacherDashboard() {
           setAddQOpen(open);
           if (!open) {
             setEditQuestionId(null);
-            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
           }
         }}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editQuestionId ? 'Editar Questão iRAT/tRAT' : 'Adicionar Questão iRAT/tRAT'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Questão</Label>
-                <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite sua questão..." />
+                <Label>Enunciado</Label>
+                <Textarea value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite o enunciado. Suporta Markdown e LaTeX." rows={4} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Mídia (opcional)</Label>
+                <QuestionMediaEditor value={qMedia} onChange={setQMedia} ownerId={user?.id} />
               </div>
               {(['A', 'B', 'C', 'D'] as const).map((opt) => (
                 <div key={opt} className="space-y-1">
@@ -1686,15 +1698,20 @@ export default function TeacherDashboard() {
           setAddAppQOpen(open);
           if (!open) {
             setEditAppQuestionId(null);
-            setAppQText(''); setAppCorrectAnswer('V');
+            setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
           }
         }}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Questão</Label>
-                <Input value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação..." />
+                <Label>Enunciado</Label>
+                <Textarea value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação. Suporta Markdown e LaTeX." rows={5} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Mídia (opcional)</Label>
+                <QuestionMediaEditor value={appQMedia} onChange={setAppQMedia} ownerId={user?.id} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Gabarito: Resposta correta</Label>
@@ -1736,7 +1753,10 @@ export default function TeacherDashboard() {
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">Q{i + 1}.</span>{q.question_text}</p>
+                        <div className="mb-2 flex gap-2">
+                          <span className="text-muted-foreground font-medium">Q{i + 1}.</span>
+                          <div className="flex-1"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></div>
+                        </div>
                         <div className="grid grid-cols-2 gap-1 text-sm">
                           {(['A', 'B', 'C', 'D'] as const).map(opt => (
                             <span key={opt} className={`px-2 py-1 rounded ${q.correct_option === opt ? 'bg-success/10 text-success font-medium' : 'text-muted-foreground'}`}>
@@ -1749,6 +1769,7 @@ export default function TeacherDashboard() {
                         <Button variant="ghost" size="icon" onClick={() => {
                           setEditQuestionId(q.id);
                           setQText(q.question_text);
+                          setQMedia(parseMedia((q as any).media));
                           setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
                           setCorrect((q.correct_option as 'A' | 'B' | 'C' | 'D') || 'A');
                           setAddQOpen(true);
@@ -1814,6 +1835,7 @@ export default function TeacherDashboard() {
                               <Button variant="ghost" size="icon" onClick={() => {
                                 setEditAppQuestionId(q.id);
                                 setAppQText(q.question_text);
+                                setAppQMedia(parseMedia((q as any).media));
                                 setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
                                 setAddAppQOpen(true);
                               }} aria-label="Editar questão de aplicação">

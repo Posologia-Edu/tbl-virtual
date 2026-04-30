@@ -121,7 +121,7 @@ export default function TeacherRoomManage() {
     if ((!aq || aq.length === 0) && roomData?.quiz_id) {
       const { data: quizAppQs } = await supabase
         .from('application_questions')
-        .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer')
+        .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer, media')
         .eq('quiz_id', roomData.quiz_id)
         .order('sort_order');
       if (quizAppQs && quizAppQs.length > 0) {
@@ -134,6 +134,7 @@ export default function TeacherRoomManage() {
           option_d: q.option_d,
           sort_order: q.sort_order,
           correct_answer: q.correct_answer,
+          media: q.media || [],
         }));
         await supabase.from('application_questions').insert(toInsert);
         const { data: freshAq } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
@@ -262,7 +263,7 @@ export default function TeacherRoomManage() {
         if (!existingRoomQs || existingRoomQs.length === 0) {
           const { data: quizAppQs } = await supabase
             .from('application_questions')
-            .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer')
+            .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer, media')
             .eq('quiz_id', room.quiz_id)
             .order('sort_order');
 
@@ -276,6 +277,7 @@ export default function TeacherRoomManage() {
               option_d: q.option_d,
               sort_order: q.sort_order,
               correct_answer: q.correct_answer,
+              media: q.media || [],
             }));
             await supabase.from('application_questions').insert(toInsert);
           }
@@ -556,9 +558,9 @@ export default function TeacherRoomManage() {
                     <div key={q.id} className="p-3 rounded-lg border flex items-start justify-between gap-2">
                       <div className="flex-1">
                         {g.caseText ? (
-                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly media={(q as any).media} />
                         ) : (
-                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                          <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                         )}
                         <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
                       </div>
@@ -1053,7 +1055,7 @@ export default function TeacherRoomManage() {
                 <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
               </div>
               <CardContent className="pt-6 space-y-5">
-                <ClinicalCaseQuestion text={currentQ.question_text} questionNumber={currentAppIdx + 1} />
+                <ClinicalCaseQuestion text={currentQ.question_text} questionNumber={currentAppIdx + 1} media={(currentQ as any).media} />
                 <div className="grid grid-cols-2 gap-4">
                   {(['A', 'B'] as const).map(opt => {
                     const label = opt === 'A' ? (currentQ.option_a || 'V') : (currentQ.option_b || 'F');

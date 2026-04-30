@@ -1,4 +1,5 @@
 import { FileText, HelpCircle } from "lucide-react";
+import { QuestionRichRenderer, parseMedia, MediaBlock } from "./QuestionMedia";
 
 interface ClinicalCaseQuestionProps {
   text: string;
@@ -8,6 +9,8 @@ interface ClinicalCaseQuestionProps {
   caseOnly?: boolean;
   /** Render only the assertion card (omit the clinical case) */
   statementOnly?: boolean;
+  /** Optional media blocks tied to this question (rendered with the statement). */
+  media?: any;
 }
 
 export const CLINICAL_CASE_SEPARATOR = "|||AFIRMACAO|||";
@@ -23,25 +26,22 @@ export function splitClinicalCase(text: string): { caseText: string; statement: 
   };
 }
 
-/**
- * Renders an application question that may contain a clinical case + V/F statement
- * separated by the literal marker "|||AFIRMACAO|||".
- * If the marker is absent, renders the text as-is (backward compatible).
- */
 export function ClinicalCaseQuestion({
   text,
   questionNumber,
   compact,
   caseOnly,
   statementOnly,
+  media,
 }: ClinicalCaseQuestionProps) {
   const { caseText, statement, hasCase } = splitClinicalCase(text);
 
   if (!hasCase) {
     return (
-      <p className={`${compact ? "text-sm" : "text-base"} leading-relaxed whitespace-pre-line`}>
-        {questionNumber ? `Q${questionNumber}. ` : ""}{statement}
-      </p>
+      <div>
+        {questionNumber ? <span className="font-medium mr-1">Q{questionNumber}.</span> : null}
+        <QuestionRichRenderer text={statement} media={media} compact={compact} />
+      </div>
     );
   }
 
@@ -51,9 +51,7 @@ export function ClinicalCaseQuestion({
         <FileText className="h-3.5 w-3.5" />
         Caso clínico
       </div>
-      <p className={`${compact ? "text-sm" : "text-base"} leading-relaxed whitespace-pre-line text-foreground`}>
-        {caseText}
-      </p>
+      <QuestionRichRenderer text={caseText} compact={compact} />
     </div>
   );
 
@@ -63,9 +61,7 @@ export function ClinicalCaseQuestion({
         <HelpCircle className="h-3.5 w-3.5" />
         Afirmação{questionNumber ? ` ${questionNumber}` : ""} — Julgue como Verdadeiro ou Falso
       </div>
-      <p className={`${compact ? "text-sm" : "text-base"} leading-relaxed whitespace-pre-line font-medium text-foreground`}>
-        {statement}
-      </p>
+      <QuestionRichRenderer text={statement} media={media} compact={compact} />
     </div>
   );
 

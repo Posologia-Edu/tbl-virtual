@@ -182,6 +182,7 @@ export type Database = {
           correct_answer: string | null
           deleted_at: string | null
           id: string
+          media: Json
           option_a: string | null
           option_b: string | null
           option_c: string | null
@@ -195,6 +196,7 @@ export type Database = {
           correct_answer?: string | null
           deleted_at?: string | null
           id?: string
+          media?: Json
           option_a?: string | null
           option_b?: string | null
           option_c?: string | null
@@ -208,6 +210,7 @@ export type Database = {
           correct_answer?: string | null
           deleted_at?: string | null
           id?: string
+          media?: Json
           option_a?: string | null
           option_b?: string | null
           option_c?: string | null
@@ -494,6 +497,7 @@ export type Database = {
           correct_option: string
           deleted_at: string | null
           id: string
+          media: Json
           option_a: string
           option_b: string
           option_c: string
@@ -506,6 +510,7 @@ export type Database = {
           correct_option: string
           deleted_at?: string | null
           id?: string
+          media?: Json
           option_a: string
           option_b: string
           option_c: string
@@ -518,6 +523,7 @@ export type Database = {
           correct_option?: string
           deleted_at?: string | null
           id?: string
+          media?: Json
           option_a?: string
           option_b?: string
           option_c?: string
