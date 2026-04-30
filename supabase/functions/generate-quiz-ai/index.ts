@@ -456,7 +456,7 @@ PROIBIDO:
 - Afirmações que sejam simples reformulação direta do enunciado sem exigir raciocínio.
 - Repetir o mesmo aspecto nas 3 afirmações.
 
-Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há asteriscos nem rótulos? Se não, reescreva.
+Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há rótulos como "Afirmação X:" ou "CASO CLÍNICO:"? Se não, reescreva.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
