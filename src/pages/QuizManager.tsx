@@ -713,7 +713,7 @@ export default function QuizManager() {
                           {questions.map((q, i) => (
                             <tr key={q.id} className="border-t hover:bg-muted/30">
                               <td className="px-4 py-2">{i + 1}</td>
-                              <td className="px-4 py-2">{q.question_text}</td>
+                              <td className="px-4 py-2"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></td>
                               <td className="px-4 py-2 text-center font-bold text-green-600">{q.correct_option}</td>
                               <td className="px-4 py-2 text-center">
                                 <div className="flex justify-center gap-2">
@@ -781,9 +781,9 @@ export default function QuizManager() {
                                   <td className="px-4 py-2">{index + 1}</td>
                                   <td className="px-4 py-2">
                                     {group.caseText ? (
-                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly />
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact statementOnly media={(q as any).media} />
                                     ) : (
-                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact />
+                                      <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                                     )}
                                   </td>
                                   <td className="px-4 py-2 text-center">
