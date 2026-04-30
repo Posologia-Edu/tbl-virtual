@@ -775,10 +775,11 @@ export default function TeacherDashboard() {
         question_text: qText.trim(),
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
+        media: qMedia as any,
       }).eq('id', editQuestionId);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
-      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
       setEditQuestionId(null);
       setAddQOpen(false);
       const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -794,10 +795,11 @@ export default function TeacherDashboard() {
       quiz_id: selectedQuiz!.id, question_text: qText.trim(),
       option_a: optA, option_b: optB, option_c: optC, option_d: optD,
       correct_option: correct, sort_order: questions.length,
+      media: qMedia as any,
     });
     if (error) { toast.error('Falha ao adicionar questão'); return; }
     toast.success('Questão adicionada!');
-    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
     setAddQOpen(false);
     const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setQuestions((data as Question[]) || []);
@@ -811,10 +813,11 @@ export default function TeacherDashboard() {
         question_text: appQText.trim(),
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
+        media: appQMedia as any,
       }).eq('id', editAppQuestionId);
       if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
       toast.success('Questão de aplicação atualizada!');
-      setAppQText(''); setAppCorrectAnswer('V');
+      setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
       setEditAppQuestionId(null);
       setAddAppQOpen(false);
       const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -831,10 +834,11 @@ export default function TeacherDashboard() {
       option_a: 'V', option_b: 'F', option_c: null, option_d: null,
       correct_answer: appCorrectAnswer,
       sort_order: appQuestions.length,
+      media: appQMedia as any,
     });
     if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
     toast.success('Questão de aplicação adicionada!');
-    setAppQText(''); setAppCorrectAnswer('V');
+    setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
     setAddAppQOpen(false);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setAppQuestions(data || []);
