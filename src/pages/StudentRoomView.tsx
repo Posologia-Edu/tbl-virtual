@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ClinicalCaseQuestion } from '@/components/ClinicalCaseQuestion';
+import { QuestionRichRenderer } from '@/components/QuestionMedia';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +30,7 @@ type Question = {
   option_d: string;
   correct_option: string;
   sort_order: number;
+  media?: any;
 };
 
 type Room = {
@@ -829,7 +831,7 @@ export default function StudentRoomView() {
               <p className="font-heading font-semibold">Questão Nº {currentQ + 1}</p>
             </div>
             <CardContent className="pt-6 space-y-5">
-              <p className="text-base leading-relaxed">{q.question_text}</p>
+              <QuestionRichRenderer text={q.question_text} media={(q as any).media} />
               <div className="space-y-4">
                 {(['A', 'B', 'C', 'D'] as const).map(opt => (
                   <div key={opt} className="flex items-center gap-3">
@@ -1311,7 +1313,7 @@ export default function StudentRoomView() {
               <p className="font-heading font-semibold">Questão Nº {currentQ + 1}</p>
             </div>
             <CardContent className="pt-6 space-y-5">
-              <p className="text-base leading-relaxed">{q.question_text}</p>
+              <QuestionRichRenderer text={q.question_text} media={(q as any).media} />
               <div className="space-y-3">
                 {(['A', 'B', 'C', 'D'] as const).map(opt => {
                   const isDisabled = disabledOpts.has(opt);
@@ -1465,7 +1467,7 @@ export default function StudentRoomView() {
             )}
           </div>
           <CardContent className="pt-6 space-y-5">
-            <ClinicalCaseQuestion text={q.question_text} questionNumber={currentAppIdx + 1} />
+            <ClinicalCaseQuestion text={q.question_text} questionNumber={currentAppIdx + 1} media={(q as any).media} />
 
             {canNavigate && appQuestions.length > 1 && (
               <div className="flex items-center justify-between gap-2">

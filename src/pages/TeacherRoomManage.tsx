@@ -1053,7 +1053,7 @@ export default function TeacherRoomManage() {
                 <p className="font-heading font-semibold">Questão Nº {currentAppIdx + 1} de {appQuestions.length}</p>
               </div>
               <CardContent className="pt-6 space-y-5">
-                <ClinicalCaseQuestion text={currentQ.question_text} questionNumber={currentAppIdx + 1} />
+                <ClinicalCaseQuestion text={currentQ.question_text} questionNumber={currentAppIdx + 1} media={(currentQ as any).media} />
                 <div className="grid grid-cols-2 gap-4">
                   {(['A', 'B'] as const).map(opt => {
                     const label = opt === 'A' ? (currentQ.option_a || 'V') : (currentQ.option_b || 'F');
