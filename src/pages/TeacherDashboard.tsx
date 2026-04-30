@@ -1753,7 +1753,10 @@ export default function TeacherDashboard() {
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="font-medium mb-2"><span className="text-muted-foreground mr-2">Q{i + 1}.</span>{q.question_text}</p>
+                        <div className="mb-2 flex gap-2">
+                          <span className="text-muted-foreground font-medium">Q{i + 1}.</span>
+                          <div className="flex-1"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></div>
+                        </div>
                         <div className="grid grid-cols-2 gap-1 text-sm">
                           {(['A', 'B', 'C', 'D'] as const).map(opt => (
                             <span key={opt} className={`px-2 py-1 rounded ${q.correct_option === opt ? 'bg-success/10 text-success font-medium' : 'text-muted-foreground'}`}>
@@ -1766,6 +1769,7 @@ export default function TeacherDashboard() {
                         <Button variant="ghost" size="icon" onClick={() => {
                           setEditQuestionId(q.id);
                           setQText(q.question_text);
+                          setQMedia(parseMedia((q as any).media));
                           setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
                           setCorrect((q.correct_option as 'A' | 'B' | 'C' | 'D') || 'A');
                           setAddQOpen(true);
