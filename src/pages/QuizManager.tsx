@@ -501,9 +501,15 @@ export default function QuizManager() {
               <Textarea
                 value={qText}
                 onChange={e => setQText(e.target.value)}
-                placeholder="Informe o Enunciado da questão."
+                placeholder="Informe o Enunciado. Suporta Markdown e LaTeX."
                 className="min-h-[150px]"
               />
+              <RichTextHelp />
+            </div>
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Mídia (opcional)</Label>
+              <QuestionMediaEditor value={qMedia} onChange={setQMedia} ownerId={user?.id} />
             </div>
 
             {optionLabels.map((opt) => {
@@ -586,9 +592,15 @@ export default function QuizManager() {
               <Textarea
                 value={appQText}
                 onChange={e => setAppQText(e.target.value)}
-                placeholder="Informe o enunciado da questão de aplicação (V ou F)."
+                placeholder="Informe o enunciado da questão de aplicação (V ou F). Suporta Markdown e LaTeX."
                 className="min-h-[150px]"
               />
+              <RichTextHelp />
+            </div>
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Mídia (opcional)</Label>
+              <QuestionMediaEditor value={appQMedia} onChange={setAppQMedia} ownerId={user?.id} />
             </div>
 
             <div className="space-y-3">
