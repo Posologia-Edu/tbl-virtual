@@ -1659,15 +1659,20 @@ export default function TeacherDashboard() {
           setAddQOpen(open);
           if (!open) {
             setEditQuestionId(null);
-            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
+            setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
           }
         }}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editQuestionId ? 'Editar Questão iRAT/tRAT' : 'Adicionar Questão iRAT/tRAT'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Questão</Label>
-                <Input value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite sua questão..." />
+                <Label>Enunciado</Label>
+                <Textarea value={qText} onChange={e => setQText(e.target.value)} placeholder="Digite o enunciado. Suporta Markdown e LaTeX." rows={4} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Mídia (opcional)</Label>
+                <QuestionMediaEditor value={qMedia} onChange={setQMedia} ownerId={user?.id} />
               </div>
               {(['A', 'B', 'C', 'D'] as const).map((opt) => (
                 <div key={opt} className="space-y-1">
@@ -1693,15 +1698,20 @@ export default function TeacherDashboard() {
           setAddAppQOpen(open);
           if (!open) {
             setEditAppQuestionId(null);
-            setAppQText(''); setAppCorrectAnswer('V');
+            setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
           }
         }}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Questão</Label>
-                <Input value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação..." />
+                <Label>Enunciado</Label>
+                <Textarea value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação. Suporta Markdown e LaTeX." rows={5} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Mídia (opcional)</Label>
+                <QuestionMediaEditor value={appQMedia} onChange={setAppQMedia} ownerId={user?.id} />
               </div>
               <div className="space-y-2">
                 <Label className="font-semibold">Gabarito: Resposta correta</Label>
