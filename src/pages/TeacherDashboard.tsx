@@ -1835,6 +1835,7 @@ export default function TeacherDashboard() {
                               <Button variant="ghost" size="icon" onClick={() => {
                                 setEditAppQuestionId(q.id);
                                 setAppQText(q.question_text);
+                                setAppQMedia(parseMedia((q as any).media));
                                 setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
                                 setAddAppQOpen(true);
                               }} aria-label="Editar questão de aplicação">
