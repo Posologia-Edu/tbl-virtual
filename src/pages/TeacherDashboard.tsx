@@ -1934,8 +1934,11 @@ export default function TeacherDashboard() {
                             </div>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" onClick={() => {
+                                const parts = splitClinicalCase(q.question_text || '');
                                 setEditAppQuestionId(q.id);
-                                setAppQText(q.question_text);
+                                setAppQText(q.question_text || '');
+                                setAppCaseText(parts.caseText || '');
+                                setAppStatement(parts.hasCase ? (parts.statement || '') : (q.question_text || ''));
                                 setAppQMedia(parseMedia((q as any).media));
                                 setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
                                 setAddAppQOpen(true);
