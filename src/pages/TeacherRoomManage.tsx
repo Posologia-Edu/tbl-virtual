@@ -275,7 +275,7 @@ export default function TeacherRoomManage() {
         if (!existingRoomQs || existingRoomQs.length === 0) {
           const { data: quizAppQs } = await supabase
             .from('application_questions')
-            .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer, media')
+            .select('question_text, option_a, option_b, option_c, option_d, sort_order, correct_answer, media, explanation')
             .eq('quiz_id', room.quiz_id)
             .order('sort_order');
 
@@ -290,6 +290,7 @@ export default function TeacherRoomManage() {
               sort_order: q.sort_order,
               correct_answer: q.correct_answer,
               media: q.media || [],
+              explanation: q.explanation || null,
             }));
             await supabase.from('application_questions').insert(toInsert);
           }
