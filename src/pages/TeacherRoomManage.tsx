@@ -1221,14 +1221,17 @@ export default function TeacherRoomManage() {
               <CheckCircle2 className="w-12 h-12 mx-auto text-success" />
               <h3 className="text-lg font-heading font-bold">Todas as questões de aplicação foram concluídas!</h3>
               <p className="text-sm text-muted-foreground">
-                Clique abaixo para encerrar a sessão e enviar os relatórios por e-mail aos alunos.
+                Avance para a fase de Feedback da Aplicação para revisar os gabaritos com a turma antes de liberar os relatórios.
               </p>
-              <Button 
-                onClick={releaseReports} 
-                disabled={sendingEmails}
+              <Button
+                onClick={async () => {
+                  await supabase.from('rooms').update({ current_stage: 'application_feedback', app_end_time: null, current_app_feedback_index: 0 } as any).eq('id', roomId!);
+                  toast.success('Avançou para Feedback da Aplicação');
+                  loadAll();
+                }}
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg"
               >
-                {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+                💬 Iniciar Feedback da Aplicação
               </Button>
             </CardContent>
           </Card>
