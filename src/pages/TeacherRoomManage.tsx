@@ -1688,6 +1688,8 @@ export default function TeacherRoomManage() {
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
         {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
+        {room.current_stage === 'trat_feedback' && renderTratFeedback()}
+        {room.current_stage === 'appeals_open' && renderAppealsStage()}
         {room.current_stage === 'application_open' && renderAppMonitoring()}
         {room.current_stage === 'finished' && renderFinished()}
       </main>
