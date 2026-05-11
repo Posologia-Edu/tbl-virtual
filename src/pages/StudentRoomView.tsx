@@ -1744,6 +1744,14 @@ export default function StudentRoomView() {
           {room.current_stage === 'trat_feedback' && renderAppealsStage()}
           {room.current_stage === 'appeals_open' && renderAppealsStage()}
           {room.current_stage === 'application_open' && renderApplication()}
+          {room.current_stage === 'application_feedback' && (
+            <div className="space-y-6 text-center py-12">
+              <TBLVirtualLogo />
+              <p className="text-lg text-primary font-semibold">Feedback da Aplicação</p>
+              <p className="text-sm text-muted-foreground">O professor está revisando as afirmações de aplicação com a turma. Aguarde a liberação dos relatórios.</p>
+              <WaitingAnimation />
+            </div>
+          )}
           {room.current_stage === 'finished' && renderFinished()}
         </main>
       </div>
