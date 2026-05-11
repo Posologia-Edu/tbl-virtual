@@ -168,6 +168,7 @@ export default function QuizManager() {
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
         media: qMedia as any,
+        explanation: qExplanation.trim() || null,
       }).eq('id', editingQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
@@ -179,6 +180,7 @@ export default function QuizManager() {
         correct_option: correct,
         sort_order: questions.length,
         media: qMedia as any,
+        explanation: qExplanation.trim() || null,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão salva!');
