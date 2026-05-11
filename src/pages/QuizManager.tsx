@@ -859,6 +859,21 @@ export default function QuizManager() {
                       </span>
                     )}
                   </button>
+                  {questions.length > 0 && (
+                    <button
+                      disabled={genExplanationsLoading}
+                      onClick={generateExplanationsForQuiz}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-blue-200/40 rounded transition-colors disabled:opacity-60"
+                    >
+                      {genExplanationsLoading
+                        ? <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        : <Sparkles className="w-5 h-5 text-purple-600" />}
+                      Gerar Feedback IA
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {questions.filter(q => !q.explanation || !q.explanation.trim()).length} pendente(s)
+                      </span>
+                    </button>
+                  )}
                   {(questions.length > 0 || appQuestions.length > 0) && (
                     <button
                       onClick={() => navigate('/dashboard')}
