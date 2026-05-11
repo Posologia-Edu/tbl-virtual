@@ -336,14 +336,26 @@ export default function TeacherRoomManage() {
 
   const addAppQuestion = async () => {
     if (!appQText.trim()) return;
-    await supabase.from('application_questions').insert({
-      room_id: roomId!, question_text: appQText.trim(),
-      option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
-      sort_order: appQuestions.length,
-    });
-    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD('');
+    if (editAppId) {
+      await supabase.from('application_questions').update({
+        question_text: appQText.trim(),
+        option_a: appOptA || 'V', option_b: appOptB || 'F',
+        option_c: appOptC || null, option_d: appOptD || null,
+        correct_answer: appCorrectAnswer,
+      } as any).eq('id', editAppId);
+      toast.success('Questão de aplicação atualizada');
+    } else {
+      await supabase.from('application_questions').insert({
+        room_id: roomId!, question_text: appQText.trim(),
+        option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
+        correct_answer: appCorrectAnswer,
+        sort_order: appQuestions.length,
+      });
+      toast.success('Questão de aplicação adicionada');
+    }
+    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+    setEditAppId(null);
     setAppQOpen(false); loadAll();
-    toast.success('Questão de aplicação adicionada');
   };
 
   const deleteAppQuestion = async (id: string) => {
