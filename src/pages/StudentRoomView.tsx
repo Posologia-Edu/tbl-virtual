@@ -1622,6 +1622,61 @@ export default function StudentRoomView() {
     );
   };
 
+  // tRAT feedback walkthrough — synced with teacher via current_feedback_index
+  const renderTratFeedbackView = () => {
+    const idx = room.current_feedback_index ?? 0;
+    const q = questions[idx];
+    if (!q) {
+      return (
+        <div className="space-y-6 text-center py-12">
+          <TBLVirtualLogo />
+          <p className="text-lg text-primary font-semibold">Fase de Feedback</p>
+          <p className="text-sm text-muted-foreground">Aguarde o professor iniciar a revisão das questões.</p>
+          <WaitingAnimation />
+        </div>
+      );
+    }
+    const correctOpt = (q.correct_option || '').toUpperCase();
+    return (
+      <div className="space-y-4">
+        <div className="bg-amber-500/10 text-center py-2 text-sm text-amber-700 font-medium rounded-lg">
+          Fase de Feedback — acompanhe a revisão com o professor
+        </div>
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">Questão {idx + 1} de {questions.length}</p>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact media={(q as any).media} />
+            <div className="space-y-2">
+              {(['A','B','C','D'] as const).map(opt => {
+                const value = q[`option_${opt.toLowerCase()}` as keyof typeof q] as string;
+                if (!value) return null;
+                const isCorrect = opt === correctOpt;
+                return (
+                  <div key={opt} className={`p-3 rounded-lg border-2 flex items-start gap-3 ${isCorrect ? 'border-success bg-success/10' : 'border-border bg-muted/30 opacity-70'}`}>
+                    <span className={`font-bold ${isCorrect ? 'text-success' : 'text-muted-foreground'}`}>{opt})</span>
+                    <span className="flex-1 text-sm">{value}</span>
+                    {isCorrect && <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+            {(q as any).explanation ? (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-sm font-semibold text-primary">Por que a alternativa {correctOpt} é a correta:</p>
+                <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center italic">O professor explicará oralmente esta questão.</p>
+            )}
+            <p className="text-xs text-center text-muted-foreground">Aguarde o professor avançar.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   // Appeals stage: reuse the existing appeal UI block from tRAT
   const renderAppealsStage = () => {
     const appealableQuestions = questions.filter(q => {
