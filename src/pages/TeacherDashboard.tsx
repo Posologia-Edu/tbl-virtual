@@ -850,17 +850,22 @@ export default function TeacherDashboard() {
   };
 
   const addAppQuestionToQuiz = async () => {
-    if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
+    const caseTrim = appCaseText.trim();
+    const statementTrim = appStatement.trim();
+    const combinedQuestionText = caseTrim
+      ? `${caseTrim}${CLINICAL_CASE_SEPARATOR}${statementTrim}`
+      : (statementTrim || appQText.trim());
+    if (!combinedQuestionText) { toast.error('Preencha a afirmação'); return; }
     if (editAppQuestionId) {
       const { error } = await supabase.from('application_questions').update({
-        question_text: appQText.trim(),
+        question_text: combinedQuestionText,
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
         media: appQMedia as any,
       }).eq('id', editAppQuestionId);
       if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
       toast.success('Questão de aplicação atualizada!');
-      setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+      setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
       setEditAppQuestionId(null);
       setAddAppQOpen(false);
       const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -873,7 +878,7 @@ export default function TeacherDashboard() {
       return;
     }
     const { error } = await supabase.from('application_questions').insert({
-      quiz_id: selectedQuiz!.id, question_text: appQText.trim(),
+      quiz_id: selectedQuiz!.id, question_text: combinedQuestionText,
       option_a: 'V', option_b: 'F', option_c: null, option_d: null,
       correct_answer: appCorrectAnswer,
       sort_order: appQuestions.length,
@@ -881,7 +886,7 @@ export default function TeacherDashboard() {
     });
     if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
     toast.success('Questão de aplicação adicionada!');
-    setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+    setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
     setAddAppQOpen(false);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setAppQuestions(data || []);
