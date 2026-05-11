@@ -855,6 +855,7 @@ export default function TeacherDashboard() {
     const combinedQuestionText = caseTrim
       ? `${caseTrim}${CLINICAL_CASE_SEPARATOR}${statementTrim}`
       : (statementTrim || appQText.trim());
+    if (caseTrim && !statementTrim) { toast.error('Preencha a afirmação'); return; }
     if (!combinedQuestionText) { toast.error('Preencha a afirmação'); return; }
     if (editAppQuestionId) {
       const { error } = await supabase.from('application_questions').update({
