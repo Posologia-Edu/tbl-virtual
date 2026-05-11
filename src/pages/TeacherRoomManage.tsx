@@ -51,6 +51,8 @@ export default function TeacherRoomManage() {
   const [appOptD, setAppOptD] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
   const [editAppId, setEditAppId] = useState<string | null>(null);
+  const [appCaseText, setAppCaseText] = useState('');
+  const [appStatement, setAppStatement] = useState('');
   const [appDistribution, setAppDistribution] = useState<Record<string, Record<string, number>>>({});
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<any[]>([]);
@@ -337,10 +339,15 @@ export default function TeacherRoomManage() {
   };
 
   const addAppQuestion = async () => {
-    if (!appQText.trim()) return;
+    const caseTrim = appCaseText.trim();
+    const stmtTrim = appStatement.trim();
+    const combined = caseTrim
+      ? `${caseTrim}|||AFIRMACAO|||${stmtTrim}`
+      : (stmtTrim || appQText.trim());
+    if (!combined) return;
     if (editAppId) {
       await supabase.from('application_questions').update({
-        question_text: appQText.trim(),
+        question_text: combined,
         option_a: appOptA || 'V', option_b: appOptB || 'F',
         option_c: appOptC || null, option_d: appOptD || null,
         correct_answer: appCorrectAnswer,
@@ -348,14 +355,15 @@ export default function TeacherRoomManage() {
       toast.success('Questão de aplicação atualizada');
     } else {
       await supabase.from('application_questions').insert({
-        room_id: roomId!, question_text: appQText.trim(),
+        room_id: roomId!, question_text: combined,
         option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
         correct_answer: appCorrectAnswer,
         sort_order: appQuestions.length,
       });
       toast.success('Questão de aplicação adicionada');
     }
-    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+    setAppQText(''); setAppCaseText(''); setAppStatement('');
+    setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
     setEditAppId(null);
     setAppQOpen(false); loadAll();
   };
@@ -538,7 +546,7 @@ export default function TeacherRoomManage() {
             setAppQOpen(open);
             if (!open) {
               setEditAppId(null);
-              setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+              setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
             }
           }}>
             <DialogTrigger asChild>
@@ -547,10 +555,11 @@ export default function TeacherRoomManage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="font-heading">{editAppId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle>
-                <DialogDescription>{editAppId ? 'Atualize a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Use {'|||AFIRMACAO|||'} para separar o caso clínico da afirmação.</DialogDescription>
+                <DialogDescription>{editAppId ? 'Atualize o caso clínico e/ou a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Preencha o caso clínico (opcional) e a afirmação separadamente.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 pt-2">
-                <div><Label>Enunciado</Label><Textarea value={appQText} onChange={e => setAppQText(e.target.value)} rows={5} /></div>
+                <div><Label>Caso clínico (opcional)</Label><Textarea value={appCaseText} onChange={e => setAppCaseText(e.target.value)} rows={5} placeholder="Contexto/caso compartilhado entre afirmativas" /></div>
+                <div><Label>Afirmação (V/F)</Label><Textarea value={appStatement} onChange={e => setAppStatement(e.target.value)} rows={3} placeholder="A afirmação a ser julgada como Verdadeira ou Falsa" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
                   <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
@@ -616,8 +625,11 @@ export default function TeacherRoomManage() {
                       </div>
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => {
+                          const parts = splitClinicalCase(q.question_text || '');
                           setEditAppId(q.id);
                           setAppQText(q.question_text || '');
+                          setAppCaseText(parts.caseText || '');
+                          setAppStatement(parts.hasCase ? (parts.statement || '') : (q.question_text || ''));
                           setAppOptA(q.option_a || 'V');
                           setAppOptB(q.option_b || 'F');
                           setAppOptC(q.option_c || '');
