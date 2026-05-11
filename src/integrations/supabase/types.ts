@@ -961,11 +961,65 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_get_profile: {
+        Args: { _user_id: string }
+        Returns: {
+          country: string | null
+          cpf: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          gender: string | null
+          id: string
+          institution: string | null
+          institution_city: string | null
+          is_approved: boolean
+          is_blocked: boolean
+          neighborhood: string | null
+          nickname: string | null
+          street: string | null
+          street_number: string | null
+          zip_code: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       generate_participant_code: {
         Args: { p_room_id: string }
         Returns: string
       }
       generate_room_code: { Args: never; Returns: string }
+      get_own_profile: {
+        Args: never
+        Returns: {
+          country: string | null
+          cpf: string | null
+          created_at: string
+          email: string | null
+          full_name: string
+          gender: string | null
+          id: string
+          institution: string | null
+          institution_city: string | null
+          is_approved: boolean
+          is_blocked: boolean
+          neighborhood: string | null
+          nickname: string | null
+          street: string | null
+          street_number: string | null
+          zip_code: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
