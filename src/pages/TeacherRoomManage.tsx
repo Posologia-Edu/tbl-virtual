@@ -49,6 +49,8 @@ export default function TeacherRoomManage() {
   const [appOptB, setAppOptB] = useState('F');
   const [appOptC, setAppOptC] = useState('');
   const [appOptD, setAppOptD] = useState('');
+  const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [editAppId, setEditAppId] = useState<string | null>(null);
   const [appDistribution, setAppDistribution] = useState<Record<string, Record<string, number>>>({});
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<any[]>([]);
