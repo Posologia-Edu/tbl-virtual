@@ -181,6 +181,7 @@ export type Database = {
         Row: {
           correct_answer: string | null
           deleted_at: string | null
+          explanation: string | null
           id: string
           media: Json
           option_a: string | null
@@ -195,6 +196,7 @@ export type Database = {
         Insert: {
           correct_answer?: string | null
           deleted_at?: string | null
+          explanation?: string | null
           id?: string
           media?: Json
           option_a?: string | null
@@ -209,6 +211,7 @@ export type Database = {
         Update: {
           correct_answer?: string | null
           deleted_at?: string | null
+          explanation?: string | null
           id?: string
           media?: Json
           option_a?: string | null

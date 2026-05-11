@@ -204,13 +204,14 @@ export default function TeacherDashboard() {
 
   const [showTypeChoice, setShowTypeChoice] = useState(false);
   const [genExplanationsLoading, setGenExplanationsLoading] = useState(false);
+  const [genAppExplanationsLoading, setGenAppExplanationsLoading] = useState(false);
 
   const generateExplanationsForQuiz = async () => {
     if (!selectedQuiz) return;
     setGenExplanationsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-explanations', {
-        body: { quiz_id: selectedQuiz.id, only_missing: true },
+        body: { quiz_id: selectedQuiz.id, only_missing: true, target: 'irat' },
       });
       if (error) throw error;
       toast.success(`Feedback gerado para ${data?.updated ?? 0} questão(ões)`);
@@ -220,6 +221,24 @@ export default function TeacherDashboard() {
       toast.error(e?.message || 'Erro ao gerar feedback');
     } finally {
       setGenExplanationsLoading(false);
+    }
+  };
+
+  const generateAppExplanationsForQuiz = async () => {
+    if (!selectedQuiz) return;
+    setGenAppExplanationsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-explanations', {
+        body: { quiz_id: selectedQuiz.id, only_missing: true, target: 'application' },
+      });
+      if (error) throw error;
+      toast.success(`Feedback gerado para ${data?.updated ?? 0} afirmação(ões) de aplicação`);
+      const { data: aData } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
+      setAppQuestions(aData || []);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao gerar feedback');
+    } finally {
+      setGenAppExplanationsLoading(false);
     }
   };
   const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; name: string } | null>(null);
@@ -1838,7 +1857,24 @@ export default function TeacherDashboard() {
           <div className="flex items-center gap-2 border-b pb-2">
             <FileQuestion className="w-5 h-5 text-orange-500" />
             <h3 className="text-lg font-heading font-semibold">Questões de Aplicação</h3>
-            <Badge variant="secondary" className="ml-auto">{appQuestions.length}</Badge>
+            <Badge variant="secondary">{appQuestions.length}</Badge>
+            {appQuestions.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={genAppExplanationsLoading}
+                onClick={generateAppExplanationsForQuiz}
+                className="ml-auto border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                {genAppExplanationsLoading
+                  ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  : <Sparkles className="w-4 h-4 mr-1" />}
+                Gerar Feedback IA
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {appQuestions.filter((q: any) => !q.explanation || !String(q.explanation).trim()).length} pendente(s)
+                </span>
+              </Button>
+            )}
           </div>
           {appQuestions.length === 0 ? (
             <p className="text-muted-foreground text-center py-4 text-sm">Nenhuma questão de aplicação adicionada.</p>
@@ -1875,6 +1911,14 @@ export default function TeacherDashboard() {
                                   {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : 'Não definido'}
                                 </span>
                               </p>
+                              {(q as any).explanation && String((q as any).explanation).trim() && (
+                                <div className="mt-2 rounded-md border-l-4 border-purple-400 bg-primary/5 p-3">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 mb-1">
+                                    Feedback (resposta correta: {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : 'Falso'})
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" onClick={() => {

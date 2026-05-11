@@ -7,15 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-interface QIn {
-  id: string;
-  question_text: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_option: string;
-}
+const CLINICAL_CASE_SEPARATOR = "|||AFIRMACAO|||";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -37,7 +29,7 @@ serve(async (req) => {
       });
     }
 
-    const { quiz_id, only_missing = true } = await req.json();
+    const { quiz_id, only_missing = true, target = "irat" } = await req.json();
     if (!quiz_id) {
       return new Response(JSON.stringify({ error: "quiz_id required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -54,13 +46,21 @@ serve(async (req) => {
       });
     }
 
-    let query = admin.from("questions")
-      .select("id, question_text, option_a, option_b, option_c, option_d, correct_option, explanation")
+    const isApplication = target === "application";
+    const table = isApplication ? "application_questions" : "questions";
+    const correctCol = isApplication ? "correct_answer" : "correct_option";
+
+    const selectCols = isApplication
+      ? "id, question_text, correct_answer, explanation"
+      : "id, question_text, option_a, option_b, option_c, option_d, correct_option, explanation";
+
+    const { data: allQs } = await admin.from(table)
+      .select(selectCols)
       .eq("quiz_id", quiz_id)
       .is("deleted_at", null);
-    const { data: allQs } = await query;
-    const questions: QIn[] = (allQs || []).filter((q: any) =>
-      only_missing ? !q.explanation || !q.explanation.trim() : true
+
+    const questions = (allQs || []).filter((q: any) =>
+      only_missing ? !q.explanation || !String(q.explanation).trim() : true
     );
 
     if (questions.length === 0) {
@@ -69,18 +69,42 @@ serve(async (req) => {
       });
     }
 
-    const systemPrompt = `Você é um professor especialista. Para cada questão de múltipla escolha, gere uma explicação técnica e didática (3-6 frases) que:
+    let systemPrompt: string;
+    let userPrompt: string;
+
+    if (isApplication) {
+      systemPrompt = `Você é um professor especialista. Para cada afirmação (Verdadeiro/Falso) baseada em um caso clínico, gere uma explicação técnica e didática (3-6 frases) que:
+1) Justifique por que a resposta correta (Verdadeiro ou Falso) é a correta;
+2) Esclareça o conceito clínico subjacente e possíveis confusões comuns.
+Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no formato:
+{"explanations":[{"id":"<id>","explanation":"<texto>"}]}`;
+
+      userPrompt = JSON.stringify(questions.map((q: any) => {
+        const txt = q.question_text || "";
+        const idx = txt.indexOf(CLINICAL_CASE_SEPARATOR);
+        const caso = idx >= 0 ? txt.slice(0, idx).trim() : "";
+        const afirm = idx >= 0 ? txt.slice(idx + CLINICAL_CASE_SEPARATOR.length).trim() : txt;
+        return {
+          id: q.id,
+          caso_clinico: caso,
+          afirmacao: afirm,
+          correta: (q.correct_answer || "").trim() === "V" ? "Verdadeiro" : "Falso",
+        };
+      }));
+    } else {
+      systemPrompt = `Você é um professor especialista. Para cada questão de múltipla escolha, gere uma explicação técnica e didática (3-6 frases) que:
 1) Justifique por que a alternativa CORRETA está certa;
 2) Explique brevemente por que cada uma das demais alternativas está incorreta.
 Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no formato:
 {"explanations":[{"id":"<id>","explanation":"<texto>"}]}`;
 
-    const userPrompt = JSON.stringify(questions.map(q => ({
-      id: q.id,
-      enunciado: q.question_text,
-      A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d,
-      correta: q.correct_option,
-    })));
+      userPrompt = JSON.stringify(questions.map((q: any) => ({
+        id: q.id,
+        enunciado: q.question_text,
+        A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d,
+        correta: q.correct_option,
+      })));
+    }
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -113,14 +137,13 @@ Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no form
     let updated = 0;
     for (const item of arr) {
       if (!item.id || !item.explanation) continue;
-      const { error } = await admin.from("questions")
+      const { error } = await admin.from(table)
         .update({ explanation: item.explanation })
         .eq("id", item.id)
         .eq("quiz_id", quiz_id);
       if (!error) updated++;
     }
 
-    // Log usage (best-effort)
     try {
       const usage = aiData.usage || {};
       await admin.from("ai_usage_log").insert({
@@ -130,7 +153,7 @@ Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no form
         tokens_input: usage.prompt_tokens || 0,
         tokens_output: usage.completion_tokens || 0,
         tokens_used: usage.total_tokens || 0,
-        prompt_type: "explanations",
+        prompt_type: isApplication ? "explanations_application" : "explanations",
       });
     } catch (_) {}
 
