@@ -232,6 +232,7 @@ export default function QuizManager() {
     setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
     setCorrect(q.correct_option as 'A' | 'B' | 'C' | 'D');
     setQMedia(parseMedia((q as any).media));
+    setQExplanation((q as any).explanation || '');
     setViewMode('edit-question');
   };
 
