@@ -1634,7 +1634,24 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Add Question Button - opens type choice */}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {questions.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={genExplanationsLoading}
+              onClick={generateExplanationsForQuiz}
+              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              {genExplanationsLoading
+                ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                : <Sparkles className="w-4 h-4 mr-1" />}
+              Gerar Feedback IA
+              <span className="ml-2 text-xs text-muted-foreground">
+                {questions.filter(q => !(q as any).explanation || !String((q as any).explanation).trim()).length} pendente(s)
+              </span>
+            </Button>
+          )}
           <Button size="sm" onClick={() => setShowTypeChoice(true)}>
             <Plus className="w-4 h-4 mr-1" /> Adicionar Questão
           </Button>
