@@ -1741,7 +1741,7 @@ export default function StudentRoomView() {
           {room.current_stage === 'waiting' && renderWaiting()}
           {room.current_stage === 'irat_open' && renderIrat()}
           {room.current_stage === 'trat_open' && renderTrat()}
-          {room.current_stage === 'trat_feedback' && renderFeedbackStage()}
+          {room.current_stage === 'trat_feedback' && renderAppealsStage()}
           {room.current_stage === 'appeals_open' && renderAppealsStage()}
           {room.current_stage === 'application_open' && renderApplication()}
           {room.current_stage === 'finished' && renderFinished()}
