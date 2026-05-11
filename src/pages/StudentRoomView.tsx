@@ -694,9 +694,41 @@ export default function StudentRoomView() {
 
   // Group formation
   const createGroup = async () => {
-    if (!newGroupName.trim()) { toast.error('Informe o nome da equipe'); return; }
-    const { data: team, error: teamError } = await supabase.from('teams').insert({ room_id: roomId!, name: newGroupName.trim() }).select().single();
-    if (teamError) { toast.error('Falha ao criar equipe'); return; }
+    const trimmedName = newGroupName.trim();
+    if (!trimmedName) { toast.error('Informe o nome da equipe'); return; }
+
+    // Check if a team with similar name (case-insensitive) already exists in this room
+    const { data: existingTeams } = await supabase
+      .from('teams')
+      .select('id, name')
+      .eq('room_id', roomId!);
+    const dupe = (existingTeams || []).find((t: any) =>
+      (t.name || '').trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    if (dupe) {
+      toast.error(`Já existe uma equipe chamada "${dupe.name}". Peça ao líder para te adicionar.`);
+      return;
+    }
+
+    // Check if current user is already in a team in this room
+    const { data: existingMembership } = await supabase
+      .from('team_members')
+      .select('id')
+      .eq('room_id', roomId!)
+      .eq('user_id', user!.id)
+      .maybeSingle();
+    if (existingMembership) {
+      toast.error('Você já está em uma equipe nesta sala');
+      loadMembership();
+      return;
+    }
+
+    const { data: team, error: teamError } = await supabase.from('teams').insert({ room_id: roomId!, name: trimmedName }).select().single();
+    if (teamError) {
+      if (teamError.code === '23505') toast.error('Já existe uma equipe com esse nome');
+      else toast.error('Falha ao criar equipe');
+      return;
+    }
     const { error: memberError } = await supabase.from('team_members').insert({ team_id: team.id, user_id: user!.id, room_id: roomId! });
     if (memberError) {
       if (memberError.code === '23505') { toast.error('Você já está em uma equipe'); await supabase.from('teams').delete().eq('id', team.id); }
