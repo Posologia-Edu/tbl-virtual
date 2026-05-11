@@ -555,10 +555,11 @@ export default function TeacherRoomManage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="font-heading">{editAppId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle>
-                <DialogDescription>{editAppId ? 'Atualize a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Use {'|||AFIRMACAO|||'} para separar o caso clínico da afirmação.</DialogDescription>
+                <DialogDescription>{editAppId ? 'Atualize o caso clínico e/ou a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Preencha o caso clínico (opcional) e a afirmação separadamente.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 pt-2">
-                <div><Label>Enunciado</Label><Textarea value={appQText} onChange={e => setAppQText(e.target.value)} rows={5} /></div>
+                <div><Label>Caso clínico (opcional)</Label><Textarea value={appCaseText} onChange={e => setAppCaseText(e.target.value)} rows={5} placeholder="Contexto/caso compartilhado entre afirmativas" /></div>
+                <div><Label>Afirmação (V/F)</Label><Textarea value={appStatement} onChange={e => setAppStatement(e.target.value)} rows={3} placeholder="A afirmação a ser julgada como Verdadeira ou Falsa" /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
                   <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
