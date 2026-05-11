@@ -99,6 +99,29 @@ export default function QuizManager() {
   const [editingAppQuestion, setEditingAppQuestion] = useState<AppQuestion | null>(null);
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
   const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
+  const [genExplanationsLoading, setGenExplanationsLoading] = useState(false);
+
+  const generateExplanationsForQuiz = async () => {
+    if (!selectedQuiz) return;
+    const pending = questions.filter(q => !q.explanation || !q.explanation.trim()).length;
+    if (pending === 0) {
+      toast.info('Todas as questões já possuem explicação.');
+      return;
+    }
+    setGenExplanationsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-explanations', {
+        body: { quiz_id: selectedQuiz.id, only_missing: true },
+      });
+      if (error) throw error;
+      toast.success(`${data?.updated ?? 0} explicação(ões) gerada(s) com IA.`);
+      await loadQuestions(selectedQuiz.id);
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao gerar explicações.');
+    } finally {
+      setGenExplanationsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) loadQuizzes();
@@ -859,6 +882,21 @@ export default function QuizManager() {
                       </span>
                     )}
                   </button>
+                  {questions.length > 0 && (
+                    <button
+                      disabled={genExplanationsLoading}
+                      onClick={generateExplanationsForQuiz}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-blue-200/40 rounded transition-colors disabled:opacity-60"
+                    >
+                      {genExplanationsLoading
+                        ? <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                        : <Sparkles className="w-5 h-5 text-purple-600" />}
+                      Gerar Feedback IA
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {questions.filter(q => !q.explanation || !q.explanation.trim()).length} pendente(s)
+                      </span>
+                    </button>
+                  )}
                   {(questions.length > 0 || appQuestions.length > 0) && (
                     <button
                       onClick={() => navigate('/dashboard')}
