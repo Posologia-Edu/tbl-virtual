@@ -1763,15 +1763,20 @@ export default function TeacherDashboard() {
           setAddAppQOpen(open);
           if (!open) {
             setEditAppQuestionId(null);
-            setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+            setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
           }
         }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Enunciado</Label>
-                <Textarea value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação. Suporta Markdown e LaTeX." rows={5} />
+                <Label>Caso clínico (opcional)</Label>
+                <Textarea value={appCaseText} onChange={e => setAppCaseText(e.target.value)} placeholder="Contexto/caso compartilhado entre afirmativas." rows={5} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Afirmação (V/F)</Label>
+                <Textarea value={appStatement} onChange={e => setAppStatement(e.target.value)} placeholder="Digite apenas a afirmativa que será julgada como Verdadeira ou Falsa." rows={3} />
                 <RichTextHelp />
               </div>
               <div className="space-y-1">
