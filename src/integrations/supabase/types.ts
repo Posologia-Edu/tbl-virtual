@@ -632,6 +632,7 @@ export type Database = {
           class_id: string | null
           code: string
           created_at: string
+          current_app_feedback_index: number
           current_app_question_index: number | null
           current_feedback_index: number
           current_stage: Database["public"]["Enums"]["room_stage"]
@@ -657,6 +658,7 @@ export type Database = {
           class_id?: string | null
           code: string
           created_at?: string
+          current_app_feedback_index?: number
           current_app_question_index?: number | null
           current_feedback_index?: number
           current_stage?: Database["public"]["Enums"]["room_stage"]
@@ -682,6 +684,7 @@ export type Database = {
           class_id?: string | null
           code?: string
           created_at?: string
+          current_app_feedback_index?: number
           current_app_question_index?: number | null
           current_feedback_index?: number
           current_stage?: Database["public"]["Enums"]["room_stage"]
@@ -989,6 +992,7 @@ export type Database = {
         | "trat_feedback"
         | "appeals_open"
         | "application_open"
+        | "application_feedback"
         | "finished"
     }
     CompositeTypes: {
@@ -1125,6 +1129,7 @@ export const Constants = {
         "trat_feedback",
         "appeals_open",
         "application_open",
+        "application_feedback",
         "finished",
       ],
     },
