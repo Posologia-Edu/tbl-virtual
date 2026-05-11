@@ -203,6 +203,25 @@ export default function TeacherDashboard() {
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   const [showTypeChoice, setShowTypeChoice] = useState(false);
+  const [genExplanationsLoading, setGenExplanationsLoading] = useState(false);
+
+  const generateExplanationsForQuiz = async () => {
+    if (!selectedQuiz) return;
+    setGenExplanationsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-explanations', {
+        body: { quiz_id: selectedQuiz.id, only_missing: true },
+      });
+      if (error) throw error;
+      toast.success(`Feedback gerado para ${data?.updated ?? 0} questão(ões)`);
+      const { data: qData } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
+      setQuestions((qData as Question[]) || []);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao gerar feedback');
+    } finally {
+      setGenExplanationsLoading(false);
+    }
+  };
   const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteUserLoading, setDeleteUserLoading] = useState(false);
 
@@ -1615,7 +1634,24 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Add Question Button - opens type choice */}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          {questions.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={genExplanationsLoading}
+              onClick={generateExplanationsForQuiz}
+              className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            >
+              {genExplanationsLoading
+                ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                : <Sparkles className="w-4 h-4 mr-1" />}
+              Gerar Feedback IA
+              <span className="ml-2 text-xs text-muted-foreground">
+                {questions.filter(q => !(q as any).explanation || !String((q as any).explanation).trim()).length} pendente(s)
+              </span>
+            </Button>
+          )}
           <Button size="sm" onClick={() => setShowTypeChoice(true)}>
             <Plus className="w-4 h-4 mr-1" /> Adicionar Questão
           </Button>
