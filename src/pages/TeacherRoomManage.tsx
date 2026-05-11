@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X, BarChart3, TrendingUp, TrendingDown, MessageSquarePlus, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { ArrowLeft, Play, Users, Plus, Copy, Clock, AlertTriangle, Link2, CheckCircle2, XCircle, X, BarChart3, TrendingUp, TrendingDown, MessageSquarePlus, ThumbsUp, ThumbsDown, Pencil } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -19,7 +19,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import TeamLeaderboard from '@/components/TeamLeaderboard';
 
-const stages = ['waiting', 'irat_open', 'trat_open', 'trat_feedback', 'appeals_open', 'application_open', 'finished'] as const;
+const stages = ['waiting', 'irat_open', 'trat_open', 'trat_feedback', 'appeals_open', 'application_open', 'application_feedback', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
@@ -27,6 +27,7 @@ const stageLabels: Record<string, { label: string; className: string }> = {
   trat_feedback: { label: 'Feedback', className: 'phase-trat' },
   appeals_open: { label: 'Apelação', className: 'phase-trat' },
   application_open: { label: 'Aplicação', className: 'phase-app' },
+  application_feedback: { label: 'Feedback Aplicação', className: 'phase-app' },
   finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
 
@@ -48,6 +49,8 @@ export default function TeacherRoomManage() {
   const [appOptB, setAppOptB] = useState('F');
   const [appOptC, setAppOptC] = useState('');
   const [appOptD, setAppOptD] = useState('');
+  const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
+  const [editAppId, setEditAppId] = useState<string | null>(null);
   const [appDistribution, setAppDistribution] = useState<Record<string, Record<string, number>>>({});
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [appResponses, setAppResponses] = useState<any[]>([]);
@@ -293,6 +296,8 @@ export default function TeacherRoomManage() {
         current_stage: nextStage, trat_end_time: null, app_end_time: endTime,
         current_app_question_index: 0, app_alternatives_released: false,
       } as any).eq('id', roomId!);
+    } else if (nextStage === 'application_feedback') {
+      await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null, current_app_feedback_index: 0 } as any).eq('id', roomId!);
     } else {
       await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null } as any).eq('id', roomId!);
     }
@@ -333,14 +338,26 @@ export default function TeacherRoomManage() {
 
   const addAppQuestion = async () => {
     if (!appQText.trim()) return;
-    await supabase.from('application_questions').insert({
-      room_id: roomId!, question_text: appQText.trim(),
-      option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
-      sort_order: appQuestions.length,
-    });
-    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD('');
+    if (editAppId) {
+      await supabase.from('application_questions').update({
+        question_text: appQText.trim(),
+        option_a: appOptA || 'V', option_b: appOptB || 'F',
+        option_c: appOptC || null, option_d: appOptD || null,
+        correct_answer: appCorrectAnswer,
+      } as any).eq('id', editAppId);
+      toast.success('Questão de aplicação atualizada');
+    } else {
+      await supabase.from('application_questions').insert({
+        room_id: roomId!, question_text: appQText.trim(),
+        option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
+        correct_answer: appCorrectAnswer,
+        sort_order: appQuestions.length,
+      });
+      toast.success('Questão de aplicação adicionada');
+    }
+    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+    setEditAppId(null);
     setAppQOpen(false); loadAll();
-    toast.success('Questão de aplicação adicionada');
   };
 
   const deleteAppQuestion = async (id: string) => {
@@ -517,22 +534,47 @@ export default function TeacherRoomManage() {
           <CardTitle className="text-base font-heading flex items-center gap-2">
             <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
           </CardTitle>
-          <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
+          <Dialog open={appQOpen} onOpenChange={(open) => {
+            setAppQOpen(open);
+            if (!open) {
+              setEditAppId(null);
+              setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+            }
+          }}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
-                <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
+                <DialogTitle className="font-heading">{editAppId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle>
+                <DialogDescription>{editAppId ? 'Atualize a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Use {'|||AFIRMACAO|||'} para separar o caso clínico da afirmação.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 pt-2">
-                <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                <div><Label>Enunciado</Label><Textarea value={appQText} onChange={e => setAppQText(e.target.value)} rows={5} /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
                   <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
                 </div>
-                <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
+                <div className="space-y-2">
+                  <Label className="font-semibold">Gabarito</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['V', 'F'] as const).map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setAppCorrectAnswer(opt)}
+                        className={`p-3 rounded-lg border-2 text-center font-bold transition-all ${
+                          appCorrectAnswer === opt
+                            ? opt === 'V' ? 'border-green-500 bg-green-50 text-green-700' : 'border-red-500 bg-red-50 text-red-700'
+                            : 'border-border hover:border-muted-foreground'
+                        }`}
+                      >
+                        {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Button onClick={addAppQuestion} className="w-full">{editAppId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -568,11 +610,27 @@ export default function TeacherRoomManage() {
                         ) : (
                           <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {q.option_a || 'V'} / {q.option_b || 'F'} • Gabarito: <span className="font-bold">{q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : '—'}</span>
+                        </p>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
-                        <X className="w-3 h-3 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => {
+                          setEditAppId(q.id);
+                          setAppQText(q.question_text || '');
+                          setAppOptA(q.option_a || 'V');
+                          setAppOptB(q.option_b || 'F');
+                          setAppOptC(q.option_c || '');
+                          setAppOptD(q.option_d || '');
+                          setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
+                          setAppQOpen(true);
+                        }} aria-label="Editar afirmação">
+                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)} aria-label="Excluir afirmação">
+                          <X className="w-3 h-3 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1163,14 +1221,17 @@ export default function TeacherRoomManage() {
               <CheckCircle2 className="w-12 h-12 mx-auto text-success" />
               <h3 className="text-lg font-heading font-bold">Todas as questões de aplicação foram concluídas!</h3>
               <p className="text-sm text-muted-foreground">
-                Clique abaixo para encerrar a sessão e enviar os relatórios por e-mail aos alunos.
+                Avance para a fase de Feedback da Aplicação para revisar os gabaritos com a turma antes de liberar os relatórios.
               </p>
-              <Button 
-                onClick={releaseReports} 
-                disabled={sendingEmails}
+              <Button
+                onClick={async () => {
+                  await supabase.from('rooms').update({ current_stage: 'application_feedback', app_end_time: null, current_app_feedback_index: 0 } as any).eq('id', roomId!);
+                  toast.success('Avançou para Feedback da Aplicação');
+                  loadAll();
+                }}
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg"
               >
-                {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+                💬 Iniciar Feedback da Aplicação
               </Button>
             </CardContent>
           </Card>
@@ -1283,6 +1344,98 @@ export default function TeacherRoomManage() {
               i === currentAppIdx ? 'bg-primary scale-125' : i < currentAppIdx ? 'bg-success' : 'bg-border'
             }`} />
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============ APPLICATION FEEDBACK STAGE ============
+  const renderAppFeedback = () => {
+    const idx = (room as any).current_app_feedback_index ?? 0;
+    const q = appQuestions[idx];
+    if (!q) {
+      return (
+        <div className="space-y-6 text-center py-12">
+          <p className="text-muted-foreground">Nenhuma questão de aplicação carregada.</p>
+          <Button onClick={releaseReports} disabled={sendingEmails}>
+            {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+          </Button>
+        </div>
+      );
+    }
+    const isLast = idx >= appQuestions.length - 1;
+    const correctAnswer = (q.correct_answer || '').trim();
+    const navAppFb = async (delta: number) => {
+      const newIdx = Math.max(0, Math.min(appQuestions.length - 1, idx + delta));
+      await supabase.from('rooms').update({ current_app_feedback_index: newIdx } as any).eq('id', roomId!);
+    };
+    const { hasCase } = splitClinicalCase(q.question_text || '');
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-emerald-500/10 text-center py-2 text-sm text-emerald-700 font-medium rounded-lg">
+          Fase de Feedback da Aplicação — revise o gabarito de cada afirmação com a turma
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-xl font-heading font-bold">{linkedQuiz?.title || room.name}</h2>
+          <p className="text-sm text-muted-foreground mt-1">Afirmação {idx + 1} de {appQuestions.length}</p>
+        </div>
+
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            {hasCase ? (
+              <>
+                <ClinicalCaseQuestion text={q.question_text} compact caseOnly />
+                <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact statementOnly media={(q as any).media} />
+              </>
+            ) : (
+              <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact media={(q as any).media} />
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {(['V', 'F'] as const).map(opt => {
+                const isCorrect = opt === correctAnswer;
+                return (
+                  <div key={opt} className={`p-4 rounded-lg border-2 text-center font-bold text-lg ${
+                    isCorrect ? 'border-success bg-success/10 text-success' : 'border-border bg-muted/30 opacity-60'
+                  }`}>
+                    {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                    {isCorrect && <CheckCircle2 className="w-5 h-5 inline ml-2" />}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(q as any).explanation && String((q as any).explanation).trim() ? (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-sm font-semibold text-primary">
+                  Por que a resposta correta é "{correctAnswer === 'V' ? 'Verdadeiro' : 'Falso'}":
+                </p>
+                <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground text-center">
+                Esta afirmação ainda não tem feedback cadastrado. Use o botão "Gerar Feedback IA" no questionário para preencher.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="outline" onClick={() => navAppFb(-1)} disabled={idx === 0}>← Anterior</Button>
+          <div className="flex gap-1">
+            {appQuestions.map((_: any, i: number) => (
+              <div key={i} className={`w-2 h-2 rounded-full ${i === idx ? 'bg-primary scale-125' : i < idx ? 'bg-success' : 'bg-border'}`} />
+            ))}
+          </div>
+          {isLast ? (
+            <Button onClick={releaseReports} disabled={sendingEmails} className="bg-primary hover:bg-primary/90">
+              {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+            </Button>
+          ) : (
+            <Button onClick={() => navAppFb(1)}>Próxima →</Button>
+          )}
         </div>
       </div>
     );
@@ -1691,6 +1844,7 @@ export default function TeacherRoomManage() {
         {room.current_stage === 'trat_feedback' && renderTratFeedback()}
         {room.current_stage === 'appeals_open' && renderAppealsStage()}
         {room.current_stage === 'application_open' && renderAppMonitoring()}
+        {room.current_stage === 'application_feedback' && renderAppFeedback()}
         {room.current_stage === 'finished' && renderFinished()}
       </main>
 

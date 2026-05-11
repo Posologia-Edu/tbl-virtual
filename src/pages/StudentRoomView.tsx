@@ -1725,7 +1725,7 @@ export default function StudentRoomView() {
       <AchievementToast />
       <ConnectionStatus pendingCount={pendingCount} syncing={syncing} />
       <div className="min-h-screen bg-background">
-        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && room.current_stage !== 'trat_feedback' && room.current_stage !== 'appeals_open' && (
+        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && room.current_stage !== 'application_feedback' && room.current_stage !== 'trat_feedback' && room.current_stage !== 'appeals_open' && (
           <header className="border-b bg-card">
             <div className="container mx-auto px-4 py-3 flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
@@ -1744,6 +1744,14 @@ export default function StudentRoomView() {
           {room.current_stage === 'trat_feedback' && renderAppealsStage()}
           {room.current_stage === 'appeals_open' && renderAppealsStage()}
           {room.current_stage === 'application_open' && renderApplication()}
+          {room.current_stage === 'application_feedback' && (
+            <div className="space-y-6 text-center py-12">
+              <TBLVirtualLogo />
+              <p className="text-lg text-primary font-semibold">Feedback da Aplicação</p>
+              <p className="text-sm text-muted-foreground">O professor está revisando as afirmações de aplicação com a turma. Aguarde a liberação dos relatórios.</p>
+              <WaitingAnimation />
+            </div>
+          )}
           {room.current_stage === 'finished' && renderFinished()}
         </main>
       </div>
