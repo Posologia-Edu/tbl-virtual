@@ -296,6 +296,8 @@ export default function TeacherRoomManage() {
         current_stage: nextStage, trat_end_time: null, app_end_time: endTime,
         current_app_question_index: 0, app_alternatives_released: false,
       } as any).eq('id', roomId!);
+    } else if (nextStage === 'application_feedback') {
+      await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null, current_app_feedback_index: 0 } as any).eq('id', roomId!);
     } else {
       await supabase.from('rooms').update({ current_stage: nextStage, app_end_time: null } as any).eq('id', roomId!);
     }
