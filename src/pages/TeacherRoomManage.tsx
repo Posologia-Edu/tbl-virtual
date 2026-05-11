@@ -532,22 +532,47 @@ export default function TeacherRoomManage() {
           <CardTitle className="text-base font-heading flex items-center gap-2">
             <Badge className="phase-app">Aplicação de Conceitos</Badge> Questões V/F
           </CardTitle>
-          <Dialog open={appQOpen} onOpenChange={setAppQOpen}>
+          <Dialog open={appQOpen} onOpenChange={(open) => {
+            setAppQOpen(open);
+            if (!open) {
+              setEditAppId(null);
+              setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+            }
+          }}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline"><Plus className="w-3 h-3 mr-1" /> Adicionar</Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle className="font-heading">Adicionar Questão de Aplicação (V/F)</DialogTitle>
-                <DialogDescription>Crie uma questão V ou F para a fase de aplicação.</DialogDescription>
+                <DialogTitle className="font-heading">{editAppId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle>
+                <DialogDescription>{editAppId ? 'Atualize a afirmação V/F.' : 'Crie uma questão V ou F para a fase de aplicação.'} Use {'|||AFIRMACAO|||'} para separar o caso clínico da afirmação.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 pt-2">
-                <div><Label>Questão</Label><Input value={appQText} onChange={e => setAppQText(e.target.value)} /></div>
+                <div><Label>Enunciado</Label><Textarea value={appQText} onChange={e => setAppQText(e.target.value)} rows={5} /></div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Opção A (ex: V)</Label><Input value={appOptA} onChange={e => setAppOptA(e.target.value)} /></div>
                   <div><Label>Opção B (ex: F)</Label><Input value={appOptB} onChange={e => setAppOptB(e.target.value)} /></div>
                 </div>
-                <Button onClick={addAppQuestion} className="w-full">Adicionar Questão</Button>
+                <div className="space-y-2">
+                  <Label className="font-semibold">Gabarito</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['V', 'F'] as const).map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setAppCorrectAnswer(opt)}
+                        className={`p-3 rounded-lg border-2 text-center font-bold transition-all ${
+                          appCorrectAnswer === opt
+                            ? opt === 'V' ? 'border-green-500 bg-green-50 text-green-700' : 'border-red-500 bg-red-50 text-red-700'
+                            : 'border-border hover:border-muted-foreground'
+                        }`}
+                      >
+                        {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Button onClick={addAppQuestion} className="w-full">{editAppId ? 'Salvar Alterações' : 'Adicionar Questão'}</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -583,11 +608,27 @@ export default function TeacherRoomManage() {
                         ) : (
                           <ClinicalCaseQuestion text={q.question_text} questionNumber={index + 1} compact media={(q as any).media} />
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">{q.option_a || 'V'} / {q.option_b || 'F'}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {q.option_a || 'V'} / {q.option_b || 'F'} • Gabarito: <span className="font-bold">{q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : '—'}</span>
+                        </p>
                       </div>
-                      <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)}>
-                        <X className="w-3 h-3 text-destructive" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => {
+                          setEditAppId(q.id);
+                          setAppQText(q.question_text || '');
+                          setAppOptA(q.option_a || 'V');
+                          setAppOptB(q.option_b || 'F');
+                          setAppOptC(q.option_c || '');
+                          setAppOptD(q.option_d || '');
+                          setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
+                          setAppQOpen(true);
+                        }} aria-label="Editar afirmação">
+                          <Pencil className="w-3 h-3 text-muted-foreground" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => deleteAppQuestion(q.id)} aria-label="Excluir afirmação">
+                          <X className="w-3 h-3 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
