@@ -46,6 +46,7 @@ type Room = {
   is_active: boolean;
   current_app_question_index?: number;
   app_alternatives_released?: boolean;
+  current_feedback_index?: number;
 };
 
 type TeamMember = {
