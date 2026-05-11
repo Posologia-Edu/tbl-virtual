@@ -1725,7 +1725,7 @@ export default function StudentRoomView() {
       <AchievementToast />
       <ConnectionStatus pendingCount={pendingCount} syncing={syncing} />
       <div className="min-h-screen bg-background">
-        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
+        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && room.current_stage !== 'trat_feedback' && room.current_stage !== 'appeals_open' && (
           <header className="border-b bg-card">
             <div className="container mx-auto px-4 py-3 flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
@@ -1741,6 +1741,8 @@ export default function StudentRoomView() {
           {room.current_stage === 'waiting' && renderWaiting()}
           {room.current_stage === 'irat_open' && renderIrat()}
           {room.current_stage === 'trat_open' && renderTrat()}
+          {room.current_stage === 'trat_feedback' && renderFeedbackStage()}
+          {room.current_stage === 'appeals_open' && renderAppealsStage()}
           {room.current_stage === 'application_open' && renderApplication()}
           {room.current_stage === 'finished' && renderFinished()}
         </main>
