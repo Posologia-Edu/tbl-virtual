@@ -1911,6 +1911,14 @@ export default function TeacherDashboard() {
                                   {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : q.correct_answer?.trim() === 'F' ? 'Falso' : 'Não definido'}
                                 </span>
                               </p>
+                              {(q as any).explanation && String((q as any).explanation).trim() && (
+                                <div className="mt-2 rounded-md border-l-4 border-purple-400 bg-primary/5 p-3">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-purple-700 mb-1">
+                                    Feedback (resposta correta: {q.correct_answer?.trim() === 'V' ? 'Verdadeiro' : 'Falso'})
+                                  </div>
+                                  <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+                                </div>
+                              )}
                             </div>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" onClick={() => {
