@@ -625,8 +625,11 @@ export default function TeacherRoomManage() {
                       </div>
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => {
+                          const parts = splitClinicalCase(q.question_text || '');
                           setEditAppId(q.id);
                           setAppQText(q.question_text || '');
+                          setAppCaseText(parts.caseText || '');
+                          setAppStatement(parts.hasCase ? (parts.statement || '') : (q.question_text || ''));
                           setAppOptA(q.option_a || 'V');
                           setAppOptB(q.option_b || 'F');
                           setAppOptC(q.option_c || '');
