@@ -203,6 +203,25 @@ export default function TeacherDashboard() {
   const [resendingInvite, setResendingInvite] = useState<string | null>(null);
 
   const [showTypeChoice, setShowTypeChoice] = useState(false);
+  const [genExplanationsLoading, setGenExplanationsLoading] = useState(false);
+
+  const generateExplanationsForQuiz = async () => {
+    if (!selectedQuiz) return;
+    setGenExplanationsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-explanations', {
+        body: { quiz_id: selectedQuiz.id, only_missing: true },
+      });
+      if (error) throw error;
+      toast.success(`Feedback gerado para ${data?.updated ?? 0} questão(ões)`);
+      const { data: qData } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
+      setQuestions((qData as Question[]) || []);
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao gerar feedback');
+    } finally {
+      setGenExplanationsLoading(false);
+    }
+  };
   const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteUserLoading, setDeleteUserLoading] = useState(false);
 
