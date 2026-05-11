@@ -449,6 +449,7 @@ export default function QuizManager() {
           question_text: q.question_text,
           option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d,
           correct_option: q.correct_option,
+          explanation: q.explanation || null,
           sort_order: questions.length + i,
         }));
         await supabase.from('questions').insert(iratInserts);
