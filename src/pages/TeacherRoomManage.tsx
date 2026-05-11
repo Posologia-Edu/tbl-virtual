@@ -1349,6 +1349,98 @@ export default function TeacherRoomManage() {
     );
   };
 
+  // ============ APPLICATION FEEDBACK STAGE ============
+  const renderAppFeedback = () => {
+    const idx = (room as any).current_app_feedback_index ?? 0;
+    const q = appQuestions[idx];
+    if (!q) {
+      return (
+        <div className="space-y-6 text-center py-12">
+          <p className="text-muted-foreground">Nenhuma questão de aplicação carregada.</p>
+          <Button onClick={releaseReports} disabled={sendingEmails}>
+            {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+          </Button>
+        </div>
+      );
+    }
+    const isLast = idx >= appQuestions.length - 1;
+    const correctAnswer = (q.correct_answer || '').trim();
+    const navAppFb = async (delta: number) => {
+      const newIdx = Math.max(0, Math.min(appQuestions.length - 1, idx + delta));
+      await supabase.from('rooms').update({ current_app_feedback_index: newIdx } as any).eq('id', roomId!);
+    };
+    const { hasCase } = splitClinicalCase(q.question_text || '');
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-emerald-500/10 text-center py-2 text-sm text-emerald-700 font-medium rounded-lg">
+          Fase de Feedback da Aplicação — revise o gabarito de cada afirmação com a turma
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-xl font-heading font-bold">{linkedQuiz?.title || room.name}</h2>
+          <p className="text-sm text-muted-foreground mt-1">Afirmação {idx + 1} de {appQuestions.length}</p>
+        </div>
+
+        <Card>
+          <CardContent className="space-y-4 pt-6">
+            {hasCase ? (
+              <>
+                <ClinicalCaseQuestion text={q.question_text} compact caseOnly />
+                <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact statementOnly media={(q as any).media} />
+              </>
+            ) : (
+              <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact media={(q as any).media} />
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              {(['V', 'F'] as const).map(opt => {
+                const isCorrect = opt === correctAnswer;
+                return (
+                  <div key={opt} className={`p-4 rounded-lg border-2 text-center font-bold text-lg ${
+                    isCorrect ? 'border-success bg-success/10 text-success' : 'border-border bg-muted/30 opacity-60'
+                  }`}>
+                    {opt === 'V' ? 'Verdadeiro' : 'Falso'}
+                    {isCorrect && <CheckCircle2 className="w-5 h-5 inline ml-2" />}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(q as any).explanation && String((q as any).explanation).trim() ? (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-sm font-semibold text-primary">
+                  Por que a resposta correta é "{correctAnswer === 'V' ? 'Verdadeiro' : 'Falso'}":
+                </p>
+                <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground text-center">
+                Esta afirmação ainda não tem feedback cadastrado. Use o botão "Gerar Feedback IA" no questionário para preencher.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="outline" onClick={() => navAppFb(-1)} disabled={idx === 0}>← Anterior</Button>
+          <div className="flex gap-1">
+            {appQuestions.map((_: any, i: number) => (
+              <div key={i} className={`w-2 h-2 rounded-full ${i === idx ? 'bg-primary scale-125' : i < idx ? 'bg-success' : 'bg-border'}`} />
+            ))}
+          </div>
+          {isLast ? (
+            <Button onClick={releaseReports} disabled={sendingEmails} className="bg-primary hover:bg-primary/90">
+              {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+            </Button>
+          ) : (
+            <Button onClick={() => navAppFb(1)}>Próxima →</Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ============ FINISHED - REPORTS ============
   const IRAT_PCT = ((room as any).individual_pct ?? 30) / 100;
   const TRAT_PCT = ((room as any).team_pct ?? 40) / 100;
