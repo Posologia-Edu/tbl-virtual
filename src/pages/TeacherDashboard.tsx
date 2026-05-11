@@ -43,7 +43,7 @@ import AdminApiKeys from '@/components/AdminApiKeys';
 import UpgradeDialog from '@/components/UpgradeDialog';
 import SystemUpdates from '@/components/SystemUpdates';
 import PipelineNotification from '@/components/PipelineNotification';
-import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { ClinicalCaseQuestion, CLINICAL_CASE_SEPARATOR, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
 import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
@@ -168,6 +168,8 @@ export default function TeacherDashboard() {
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [addAppQOpen, setAddAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
+  const [appCaseText, setAppCaseText] = useState('');
+  const [appStatement, setAppStatement] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
   const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
@@ -848,17 +850,23 @@ export default function TeacherDashboard() {
   };
 
   const addAppQuestionToQuiz = async () => {
-    if (!appQText.trim()) { toast.error('Preencha o enunciado'); return; }
+    const caseTrim = appCaseText.trim();
+    const statementTrim = appStatement.trim();
+    const combinedQuestionText = caseTrim
+      ? `${caseTrim}${CLINICAL_CASE_SEPARATOR}${statementTrim}`
+      : (statementTrim || appQText.trim());
+    if (caseTrim && !statementTrim) { toast.error('Preencha a afirmação'); return; }
+    if (!combinedQuestionText) { toast.error('Preencha a afirmação'); return; }
     if (editAppQuestionId) {
       const { error } = await supabase.from('application_questions').update({
-        question_text: appQText.trim(),
+        question_text: combinedQuestionText,
         option_a: 'V', option_b: 'F', option_c: null, option_d: null,
         correct_answer: appCorrectAnswer,
         media: appQMedia as any,
       }).eq('id', editAppQuestionId);
       if (error) { toast.error('Falha ao atualizar questão de aplicação'); return; }
       toast.success('Questão de aplicação atualizada!');
-      setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+      setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
       setEditAppQuestionId(null);
       setAddAppQOpen(false);
       const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -871,7 +879,7 @@ export default function TeacherDashboard() {
       return;
     }
     const { error } = await supabase.from('application_questions').insert({
-      quiz_id: selectedQuiz!.id, question_text: appQText.trim(),
+      quiz_id: selectedQuiz!.id, question_text: combinedQuestionText,
       option_a: 'V', option_b: 'F', option_c: null, option_d: null,
       correct_answer: appCorrectAnswer,
       sort_order: appQuestions.length,
@@ -879,7 +887,7 @@ export default function TeacherDashboard() {
     });
     if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
     toast.success('Questão de aplicação adicionada!');
-    setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+    setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
     setAddAppQOpen(false);
     const { data } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setAppQuestions(data || []);
@@ -1756,15 +1764,20 @@ export default function TeacherDashboard() {
           setAddAppQOpen(open);
           if (!open) {
             setEditAppQuestionId(null);
-            setAppQText(''); setAppCorrectAnswer('V'); setAppQMedia([]);
+            setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
           }
         }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader><DialogTitle className="font-heading">{editAppQuestionId ? 'Editar Questão de Aplicação (V/F)' : 'Adicionar Questão de Aplicação (V/F)'}</DialogTitle></DialogHeader>
             <div className="space-y-3 pt-2">
               <div className="space-y-1">
-                <Label>Enunciado</Label>
-                <Textarea value={appQText} onChange={e => setAppQText(e.target.value)} placeholder="Digite a questão de aplicação. Suporta Markdown e LaTeX." rows={5} />
+                <Label>Caso clínico (opcional)</Label>
+                <Textarea value={appCaseText} onChange={e => setAppCaseText(e.target.value)} placeholder="Contexto/caso compartilhado entre afirmativas." rows={5} />
+                <RichTextHelp />
+              </div>
+              <div className="space-y-1">
+                <Label>Afirmação (V/F)</Label>
+                <Textarea value={appStatement} onChange={e => setAppStatement(e.target.value)} placeholder="Digite apenas a afirmativa que será julgada como Verdadeira ou Falsa." rows={3} />
                 <RichTextHelp />
               </div>
               <div className="space-y-1">
@@ -1922,8 +1935,11 @@ export default function TeacherDashboard() {
                             </div>
                             <div className="flex items-center gap-1">
                               <Button variant="ghost" size="icon" onClick={() => {
+                                const parts = splitClinicalCase(q.question_text || '');
                                 setEditAppQuestionId(q.id);
-                                setAppQText(q.question_text);
+                                setAppQText(q.question_text || '');
+                                setAppCaseText(parts.caseText || '');
+                                setAppStatement(parts.hasCase ? (parts.statement || '') : (q.question_text || ''));
                                 setAppQMedia(parseMedia((q as any).media));
                                 setAppCorrectAnswer(((q.correct_answer || 'V').trim() as 'V' | 'F'));
                                 setAddAppQOpen(true);
