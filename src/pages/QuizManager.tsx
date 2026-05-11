@@ -26,6 +26,7 @@ type Question = {
   option_d: string;
   correct_option: string;
   sort_order: number;
+  explanation?: string | null;
 };
 
 type AppQuestion = {
