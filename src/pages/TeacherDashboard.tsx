@@ -1857,7 +1857,24 @@ export default function TeacherDashboard() {
           <div className="flex items-center gap-2 border-b pb-2">
             <FileQuestion className="w-5 h-5 text-orange-500" />
             <h3 className="text-lg font-heading font-semibold">Questões de Aplicação</h3>
-            <Badge variant="secondary" className="ml-auto">{appQuestions.length}</Badge>
+            <Badge variant="secondary">{appQuestions.length}</Badge>
+            {appQuestions.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={genAppExplanationsLoading}
+                onClick={generateAppExplanationsForQuiz}
+                className="ml-auto border-purple-300 text-purple-700 hover:bg-purple-50"
+              >
+                {genAppExplanationsLoading
+                  ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  : <Sparkles className="w-4 h-4 mr-1" />}
+                Gerar Feedback IA
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {appQuestions.filter((q: any) => !q.explanation || !String(q.explanation).trim()).length} pendente(s)
+                </span>
+              </Button>
+            )}
           </div>
           {appQuestions.length === 0 ? (
             <p className="text-muted-foreground text-center py-4 text-sm">Nenhuma questão de aplicação adicionada.</p>
