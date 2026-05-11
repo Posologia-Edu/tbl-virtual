@@ -1803,6 +1803,12 @@ export default function TeacherDashboard() {
                             </span>
                           ))}
                         </div>
+                        {(q as any).explanation && (
+                          <div className="mt-3 p-3 rounded-md bg-primary/5 border border-primary/20">
+                            <p className="text-xs font-semibold text-primary mb-1">Feedback (alternativa correta: {q.correct_option})</p>
+                            <p className="text-sm whitespace-pre-wrap text-foreground/90">{(q as any).explanation}</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <Button variant="ghost" size="icon" onClick={() => {
