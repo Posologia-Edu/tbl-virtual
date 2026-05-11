@@ -546,7 +546,7 @@ export default function TeacherRoomManage() {
             setAppQOpen(open);
             if (!open) {
               setEditAppId(null);
-              setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+              setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
             }
           }}>
             <DialogTrigger asChild>
