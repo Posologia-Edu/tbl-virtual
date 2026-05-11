@@ -253,6 +253,10 @@ export default function TeacherRoomManage() {
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: endTime } as any).eq('id', roomId!);
     } else if (nextStage === 'trat_open') {
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: null, trat_end_time: endTime } as any).eq('id', roomId!);
+    } else if (nextStage === 'trat_feedback') {
+      await supabase.from('rooms').update({ current_stage: nextStage, trat_end_time: null, current_feedback_index: 0 } as any).eq('id', roomId!);
+    } else if (nextStage === 'appeals_open') {
+      await supabase.from('rooms').update({ current_stage: nextStage } as any).eq('id', roomId!);
     } else if (nextStage === 'application_open') {
       // Copy quiz app questions if needed
       if (room.quiz_id) {
