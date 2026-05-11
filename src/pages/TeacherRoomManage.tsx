@@ -149,6 +149,33 @@ export default function TeacherRoomManage() {
         aq = freshAq;
       }
     }
+    // Backfill: copy missing explanations from quiz template to room questions
+    if (aq && aq.length > 0 && roomData?.quiz_id) {
+      const missing = aq.filter((q: any) => !q.explanation || !String(q.explanation).trim());
+      if (missing.length > 0) {
+        const { data: quizExps } = await supabase
+          .from('application_questions')
+          .select('sort_order, explanation')
+          .eq('quiz_id', roomData.quiz_id);
+        const expBySort: Record<number, string> = {};
+        (quizExps || []).forEach((q: any) => {
+          if (q.explanation && String(q.explanation).trim()) expBySort[q.sort_order] = q.explanation;
+        });
+        let updated = false;
+        for (const q of missing) {
+          const exp = expBySort[q.sort_order];
+          if (exp) {
+            await supabase.from('application_questions').update({ explanation: exp }).eq('id', q.id);
+            q.explanation = exp;
+            updated = true;
+          }
+        }
+        if (updated) {
+          const { data: refreshed } = await supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order');
+          if (refreshed) aq = refreshed;
+        }
+      }
+    }
     setAppQuestions(aq || []);
 
     const { data: ar } = await supabase.from('application_responses').select('*').eq('room_id', roomId!);
