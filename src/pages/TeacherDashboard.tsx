@@ -43,7 +43,7 @@ import AdminApiKeys from '@/components/AdminApiKeys';
 import UpgradeDialog from '@/components/UpgradeDialog';
 import SystemUpdates from '@/components/SystemUpdates';
 import PipelineNotification from '@/components/PipelineNotification';
-import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
+import { ClinicalCaseQuestion, CLINICAL_CASE_SEPARATOR, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
 import { QuestionMediaEditor, QuestionRichRenderer, RichTextHelp, MediaBlock, parseMedia } from '@/components/QuestionMedia';
 import { STRIPE_PLANS } from '@/lib/stripe-plans';
 type Room = {
@@ -168,6 +168,8 @@ export default function TeacherDashboard() {
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
   const [addAppQOpen, setAddAppQOpen] = useState(false);
   const [appQText, setAppQText] = useState('');
+  const [appCaseText, setAppCaseText] = useState('');
+  const [appStatement, setAppStatement] = useState('');
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
   const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
 
