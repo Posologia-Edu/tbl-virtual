@@ -144,7 +144,7 @@ export default function QuizManager() {
 
   const resetQuestionForm = () => {
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
-    setEditingQuestion(null); setQMedia([]);
+    setEditingQuestion(null); setQMedia([]); setQExplanation('');
   };
 
   const resetAppQuestionForm = () => {
