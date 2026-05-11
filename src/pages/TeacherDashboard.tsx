@@ -162,6 +162,7 @@ export default function TeacherDashboard() {
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
+  const [qExplanation, setQExplanation] = useState('');
 
   // Application question state
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
