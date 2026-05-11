@@ -553,6 +553,17 @@ export default function QuizManager() {
                 </div>
               );
             })}
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Explicação da resposta (mostrada na fase de Feedback)</Label>
+              <Textarea
+                value={qExplanation}
+                onChange={e => setQExplanation(e.target.value)}
+                placeholder="Explique por que a alternativa correta é a correta e por que as demais estão erradas. Suporta Markdown e LaTeX."
+                className="min-h-[120px]"
+              />
+              <p className="text-xs text-muted-foreground">Este texto será exibido para todos os alunos durante a fase de Feedback pós-tRAT.</p>
+            </div>
           </main>
 
           <aside className="w-56 bg-blue-100/60 border-l min-h-screen p-0">
