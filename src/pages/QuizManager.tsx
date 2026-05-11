@@ -752,21 +752,32 @@ export default function QuizManager() {
                         </thead>
                         <tbody>
                           {questions.map((q, i) => (
-                            <tr key={q.id} className="border-t hover:bg-muted/30">
-                              <td className="px-4 py-2">{i + 1}</td>
-                              <td className="px-4 py-2"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></td>
-                              <td className="px-4 py-2 text-center font-bold text-green-600">{q.correct_option}</td>
-                              <td className="px-4 py-2 text-center">
-                                <div className="flex justify-center gap-2">
-                                  <button onClick={() => startEditQuestion(q)} className="hover:text-primary">
-                                    <PencilLine className="w-5 h-5" />
-                                  </button>
-                                  <button onClick={() => deleteQuestion(q.id)} className="hover:text-destructive">
-                                    <Trash2 className="w-5 h-5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
+                            <React.Fragment key={q.id}>
+                              <tr className="border-t hover:bg-muted/30">
+                                <td className="px-4 py-2">{i + 1}</td>
+                                <td className="px-4 py-2"><QuestionRichRenderer text={q.question_text} media={(q as any).media} compact /></td>
+                                <td className="px-4 py-2 text-center font-bold text-green-600">{q.correct_option}</td>
+                                <td className="px-4 py-2 text-center">
+                                  <div className="flex justify-center gap-2">
+                                    <button onClick={() => startEditQuestion(q)} className="hover:text-primary">
+                                      <PencilLine className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => deleteQuestion(q.id)} className="hover:text-destructive">
+                                      <Trash2 className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                              {q.explanation && q.explanation.trim() && (
+                                <tr className="bg-primary/5 border-t border-primary/10">
+                                  <td></td>
+                                  <td colSpan={3} className="px-4 py-2">
+                                    <p className="text-xs font-semibold text-primary mb-1">Feedback (alternativa correta: {q.correct_option})</p>
+                                    <p className="text-sm whitespace-pre-wrap text-foreground/90">{q.explanation}</p>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           ))}
                         </tbody>
                       </table>
