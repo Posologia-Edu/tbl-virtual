@@ -339,10 +339,15 @@ export default function TeacherRoomManage() {
   };
 
   const addAppQuestion = async () => {
-    if (!appQText.trim()) return;
+    const caseTrim = appCaseText.trim();
+    const stmtTrim = appStatement.trim();
+    const combined = caseTrim
+      ? `${caseTrim}|||AFIRMACAO|||${stmtTrim}`
+      : (stmtTrim || appQText.trim());
+    if (!combined) return;
     if (editAppId) {
       await supabase.from('application_questions').update({
-        question_text: appQText.trim(),
+        question_text: combined,
         option_a: appOptA || 'V', option_b: appOptB || 'F',
         option_c: appOptC || null, option_d: appOptD || null,
         correct_answer: appCorrectAnswer,
@@ -350,14 +355,15 @@ export default function TeacherRoomManage() {
       toast.success('Questão de aplicação atualizada');
     } else {
       await supabase.from('application_questions').insert({
-        room_id: roomId!, question_text: appQText.trim(),
+        room_id: roomId!, question_text: combined,
         option_a: appOptA || 'V', option_b: appOptB || 'F', option_c: appOptC || null, option_d: appOptD || null,
         correct_answer: appCorrectAnswer,
         sort_order: appQuestions.length,
       });
       toast.success('Questão de aplicação adicionada');
     }
-    setAppQText(''); setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
+    setAppQText(''); setAppCaseText(''); setAppStatement('');
+    setAppOptA('V'); setAppOptB('F'); setAppOptC(''); setAppOptD(''); setAppCorrectAnswer('V');
     setEditAppId(null);
     setAppQOpen(false); loadAll();
   };
