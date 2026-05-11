@@ -88,6 +88,7 @@ export default function QuizManager() {
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
+  const [qExplanation, setQExplanation] = useState('');
 
   // Application question form state
   const [appQText, setAppQText] = useState('');
