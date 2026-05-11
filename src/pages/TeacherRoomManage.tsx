@@ -19,11 +19,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import TeamLeaderboard from '@/components/TeamLeaderboard';
 
-const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
+const stages = ['waiting', 'irat_open', 'trat_open', 'trat_feedback', 'appeals_open', 'application_open', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
   trat_open: { label: 'tRAT', className: 'phase-trat' },
+  trat_feedback: { label: 'Feedback', className: 'phase-trat' },
+  appeals_open: { label: 'Apelação', className: 'phase-trat' },
   application_open: { label: 'Aplicação', className: 'phase-app' },
   finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
