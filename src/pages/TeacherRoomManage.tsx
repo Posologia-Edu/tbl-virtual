@@ -19,11 +19,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import TeamLeaderboard from '@/components/TeamLeaderboard';
 
-const stages = ['waiting', 'irat_open', 'trat_open', 'application_open', 'finished'] as const;
+const stages = ['waiting', 'irat_open', 'trat_open', 'trat_feedback', 'appeals_open', 'application_open', 'finished'] as const;
 const stageLabels: Record<string, { label: string; className: string }> = {
   waiting: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   irat_open: { label: 'iRAT', className: 'phase-irat' },
   trat_open: { label: 'tRAT', className: 'phase-trat' },
+  trat_feedback: { label: 'Feedback', className: 'phase-trat' },
+  appeals_open: { label: 'Apelação', className: 'phase-trat' },
   application_open: { label: 'Aplicação', className: 'phase-app' },
   finished: { label: 'Finalizado', className: 'bg-muted text-muted-foreground' },
 };
@@ -251,6 +253,10 @@ export default function TeacherRoomManage() {
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: endTime } as any).eq('id', roomId!);
     } else if (nextStage === 'trat_open') {
       await supabase.from('rooms').update({ current_stage: nextStage, irat_end_time: null, trat_end_time: endTime } as any).eq('id', roomId!);
+    } else if (nextStage === 'trat_feedback') {
+      await supabase.from('rooms').update({ current_stage: nextStage, trat_end_time: null, current_feedback_index: 0 } as any).eq('id', roomId!);
+    } else if (nextStage === 'appeals_open') {
+      await supabase.from('rooms').update({ current_stage: nextStage } as any).eq('id', roomId!);
     } else if (nextStage === 'application_open') {
       // Copy quiz app questions if needed
       if (room.quiz_id) {
@@ -970,9 +976,6 @@ export default function TeacherRoomManage() {
         </div>
       </div>
 
-      {/* Appeals */}
-      {renderAppealsCard()}
-
       {/* Application questions management during tRAT monitoring */}
       {renderAppQuestionsCard()}
 
@@ -980,7 +983,131 @@ export default function TeacherRoomManage() {
       <TeamLeaderboard teams={tratStats} title="Ranking em Tempo Real" />
 
       <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
-        Finalizar Aplicação → Avançar para {nextStageName}
+        Finalizar tRAT → Avançar para {nextStageName}
+      </Button>
+    </div>
+  );
+
+  // ============ TRAT FEEDBACK (walkthrough of correct answers) ============
+  const renderTratFeedback = () => {
+    const idx = room.current_feedback_index ?? 0;
+    const q = questions[idx];
+    if (!q) {
+      return (
+        <div className="space-y-6 text-center py-12">
+          <p className="text-muted-foreground">Nenhuma questão carregada.</p>
+          <Button onClick={handleAdvanceClick}>Avançar para Apelação</Button>
+        </div>
+      );
+    }
+    const isLast = idx >= questions.length - 1;
+    const correctOpt = (q.correct_option || '').toUpperCase();
+
+    const navigate = async (delta: number) => {
+      const newIdx = Math.max(0, Math.min(questions.length - 1, idx + delta));
+      await supabase.from('rooms').update({ current_feedback_index: newIdx } as any).eq('id', roomId!);
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-amber-500/10 text-center py-2 text-sm text-amber-700 font-medium rounded-lg">
+          Fase de Feedback — discuta a resposta correta de cada questão com a turma
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-xl font-heading font-bold">{linkedQuiz?.title || room.name}</h2>
+          <p className="text-sm text-muted-foreground mt-1">Questão {idx + 1} de {questions.length}</p>
+        </div>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-heading">Questão {idx + 1}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <ClinicalCaseQuestion text={q.question_text} questionNumber={idx + 1} compact media={(q as any).media} />
+
+            <div className="space-y-2">
+              {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                const isCorrect = opt === correctOpt;
+                const value = q[`option_${opt.toLowerCase()}` as keyof typeof q] as string;
+                if (!value) return null;
+                return (
+                  <div
+                    key={opt}
+                    className={`p-3 rounded-lg border-2 flex items-start gap-3 ${
+                      isCorrect ? 'border-success bg-success/10' : 'border-border bg-muted/30 opacity-70'
+                    }`}
+                  >
+                    <span className={`font-bold ${isCorrect ? 'text-success' : 'text-muted-foreground'}`}>
+                      {opt})
+                    </span>
+                    <span className="flex-1 text-sm">{value}</span>
+                    {isCorrect && <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(q as any).explanation && (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-sm font-semibold text-primary">Por que a alternativa {correctOpt} é a correta:</p>
+                <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+              </div>
+            )}
+            {!(q as any).explanation && (
+              <div className="p-3 rounded-lg bg-muted/50 text-xs text-muted-foreground text-center">
+                Esta questão ainda não tem explicação cadastrada. Edite a questão no banco para adicionar.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between gap-3">
+          <Button variant="outline" onClick={() => navigate(-1)} disabled={idx === 0}>
+            ← Anterior
+          </Button>
+          <div className="flex gap-1">
+            {questions.map((_, i) => (
+              <div key={i} className={`w-2 h-2 rounded-full ${i === idx ? 'bg-primary scale-125' : i < idx ? 'bg-success' : 'bg-border'}`} />
+            ))}
+          </div>
+          {isLast ? (
+            <Button onClick={handleAdvanceClick} className="bg-primary hover:bg-primary/90">
+              Ir para Apelação →
+            </Button>
+          ) : (
+            <Button onClick={() => navigate(1)}>Próxima →</Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ============ APPEALS STAGE ============
+  const renderAppealsStage = () => (
+    <div className="space-y-6">
+      <div className="bg-warning/10 text-center py-2 text-sm text-warning font-medium rounded-lg">
+        Fase de Apelação — as equipes podem contestar questões do tRAT
+      </div>
+      <div className="text-center">
+        <h2 className="text-xl font-heading font-bold">{linkedQuiz?.title || room.name}</h2>
+      </div>
+
+      {renderAppealsCard()}
+
+      {appeals.length === 0 && (
+        <Card>
+          <CardContent className="pt-6 text-center text-sm text-muted-foreground">
+            Nenhuma apelação enviada até o momento. Aguarde as equipes ou avance para a Aplicação.
+          </CardContent>
+        </Card>
+      )}
+
+      {renderAppQuestionsCard()}
+
+      <Button onClick={handleAdvanceClick} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 text-lg">
+        Encerrar Apelação → Avançar para Aplicação
       </Button>
     </div>
   );
@@ -1561,6 +1688,8 @@ export default function TeacherRoomManage() {
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
         {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
+        {room.current_stage === 'trat_feedback' && renderTratFeedback()}
+        {room.current_stage === 'appeals_open' && renderAppealsStage()}
         {room.current_stage === 'application_open' && renderAppMonitoring()}
         {room.current_stage === 'finished' && renderFinished()}
       </main>

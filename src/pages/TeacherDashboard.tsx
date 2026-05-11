@@ -162,6 +162,7 @@ export default function TeacherDashboard() {
   const [optD, setOptD] = useState('');
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
+  const [qExplanation, setQExplanation] = useState('');
 
   // Application question state
   const [appQuestions, setAppQuestions] = useState<any[]>([]);
@@ -776,10 +777,11 @@ export default function TeacherDashboard() {
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
         media: qMedia as any,
+        explanation: qExplanation.trim() || null,
       }).eq('id', editQuestionId);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
-      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
+      setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]); setQExplanation('');
       setEditQuestionId(null);
       setAddQOpen(false);
       const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
@@ -796,10 +798,11 @@ export default function TeacherDashboard() {
       option_a: optA, option_b: optB, option_c: optC, option_d: optD,
       correct_option: correct, sort_order: questions.length,
       media: qMedia as any,
+      explanation: qExplanation.trim() || null,
     });
     if (error) { toast.error('Falha ao adicionar questão'); return; }
     toast.success('Questão adicionada!');
-    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]);
+    setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]); setQExplanation('');
     setAddQOpen(false);
     const { data } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz!.id).is('deleted_at', null).order('sort_order');
     setQuestions((data as Question[]) || []);

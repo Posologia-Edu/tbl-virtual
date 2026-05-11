@@ -496,6 +496,7 @@ export type Database = {
         Row: {
           correct_option: string
           deleted_at: string | null
+          explanation: string | null
           id: string
           media: Json
           option_a: string
@@ -509,6 +510,7 @@ export type Database = {
         Insert: {
           correct_option: string
           deleted_at?: string | null
+          explanation?: string | null
           id?: string
           media?: Json
           option_a: string
@@ -522,6 +524,7 @@ export type Database = {
         Update: {
           correct_option?: string
           deleted_at?: string | null
+          explanation?: string | null
           id?: string
           media?: Json
           option_a?: string
@@ -627,6 +630,7 @@ export type Database = {
           code: string
           created_at: string
           current_app_question_index: number | null
+          current_feedback_index: number
           current_stage: Database["public"]["Enums"]["room_stage"]
           deleted_at: string | null
           id: string
@@ -651,6 +655,7 @@ export type Database = {
           code: string
           created_at?: string
           current_app_question_index?: number | null
+          current_feedback_index?: number
           current_stage?: Database["public"]["Enums"]["room_stage"]
           deleted_at?: string | null
           id?: string
@@ -675,6 +680,7 @@ export type Database = {
           code?: string
           created_at?: string
           current_app_question_index?: number | null
+          current_feedback_index?: number
           current_stage?: Database["public"]["Enums"]["room_stage"]
           deleted_at?: string | null
           id?: string
@@ -977,6 +983,8 @@ export type Database = {
         | "waiting"
         | "irat_open"
         | "trat_open"
+        | "trat_feedback"
+        | "appeals_open"
         | "application_open"
         | "finished"
     }
@@ -1111,6 +1119,8 @@ export const Constants = {
         "waiting",
         "irat_open",
         "trat_open",
+        "trat_feedback",
+        "appeals_open",
         "application_open",
         "finished",
       ],

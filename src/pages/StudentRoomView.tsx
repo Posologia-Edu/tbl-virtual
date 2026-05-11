@@ -46,6 +46,7 @@ type Room = {
   is_active: boolean;
   current_app_question_index?: number;
   app_alternatives_released?: boolean;
+  current_feedback_index?: number;
 };
 
 type TeamMember = {
@@ -1566,12 +1567,165 @@ export default function StudentRoomView() {
     </div>
   );
 
+  // Feedback stage: read-only view of question the teacher is showing
+  const renderFeedbackStage = () => {
+    const idx = room.current_feedback_index ?? 0;
+    const q = questions[idx];
+    if (!q) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <TBLVirtualLogo />
+          <p className="text-muted-foreground">Aguardando o professor iniciar o feedback...</p>
+          <WaitingAnimation />
+        </div>
+      );
+    }
+    const correctOpt = ((q as any).correct_option || '').toUpperCase();
+    return (
+      <div className="space-y-4">
+        <div className="text-center space-y-1">
+          <TBLVirtualLogo />
+          <p className="text-sm text-amber-700 font-semibold mt-2">Feedback — Resposta correta</p>
+          <p className="text-sm text-muted-foreground">Questão {idx + 1} de {questions.length}</p>
+        </div>
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <ClinicalCaseQuestion text={(q as any).question_text} questionNumber={idx + 1} compact media={(q as any).media} />
+            <div className="space-y-2">
+              {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                const isCorrect = opt === correctOpt;
+                const value = (q as any)[`option_${opt.toLowerCase()}`];
+                if (!value) return null;
+                return (
+                  <div key={opt} className={`p-3 rounded-lg border-2 flex items-start gap-3 ${
+                    isCorrect ? 'border-success bg-success/10' : 'border-border bg-muted/30 opacity-70'
+                  }`}>
+                    <span className={`font-bold ${isCorrect ? 'text-success' : 'text-muted-foreground'}`}>{opt})</span>
+                    <span className="flex-1 text-sm">{value}</span>
+                    {isCorrect && <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+            {(q as any).explanation ? (
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+                <p className="text-sm font-semibold text-primary">Por que a alternativa {correctOpt} é a correta:</p>
+                <p className="text-sm whitespace-pre-wrap">{(q as any).explanation}</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center italic">O professor explicará oralmente esta questão.</p>
+            )}
+            <p className="text-xs text-center text-muted-foreground">Aguarde o professor avançar para a próxima questão.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  // Appeals stage: reuse the existing appeal UI block from tRAT
+  const renderAppealsStage = () => {
+    const appealableQuestions = questions.filter(q => {
+      const qA = tratAttempts.filter(a => a.question_id === q.id);
+      const gotCorrectFirst = qA.some(a => a.is_correct && a.attempt_number === 1);
+      const alreadyAppealed = appeals.some(a => a.question_id === q.id);
+      return !gotCorrectFirst && !alreadyAppealed;
+    });
+    return (
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <TBLVirtualLogo />
+          <p className="text-lg text-primary font-semibold">Fase de Apelação</p>
+          <p className="text-sm text-muted-foreground">Sua equipe pode contestar questões do tRAT.</p>
+        </div>
+        {membership && appealableQuestions.length > 0 && (
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <MessageSquarePlus className="w-5 h-5 text-primary" />
+                <h3 className="font-heading font-bold text-base">Questões disponíveis para apelação</h3>
+              </div>
+              <div className="space-y-3">
+                {appealableQuestions.map((q) => {
+                  const qIdx = questions.indexOf(q) + 1;
+                  return (
+                    <div key={q.id} className="p-3 rounded-lg border flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium flex-1">Q{qIdx}. {q.question_text.substring(0, 60)}...</span>
+                      <Button size="sm" variant="outline" onClick={() => setAppealQuestion(q.id)}>
+                        <MessageSquarePlus className="w-3 h-3 mr-1" /> Apelar
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {appeals.length > 0 && (
+          <Card>
+            <CardContent className="pt-6 space-y-3">
+              <h3 className="font-heading font-bold text-base">Apelações Enviadas</h3>
+              {appeals.map(a => {
+                const q = questions.find(q => q.id === a.question_id);
+                const qIdx = q ? questions.indexOf(q) + 1 : '?';
+                return (
+                  <div key={a.id} className="p-3 rounded-lg border space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Q{qIdx}</span>
+                      <Badge variant="outline" className={
+                        a.status === 'accepted' ? 'text-success border-success/30' :
+                        a.status === 'rejected' ? 'text-destructive border-destructive/30' :
+                        'text-warning border-warning/30'
+                      }>
+                        {a.status === 'pending' ? 'Pendente' : a.status === 'accepted' ? 'Aceita' : 'Rejeitada'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{a.justification}</p>
+                    {a.teacher_response && <p className="text-xs text-primary mt-1">Resposta: {a.teacher_response}</p>}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+        {membership && appealableQuestions.length === 0 && appeals.length === 0 && (
+          <Card><CardContent className="pt-6 text-center text-sm text-muted-foreground">
+            Nenhuma questão disponível para apelação. Aguarde o professor avançar.
+          </CardContent></Card>
+        )}
+        <WaitingAnimation />
+        <Dialog open={!!appealQuestion} onOpenChange={(open) => { if (!open) { setAppealQuestion(null); setAppealJustification(''); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-heading">Recurso de Apelação</DialogTitle>
+              <DialogDescription>Justifique por que sua equipe acredita que a resposta deveria ser considerada correta.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              {appealQuestion && (
+                <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                  <p className="font-medium">{questions.find(q => q.id === appealQuestion)?.question_text}</p>
+                </div>
+              )}
+              <div>
+                <Label>Justificativa</Label>
+                <Textarea value={appealJustification} onChange={e => setAppealJustification(e.target.value)} placeholder="Apresente sua justificativa com base teórica ou referências..." rows={5} />
+              </div>
+              <Button onClick={() => appealQuestion && submitAppeal(appealQuestion)} disabled={!appealJustification.trim() || submittingAppeal} className="w-full">
+                <Send className="w-4 h-4 mr-2" />
+                {submittingAppeal ? 'Enviando...' : 'Enviar Apelação'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  };
+
   return (
     <>
       <AchievementToast />
       <ConnectionStatus pendingCount={pendingCount} syncing={syncing} />
       <div className="min-h-screen bg-background">
-        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && (
+        {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && room.current_stage !== 'trat_feedback' && room.current_stage !== 'appeals_open' && (
           <header className="border-b bg-card">
             <div className="container mx-auto px-4 py-3 flex items-center gap-3">
               <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
@@ -1587,6 +1741,8 @@ export default function StudentRoomView() {
           {room.current_stage === 'waiting' && renderWaiting()}
           {room.current_stage === 'irat_open' && renderIrat()}
           {room.current_stage === 'trat_open' && renderTrat()}
+          {room.current_stage === 'trat_feedback' && renderFeedbackStage()}
+          {room.current_stage === 'appeals_open' && renderAppealsStage()}
           {room.current_stage === 'application_open' && renderApplication()}
           {room.current_stage === 'finished' && renderFinished()}
         </main>

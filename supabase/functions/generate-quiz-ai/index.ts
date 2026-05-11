@@ -458,6 +458,12 @@ PROIBIDO:
 
 Antes de responder, faça uma checagem interna: o caso tem densidade de banca? As 3 afirmações cobrem aspectos distintos? O caso é IDÊNTICO nas 3 questões? O separador "|||AFIRMACAO|||" está em todas? Não há rótulos como "Afirmação X:" ou "CASO CLÍNICO:"? Se não, reescreva.
 
+EXPLICAÇÃO (obrigatória para cada questão do iRAT/tRAT):
+- Para cada questão de iRAT/tRAT, gere um campo "explanation" com 2 a 5 frases que:
+  1) Indique a alternativa correta e justifique tecnicamente por que ela está correta (com base no material).
+  2) Comente brevemente por que as demais alternativas estão erradas (pode citar A, B, C, D).
+- Use linguagem didática, técnica e fundamentada no material.
+
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
 {
@@ -468,7 +474,8 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       "option_b": "Alternativa B",
       "option_c": "Alternativa C",
       "option_d": "Alternativa D",
-      "correct_option": "A"
+      "correct_option": "A",
+      "explanation": "A alternativa A está correta porque ... A alternativa B está errada porque ... C está errada porque ... D está errada porque ..."
     }
   ],
   "application_questions": [

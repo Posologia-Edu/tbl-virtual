@@ -26,6 +26,7 @@ type Question = {
   option_d: string;
   correct_option: string;
   sort_order: number;
+  explanation?: string | null;
 };
 
 type AppQuestion = {
@@ -87,6 +88,7 @@ export default function QuizManager() {
   const [correct, setCorrect] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [qMedia, setQMedia] = useState<MediaBlock[]>([]);
+  const [qExplanation, setQExplanation] = useState('');
 
   // Application question form state
   const [appQText, setAppQText] = useState('');
@@ -142,7 +144,7 @@ export default function QuizManager() {
 
   const resetQuestionForm = () => {
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A');
-    setEditingQuestion(null); setQMedia([]);
+    setEditingQuestion(null); setQMedia([]); setQExplanation('');
   };
 
   const resetAppQuestionForm = () => {
@@ -166,6 +168,7 @@ export default function QuizManager() {
         option_a: optA, option_b: optB, option_c: optC, option_d: optD,
         correct_option: correct,
         media: qMedia as any,
+        explanation: qExplanation.trim() || null,
       }).eq('id', editingQuestion.id);
       if (error) { toast.error('Falha ao atualizar questão'); return; }
       toast.success('Questão atualizada!');
@@ -177,6 +180,7 @@ export default function QuizManager() {
         correct_option: correct,
         sort_order: questions.length,
         media: qMedia as any,
+        explanation: qExplanation.trim() || null,
       });
       if (error) { toast.error('Falha ao adicionar questão'); return; }
       toast.success('Questão salva!');
@@ -228,6 +232,7 @@ export default function QuizManager() {
     setOptA(q.option_a); setOptB(q.option_b); setOptC(q.option_c); setOptD(q.option_d);
     setCorrect(q.correct_option as 'A' | 'B' | 'C' | 'D');
     setQMedia(parseMedia((q as any).media));
+    setQExplanation((q as any).explanation || '');
     setViewMode('edit-question');
   };
 
@@ -389,6 +394,7 @@ export default function QuizManager() {
           option_c: q.option_c,
           option_d: q.option_d,
           correct_option: q.correct_option,
+          explanation: q.explanation || null,
           sort_order: i,
         }));
         await supabase.from('questions').insert(iratInserts);
@@ -448,6 +454,7 @@ export default function QuizManager() {
           question_text: q.question_text,
           option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d,
           correct_option: q.correct_option,
+          explanation: q.explanation || null,
           sort_order: questions.length + i,
         }));
         await supabase.from('questions').insert(iratInserts);
@@ -546,6 +553,17 @@ export default function QuizManager() {
                 </div>
               );
             })}
+
+            <div className="border rounded-lg bg-card p-4 space-y-2">
+              <Label className="text-center block font-semibold">Explicação da resposta (mostrada na fase de Feedback)</Label>
+              <Textarea
+                value={qExplanation}
+                onChange={e => setQExplanation(e.target.value)}
+                placeholder="Explique por que a alternativa correta é a correta e por que as demais estão erradas. Suporta Markdown e LaTeX."
+                className="min-h-[120px]"
+              />
+              <p className="text-xs text-muted-foreground">Este texto será exibido para todos os alunos durante a fase de Feedback pós-tRAT.</p>
+            </div>
           </main>
 
           <aside className="w-56 bg-blue-100/60 border-l min-h-screen p-0">
