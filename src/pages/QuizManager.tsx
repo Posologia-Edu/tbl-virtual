@@ -99,6 +99,29 @@ export default function QuizManager() {
   const [editingAppQuestion, setEditingAppQuestion] = useState<AppQuestion | null>(null);
   const [appCorrectAnswer, setAppCorrectAnswer] = useState<'V' | 'F'>('V');
   const [appQMedia, setAppQMedia] = useState<MediaBlock[]>([]);
+  const [genExplanationsLoading, setGenExplanationsLoading] = useState(false);
+
+  const generateExplanationsForQuiz = async () => {
+    if (!selectedQuiz) return;
+    const pending = questions.filter(q => !q.explanation || !q.explanation.trim()).length;
+    if (pending === 0) {
+      toast.info('Todas as questões já possuem explicação.');
+      return;
+    }
+    setGenExplanationsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-explanations', {
+        body: { quiz_id: selectedQuiz.id, only_missing: true },
+      });
+      if (error) throw error;
+      toast.success(`${data?.updated ?? 0} explicação(ões) gerada(s) com IA.`);
+      await loadQuestions(selectedQuiz.id);
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao gerar explicações.');
+    } finally {
+      setGenExplanationsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) loadQuizzes();
