@@ -1409,8 +1409,8 @@ export default function TeacherRoomManage() {
       return (
         <div className="space-y-6 text-center py-12">
           <p className="text-muted-foreground">Nenhuma questão de aplicação carregada.</p>
-          <Button onClick={releaseReports} disabled={sendingEmails}>
-            {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+          <Button onClick={releaseReports} disabled={sendingEmails || pendingAppeals.length > 0}>
+            {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? `🔒 ${pendingAppeals.length} apelação(ões) pendente(s)` : '📧 Liberar Relatórios e Encerrar'}
           </Button>
         </div>
       );
