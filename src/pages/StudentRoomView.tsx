@@ -563,8 +563,15 @@ export default function StudentRoomView() {
         await loadMembership();
         await loadAppData();
       }
-      // Keep appeals synced during tRAT and appeals_open (when appeals are submitted/reviewed)
-      if (latestRoom?.current_stage === 'trat_open' || latestRoom?.current_stage === 'appeals_open' || latestRoom?.current_stage === 'trat_feedback') {
+      // Keep appeals synced during all stages where appeals can be submitted or reviewed
+      if (
+        latestRoom?.current_stage === 'trat_open' ||
+        latestRoom?.current_stage === 'trat_feedback' ||
+        latestRoom?.current_stage === 'appeals_open' ||
+        latestRoom?.current_stage === 'application_open' ||
+        latestRoom?.current_stage === 'application_feedback' ||
+        latestRoom?.current_stage === 'finished'
+      ) {
         await loadAppeals();
       }
     }, 2000);
@@ -1669,6 +1676,10 @@ export default function StudentRoomView() {
       );
     }
     const correctOpt = (q.correct_option || '').toUpperCase();
+    const qAttempts = tratAttempts.filter(a => a.question_id === q.id);
+    const gotCorrectFirst = qAttempts.some(a => a.is_correct && a.attempt_number === 1);
+    const existingAppeal = appeals.find(a => a.question_id === q.id);
+    const canAppeal = !!membership && !gotCorrectFirst && !existingAppeal;
     return (
       <div className="space-y-4">
         <div className="bg-amber-500/10 text-center py-2 text-sm text-amber-700 font-medium rounded-lg">
@@ -1702,9 +1713,65 @@ export default function StudentRoomView() {
             ) : (
               <p className="text-xs text-muted-foreground text-center italic">O professor explicará oralmente esta questão.</p>
             )}
+
+            {/* Appeal section for this question */}
+            {membership && (
+              <div className="pt-2 border-t">
+                {existingAppeal ? (
+                  <div className="p-3 rounded-lg border space-y-1 bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">Apelação enviada</span>
+                      <Badge variant="outline" className={
+                        existingAppeal.status === 'accepted' ? 'text-success border-success/30' :
+                        existingAppeal.status === 'rejected' ? 'text-destructive border-destructive/30' :
+                        'text-warning border-warning/30'
+                      }>
+                        {existingAppeal.status === 'pending' ? 'Pendente' : existingAppeal.status === 'accepted' ? 'Aceita' : 'Rejeitada'}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground italic">"{existingAppeal.justification}"</p>
+                    {existingAppeal.teacher_response && (
+                      <p className="text-xs text-primary mt-1"><strong>Resposta do professor:</strong> {existingAppeal.teacher_response}</p>
+                    )}
+                  </div>
+                ) : canAppeal ? (
+                  <Button size="sm" variant="outline" className="w-full" onClick={() => setAppealQuestion(q.id)}>
+                    <MessageSquarePlus className="w-3 h-3 mr-1" /> Apelar desta questão
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center italic">Sua equipe acertou esta questão na 1ª tentativa — não há apelação disponível.</p>
+                )}
+              </div>
+            )}
+
             <p className="text-xs text-center text-muted-foreground">Aguarde o professor avançar.</p>
           </CardContent>
         </Card>
+
+        {/* Appeal dialog */}
+        <Dialog open={!!appealQuestion} onOpenChange={(open) => { if (!open) { setAppealQuestion(null); setAppealJustification(''); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-heading">Recurso de Apelação</DialogTitle>
+              <DialogDescription>Justifique por que sua equipe acredita que a resposta deveria ser considerada correta.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              {appealQuestion && (
+                <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                  <p className="font-medium">{questions.find(q => q.id === appealQuestion)?.question_text}</p>
+                </div>
+              )}
+              <div>
+                <Label>Justificativa</Label>
+                <Textarea value={appealJustification} onChange={e => setAppealJustification(e.target.value)} placeholder="Apresente sua justificativa com base teórica ou referências..." rows={5} />
+              </div>
+              <Button onClick={() => appealQuestion && submitAppeal(appealQuestion)} disabled={!appealJustification.trim() || submittingAppeal} className="w-full">
+                <Send className="w-4 h-4 mr-2" />
+                {submittingAppeal ? 'Enviando...' : 'Enviar Apelação'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   };

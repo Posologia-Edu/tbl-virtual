@@ -278,7 +278,10 @@ export default function TeacherRoomManage() {
   const confirmAdvance = async () => {
     if (!room) return;
     const currentIdx = stages.indexOf(room.current_stage);
-    const nextStage = stages[currentIdx + 1];
+    // Skip the deprecated standalone appeals_open stage — appeals are now submitted during trat_feedback
+    // and reviewed at any time before reports are released.
+    let nextStage = stages[currentIdx + 1];
+    if (room.current_stage === 'trat_feedback') nextStage = 'application_open';
     const minutes = parseInt(timerMinutes) || 15;
     const endTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
@@ -1161,6 +1164,9 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
+        {/* Appeals submitted by teams during this feedback phase */}
+        {renderAppealsCard()}
+
         {/* Navigation */}
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" onClick={() => navigate(-1)} disabled={idx === 0}>
@@ -1173,7 +1179,7 @@ export default function TeacherRoomManage() {
           </div>
           {isLast ? (
             <Button onClick={handleAdvanceClick} className="bg-primary hover:bg-primary/90">
-              Ir para Apelação →
+              Avançar para Aplicação →
             </Button>
           ) : (
             <Button onClick={() => navigate(1)}>Próxima →</Button>
@@ -1227,6 +1233,11 @@ export default function TeacherRoomManage() {
   };
 
   const releaseReports = async () => {
+    const stillPending = appeals.filter((a: any) => a.status === 'pending');
+    if (stillPending.length > 0) {
+      toast.error(`Existem ${stillPending.length} apelação(ões) pendente(s). Responda todas antes de liberar os relatórios.`);
+      return;
+    }
     setSendingEmails(true);
     try {
       await supabase.from('rooms').update({ current_stage: 'finished', app_end_time: null } as any).eq('id', roomId!);
@@ -1398,8 +1409,8 @@ export default function TeacherRoomManage() {
       return (
         <div className="space-y-6 text-center py-12">
           <p className="text-muted-foreground">Nenhuma questão de aplicação carregada.</p>
-          <Button onClick={releaseReports} disabled={sendingEmails}>
-            {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+          <Button onClick={releaseReports} disabled={sendingEmails || pendingAppeals.length > 0}>
+            {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? `🔒 ${pendingAppeals.length} apelação(ões) pendente(s)` : '📧 Liberar Relatórios e Encerrar'}
           </Button>
         </div>
       );
@@ -1463,6 +1474,14 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
+        {/* Pending appeals warning + management */}
+        {pendingAppeals.length > 0 && (
+          <div className="p-3 rounded-lg border-2 border-warning bg-warning/10 text-sm text-warning-foreground">
+            <strong>Atenção:</strong> existem {pendingAppeals.length} apelação(ões) pendente(s). Responda todas abaixo antes de liberar os relatórios.
+          </div>
+        )}
+        {renderAppealsCard()}
+
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" onClick={() => navAppFb(-1)} disabled={idx === 0}>← Anterior</Button>
           <div className="flex gap-1">
@@ -1471,8 +1490,8 @@ export default function TeacherRoomManage() {
             ))}
           </div>
           {isLast ? (
-            <Button onClick={releaseReports} disabled={sendingEmails} className="bg-primary hover:bg-primary/90">
-              {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+            <Button onClick={releaseReports} disabled={sendingEmails || pendingAppeals.length > 0} className="bg-primary hover:bg-primary/90">
+              {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? '🔒 Responda apelações pendentes' : '📧 Liberar Relatórios e Encerrar'}
             </Button>
           ) : (
             <Button onClick={() => navAppFb(1)}>Próxima →</Button>
@@ -1697,8 +1716,12 @@ export default function TeacherRoomManage() {
               <Button onClick={() => navigate('/dashboard')} variant="outline" className="flex-1">Voltar ao Dashboard</Button>
               <Button
                 className="flex-1"
-                disabled={sendingEmails}
+                disabled={sendingEmails || pendingAppeals.length > 0}
                 onClick={async () => {
+                  if (pendingAppeals.length > 0) {
+                    toast.error(`Existem ${pendingAppeals.length} apelação(ões) pendente(s). Responda todas antes de enviar os relatórios.`);
+                    return;
+                  }
                   setSendingEmails(true);
                   try {
                     const res = await supabase.functions.invoke('send-report-email', { body: { roomId } });
@@ -1716,7 +1739,7 @@ export default function TeacherRoomManage() {
                   }
                 }}
               >
-                {sendingEmails ? 'Enviando...' : '📧 Enviar Relatórios por E-mail'}
+                {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? `🔒 ${pendingAppeals.length} apelação(ões) pendente(s)` : '📧 Enviar Relatórios por E-mail'}
               </Button>
             </div>
           </TabsContent>
@@ -1879,6 +1902,21 @@ export default function TeacherRoomManage() {
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-4xl">
+        {pendingAppeals.length > 0 && (
+          room.current_stage === 'application_open' ||
+          room.current_stage === 'application_feedback' ||
+          room.current_stage === 'finished'
+        ) && (
+          <div className="mb-6 p-4 rounded-lg border-2 border-warning bg-warning/10 flex items-start gap-3">
+            <MessageSquarePlus className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-sm">Existem {pendingAppeals.length} apelação(ões) pendente(s) nesta sala</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Você pode continuar normalmente, mas a geração e o envio dos relatórios só serão liberados após responder todas as apelações. Role a página para revisá-las.
+              </p>
+            </div>
+          </div>
+        )}
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
         {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
