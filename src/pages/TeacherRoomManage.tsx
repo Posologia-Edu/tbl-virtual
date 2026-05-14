@@ -278,7 +278,10 @@ export default function TeacherRoomManage() {
   const confirmAdvance = async () => {
     if (!room) return;
     const currentIdx = stages.indexOf(room.current_stage);
-    const nextStage = stages[currentIdx + 1];
+    // Skip the deprecated standalone appeals_open stage — appeals are now submitted during trat_feedback
+    // and reviewed at any time before reports are released.
+    let nextStage = stages[currentIdx + 1];
+    if (room.current_stage === 'trat_feedback') nextStage = 'application_open';
     const minutes = parseInt(timerMinutes) || 15;
     const endTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
