@@ -1164,6 +1164,9 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
+        {/* Appeals submitted by teams during this feedback phase */}
+        {renderAppealsCard()}
+
         {/* Navigation */}
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" onClick={() => navigate(-1)} disabled={idx === 0}>
@@ -1176,7 +1179,7 @@ export default function TeacherRoomManage() {
           </div>
           {isLast ? (
             <Button onClick={handleAdvanceClick} className="bg-primary hover:bg-primary/90">
-              Ir para Apelação →
+              Avançar para Aplicação →
             </Button>
           ) : (
             <Button onClick={() => navigate(1)}>Próxima →</Button>
