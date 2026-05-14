@@ -1716,8 +1716,12 @@ export default function TeacherRoomManage() {
               <Button onClick={() => navigate('/dashboard')} variant="outline" className="flex-1">Voltar ao Dashboard</Button>
               <Button
                 className="flex-1"
-                disabled={sendingEmails}
+                disabled={sendingEmails || pendingAppeals.length > 0}
                 onClick={async () => {
+                  if (pendingAppeals.length > 0) {
+                    toast.error(`Existem ${pendingAppeals.length} apelação(ões) pendente(s). Responda todas antes de enviar os relatórios.`);
+                    return;
+                  }
                   setSendingEmails(true);
                   try {
                     const res = await supabase.functions.invoke('send-report-email', { body: { roomId } });
@@ -1735,7 +1739,7 @@ export default function TeacherRoomManage() {
                   }
                 }}
               >
-                {sendingEmails ? 'Enviando...' : '📧 Enviar Relatórios por E-mail'}
+                {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? `🔒 ${pendingAppeals.length} apelação(ões) pendente(s)` : '📧 Enviar Relatórios por E-mail'}
               </Button>
             </div>
           </TabsContent>
