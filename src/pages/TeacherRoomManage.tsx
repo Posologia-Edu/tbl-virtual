@@ -1233,6 +1233,11 @@ export default function TeacherRoomManage() {
   };
 
   const releaseReports = async () => {
+    const stillPending = appeals.filter((a: any) => a.status === 'pending');
+    if (stillPending.length > 0) {
+      toast.error(`Existem ${stillPending.length} apelação(ões) pendente(s). Responda todas antes de liberar os relatórios.`);
+      return;
+    }
     setSendingEmails(true);
     try {
       await supabase.from('rooms').update({ current_stage: 'finished', app_end_time: null } as any).eq('id', roomId!);
