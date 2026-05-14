@@ -1898,6 +1898,21 @@ export default function TeacherRoomManage() {
       </header>
 
       <main className="container mx-auto px-4 py-6 max-w-4xl">
+        {pendingAppeals.length > 0 && (
+          room.current_stage === 'application_open' ||
+          room.current_stage === 'application_feedback' ||
+          room.current_stage === 'finished'
+        ) && (
+          <div className="mb-6 p-4 rounded-lg border-2 border-warning bg-warning/10 flex items-start gap-3">
+            <MessageSquarePlus className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-semibold text-sm">Existem {pendingAppeals.length} apelação(ões) pendente(s) nesta sala</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Você pode continuar normalmente, mas a geração e o envio dos relatórios só serão liberados após responder todas as apelações. Role a página para revisá-las.
+              </p>
+            </div>
+          </div>
+        )}
         {room.current_stage === 'waiting' && renderWaitingRoom()}
         {room.current_stage === 'irat_open' && renderIratMonitoring()}
         {room.current_stage === 'trat_open' && renderTratWaitingRoom()}
