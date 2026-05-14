@@ -1474,6 +1474,14 @@ export default function TeacherRoomManage() {
           </CardContent>
         </Card>
 
+        {/* Pending appeals warning + management */}
+        {pendingAppeals.length > 0 && (
+          <div className="p-3 rounded-lg border-2 border-warning bg-warning/10 text-sm text-warning-foreground">
+            <strong>Atenção:</strong> existem {pendingAppeals.length} apelação(ões) pendente(s). Responda todas abaixo antes de liberar os relatórios.
+          </div>
+        )}
+        {renderAppealsCard()}
+
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" onClick={() => navAppFb(-1)} disabled={idx === 0}>← Anterior</Button>
           <div className="flex gap-1">
@@ -1482,8 +1490,8 @@ export default function TeacherRoomManage() {
             ))}
           </div>
           {isLast ? (
-            <Button onClick={releaseReports} disabled={sendingEmails} className="bg-primary hover:bg-primary/90">
-              {sendingEmails ? 'Enviando...' : '📧 Liberar Relatórios e Encerrar'}
+            <Button onClick={releaseReports} disabled={sendingEmails || pendingAppeals.length > 0} className="bg-primary hover:bg-primary/90">
+              {sendingEmails ? 'Enviando...' : pendingAppeals.length > 0 ? '🔒 Responda apelações pendentes' : '📧 Liberar Relatórios e Encerrar'}
             </Button>
           ) : (
             <Button onClick={() => navAppFb(1)}>Próxima →</Button>
