@@ -195,14 +195,13 @@ export default function StudentRoomView() {
   // Achievement granting
   const grantAchievement = async (key: string, name: string, description: string, icon: string) => {
     if (!user) return;
-    const { error } = await supabase.from('student_achievements').insert({
-      user_id: user.id,
-      achievement_key: key,
-      achievement_name: name,
-      achievement_description: description,
-      icon,
-      room_id: roomId!,
-    } as any);
+    const { error } = await (supabase as any).rpc('grant_student_achievement', {
+      _achievement_key: key,
+      _achievement_name: name,
+      _achievement_description: description,
+      _icon: icon,
+      _room_id: roomId!,
+    });
     if (!error) {
       triggerAchievement({ icon, name, description });
     }

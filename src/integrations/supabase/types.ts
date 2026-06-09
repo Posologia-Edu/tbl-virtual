@@ -1020,6 +1020,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      grant_student_achievement: {
+        Args: {
+          _achievement_description: string
+          _achievement_key: string
+          _achievement_name: string
+          _icon: string
+          _room_id: string
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
