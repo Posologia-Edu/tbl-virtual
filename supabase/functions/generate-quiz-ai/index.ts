@@ -188,11 +188,12 @@ async function tryExternalProvider(
   if (!config) return null;
 
   try {
+    const isAnthropic = provider === "anthropic";
     const baseBody: any = { model: config.model, messages };
     if (!isAnthropic) {
       baseBody.response_format = { type: "json_object" };
     }
-    const isAnthropic2 = isAnthropic;
+
 
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (isAnthropic) {
