@@ -108,13 +108,38 @@ async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: num
   }
 }
 
+function extractBalancedJson(text: string): string[] {
+  const results: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\") { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        results.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
 function parseGeneratedQuestions(rawContent: string) {
   const trimmed = rawContent.trim();
-  const candidates = [trimmed];
+  const candidates: string[] = [trimmed];
 
-  if (trimmed.startsWith("```")) {
-    candidates.push(trimmed.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim());
-  }
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch) candidates.push(fenceMatch[1].trim());
 
   const firstBrace = trimmed.indexOf("{");
   const lastBrace = trimmed.lastIndexOf("}");
@@ -122,17 +147,31 @@ function parseGeneratedQuestions(rawContent: string) {
     candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
   }
 
-  for (const candidate of candidates) {
+  candidates.push(...extractBalancedJson(trimmed));
+
+  const tryParse = (c: string) => {
     try {
-      const parsed = JSON.parse(candidate);
+      const parsed = JSON.parse(c);
       if (Array.isArray(parsed?.irat_questions) && Array.isArray(parsed?.application_questions)) {
         return parsed;
       }
-    } catch {
-      // ignore and try next candidate
-    }
+    } catch { /* ignore */ }
+    return null;
+  };
+
+  for (const c of candidates) {
+    const p = tryParse(c);
+    if (p) return p;
   }
 
+  // Last resort: strip trailing commas
+  for (const c of candidates) {
+    const p = tryParse(c.replace(/,(\s*[}\]])/g, "$1"));
+    if (p) return p;
+  }
+
+  console.error("[AI] Failed to parse. First 800 chars:", rawContent.slice(0, 800));
+  console.error("[AI] Last 400 chars:", rawContent.slice(-400));
   throw new Error("INVALID_AI_JSON");
 }
 
