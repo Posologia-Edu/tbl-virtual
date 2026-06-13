@@ -260,7 +260,7 @@ async function tryLovableAI(messages: any[]): Promise<AIResult> {
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ model, messages, response_format: { type: "json_object" } }),
   }, 25000);
 
   if (!response.ok) {
