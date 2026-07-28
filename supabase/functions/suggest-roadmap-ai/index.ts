@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
+import { getConfiguredApiKeys, tryExternalProvider, tryLovableAI } from "../_shared/ai-providers.ts";
 
 interface Suggestion {
   title: string;
@@ -18,30 +19,10 @@ interface SuggestResponse {
   provider?: string;
 }
 
-// --- Provider configs (same pattern as generate-quiz-ai) ---
-
-const PROVIDER_CONFIGS: Record<string, { url: string; model: string; supportsTools: boolean }> = {
-  google: {
-    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.5-flash",
-    supportsTools: true,
-  },
-  openai: {
-    url: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o-mini",
-    supportsTools: true,
-  },
-  groq: {
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    model: "llama-3.3-70b-versatile",
-    supportsTools: true,
-  },
-  openrouter: {
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "google/gemini-2.5-flash",
-    supportsTools: true,
-  },
-};
+// Anthropic uses a different tool-calling schema (input_schema, tool_use
+// content blocks) than the OpenAI-compatible providers below, so it's
+// excluded from this tool-call-based flow.
+const PROVIDER_ORDER = ["google", "openai", "groq", "openrouter"];
 
 const TOOLS_PAYLOAD = [
   {
@@ -163,22 +144,21 @@ Foque em resolver dores reais de professores e alunos no contexto de Team-Based 
   return { systemPrompt, userPrompt };
 }
 
-// Parse suggestions from tool_calls or plain JSON content
-function parseSuggestions(data: any): Suggestion[] | null {
-  // Try tool_calls first
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (toolCall) {
+const TOOL_CHOICE = { type: "function" as const, function: { name: "suggest_roadmap_items" } };
+
+// Parse suggestions from a shared-module AIResult's tool_calls or plain JSON content
+function parseSuggestions(result: { content?: string; toolArguments?: string }): Suggestion[] | null {
+  if (result.toolArguments) {
     try {
-      const parsed = JSON.parse(toolCall.function.arguments);
-      return parsed.suggestions || null;
+      const parsed = JSON.parse(result.toolArguments);
+      if (parsed.suggestions) return parsed.suggestions;
     } catch { /* fall through */ }
   }
 
   // Try plain content (for providers that may not use tool_calls properly)
-  const content = data.choices?.[0]?.message?.content;
-  if (content) {
+  if (result.content) {
     try {
-      let jsonStr = content.trim();
+      let jsonStr = result.content.trim();
       if (jsonStr.startsWith("```")) {
         jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
       }
@@ -188,104 +168,6 @@ function parseSuggestions(data: any): Suggestion[] | null {
   }
 
   return null;
-}
-
-async function tryExternalProvider(
-  provider: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-): Promise<{ suggestions: Suggestion[]; provider: string } | null> {
-  const config = PROVIDER_CONFIGS[provider];
-  if (!config) return null;
-
-  try {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    };
-
-    const body: any = {
-      model: config.model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-    };
-
-    if (config.supportsTools) {
-      body.tools = TOOLS_PAYLOAD;
-      body.tool_choice = { type: "function", function: { name: "suggest_roadmap_items" } };
-    }
-
-    console.log(`[ROADMAP-AI] Trying provider: ${provider}`);
-    const res = await fetch(config.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const t = await res.text();
-      console.error(`[ROADMAP-AI] ${provider} failed (${res.status}): ${t}`);
-      return null;
-    }
-
-    const data = await res.json();
-    const suggestions = parseSuggestions(data);
-    if (!suggestions || suggestions.length === 0) {
-      console.error(`[ROADMAP-AI] ${provider} returned no suggestions`);
-      return null;
-    }
-
-    console.log(`[ROADMAP-AI] Success with provider: ${provider} (${suggestions.length} suggestions)`);
-    return { suggestions, provider };
-  } catch (e) {
-    console.error(`[ROADMAP-AI] ${provider} error:`, e);
-    return null;
-  }
-}
-
-async function tryLovableAI(
-  systemPrompt: string,
-  userPrompt: string,
-): Promise<{ suggestions: Suggestion[]; provider: string }> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-  console.log("[ROADMAP-AI] Using Lovable AI (fallback)");
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      tools: TOOLS_PAYLOAD,
-      tool_choice: { type: "function", function: { name: "suggest_roadmap_items" } },
-    }),
-  });
-
-  if (!res.ok) {
-    const status = res.status;
-    if (status === 429) throw new Error("RATE_LIMIT");
-    if (status === 402) throw new Error("PAYMENT_REQUIRED");
-    const t = await res.text();
-    throw new Error(`Lovable AI error ${status}: ${t}`);
-  }
-
-  const data = await res.json();
-  const suggestions = parseSuggestions(data);
-  if (!suggestions || suggestions.length === 0) {
-    throw new Error("Lovable AI returned no suggestions");
-  }
-
-  return { suggestions, provider: "lovable" };
 }
 
 serve(async (req) => {
@@ -327,6 +209,10 @@ serve(async (req) => {
       .join("\n");
 
     const { systemPrompt, userPrompt } = buildPrompts(existingList);
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
     // --- Try external providers first (prioritize Google) ---
     const adminClient = createClient(
@@ -334,20 +220,34 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    let result: { suggestions: Suggestion[]; provider: string } | null = null;
+    let providerUsed: string | null = null;
+    let suggestions: Suggestion[] | null = null;
 
     try {
-      const { data: apiKeys } = await adminClient.from("ai_api_keys").select("provider, api_key");
+      const apiKeys = await getConfiguredApiKeys(adminClient);
 
-      if (apiKeys && apiKeys.length > 0) {
-        const preferredOrder = ["google", "openai", "groq", "openrouter"];
-
-        for (const providerName of preferredOrder) {
-          const keyRow = apiKeys.find((k: any) => k.provider === providerName);
+      if (apiKeys.length > 0) {
+        for (const providerName of PROVIDER_ORDER) {
+          const keyRow = apiKeys.find((k) => k.provider === providerName);
           if (!keyRow) continue;
 
-          result = await tryExternalProvider(providerName, keyRow.api_key, systemPrompt, userPrompt);
-          if (result) break;
+          console.log(`[ROADMAP-AI] Trying provider: ${providerName}`);
+          const aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, {
+            tools: TOOLS_PAYLOAD,
+            toolChoice: TOOL_CHOICE,
+          });
+          if (!aiResult) continue;
+
+          const parsed = parseSuggestions(aiResult);
+          if (!parsed || parsed.length === 0) {
+            console.error(`[ROADMAP-AI] ${providerName} returned no suggestions`);
+            continue;
+          }
+
+          suggestions = parsed;
+          providerUsed = providerName;
+          console.log(`[ROADMAP-AI] Success with provider: ${providerName} (${parsed.length} suggestions)`);
+          break;
         }
       }
     } catch (e) {
@@ -355,9 +255,17 @@ serve(async (req) => {
     }
 
     // --- Fallback to Lovable AI ---
-    if (!result) {
+    if (!suggestions) {
       try {
-        result = await tryLovableAI(systemPrompt, userPrompt);
+        const aiResult = await tryLovableAI(messages, {
+          model: "google/gemini-3-flash-preview",
+          tools: TOOLS_PAYLOAD,
+          toolChoice: TOOL_CHOICE,
+        });
+        const parsed = parseSuggestions(aiResult);
+        if (!parsed || parsed.length === 0) throw new Error("Lovable AI returned no suggestions");
+        suggestions = parsed;
+        providerUsed = "lovable";
       } catch (e: any) {
         if (e.message === "RATE_LIMIT") {
           return respond({ ok: false, error: "Limite de requisições excedido. Tente novamente em alguns segundos.", code: "RATE_LIMITED" });
@@ -369,13 +277,13 @@ serve(async (req) => {
       }
     }
 
-    if (!result) {
+    if (!suggestions || !providerUsed) {
       return respond({ ok: false, error: "Nenhum provedor de IA disponível.", code: "NO_PROVIDER" });
     }
 
     // Filter duplicates
     const existingTitles = new Set((existing || []).map((e: any) => e.title.toLowerCase().trim()));
-    const filtered = result.suggestions.filter(
+    const filtered = suggestions.filter(
       (s) => !existingTitles.has(s.title.toLowerCase().trim())
     );
 
@@ -397,8 +305,8 @@ serve(async (req) => {
       }
     }
 
-    console.log(`[ROADMAP-AI] Done: ${filtered.length} suggestions via ${result.provider}`);
-    return respond({ ok: true, count: filtered.length, suggestions: filtered, provider: result.provider });
+    console.log(`[ROADMAP-AI] Done: ${filtered.length} suggestions via ${providerUsed}`);
+    return respond({ ok: true, count: filtered.length, suggestions: filtered, provider: providerUsed });
   } catch (e) {
     console.error("suggest-roadmap-ai error:", e);
     return respond({ ok: false, error: e instanceof Error ? e.message : "Unknown error", code: "UNEXPECTED_ERROR" });

@@ -3,6 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
+import {
+  DEFAULT_PROVIDER_ORDER,
+  getConfiguredApiKeys,
+  tryExternalProvider,
+  tryLovableAI,
+  type AIResult,
+} from "../_shared/ai-providers.ts";
 
 async function extractPdfText(base64: string): Promise<string> {
   const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -18,43 +25,6 @@ const PLAN_AI_LIMITS: Record<string, number> = {
   "prod_U1ob8n7iDfyGLT": Infinity,
   admin: Infinity,
 };
-
-const PROVIDER_CONFIGS: Record<string, { url: string; model: string; mapBody?: (body: any) => any }> = {
-  groq: {
-    url: "https://api.groq.com/openai/v1/chat/completions",
-    model: "llama-3.3-70b-versatile",
-  },
-  openai: {
-    url: "https://api.openai.com/v1/chat/completions",
-    model: "gpt-4o-mini",
-  },
-  anthropic: {
-    url: "https://api.anthropic.com/v1/messages",
-    model: "claude-sonnet-4-20250514",
-    mapBody: (body: any) => ({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      system: body.messages.find((m: any) => m.role === "system")?.content || "",
-      messages: body.messages.filter((m: any) => m.role !== "system"),
-    }),
-  },
-  openrouter: {
-    url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "google/gemini-2.5-flash",
-  },
-  google: {
-    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.5-flash",
-  },
-};
-
-interface AIResult {
-  content: string;
-  provider: string;
-  model: string;
-  tokensInput: number;
-  tokensOutput: number;
-}
 
 // Cost per 1M tokens (input/output) in USD
 const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
@@ -85,22 +55,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
       },
     );
   });
-}
-
-async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } catch (error: any) {
-    if (error?.name === "AbortError") {
-      throw new Error("PROVIDER_TIMEOUT");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 function extractBalancedJson(text: string): string[] {
@@ -172,112 +126,6 @@ function parseGeneratedQuestions(rawContent: string) {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-async function tryExternalProvider(
-  provider: string,
-  apiKey: string,
-  messages: any[]
-): Promise<AIResult | null> {
-  const config = PROVIDER_CONFIGS[provider];
-  if (!config) return null;
-
-  try {
-    const isAnthropic = provider === "anthropic";
-    const baseBody: any = { model: config.model, messages };
-    if (!isAnthropic) {
-      baseBody.response_format = { type: "json_object" };
-    }
-
-
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (isAnthropic) {
-      headers["x-api-key"] = apiKey;
-      headers["anthropic-version"] = "2023-06-01";
-    } else {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    let url = config.url;
-    if (provider === "google") {
-      headers["Authorization"] = `Bearer ${apiKey}`;
-    }
-
-    const body = config.mapBody ? config.mapBody(baseBody) : baseBody;
-
-    console.log(`[AI] Trying provider: ${provider}`);
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    }, 25000);
-
-    if (!res.ok) {
-      const t = await res.text();
-      console.error(`[AI] ${provider} failed (${res.status}): ${t}`);
-      return null;
-    }
-
-    const data = await res.json();
-
-    let content: string | null = null;
-    let tokensInput = 0;
-    let tokensOutput = 0;
-
-    if (isAnthropic) {
-      content = data.content?.[0]?.text || null;
-      tokensInput = data.usage?.input_tokens ?? 0;
-      tokensOutput = data.usage?.output_tokens ?? 0;
-    } else {
-      content = data.choices?.[0]?.message?.content || null;
-      tokensInput = data.usage?.prompt_tokens ?? 0;
-      tokensOutput = data.usage?.completion_tokens ?? 0;
-    }
-
-    if (!content) return null;
-
-    return { content, provider, model: config.model, tokensInput, tokensOutput };
-  } catch (e) {
-    console.error(`[AI] ${provider} error:`, e);
-    return null;
-  }
-}
-
-async function tryLovableAI(messages: any[]): Promise<AIResult> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-  const model = "google/gemini-2.5-flash";
-  console.log("[AI] Using Lovable AI (fallback)");
-  const response = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ model, messages, response_format: { type: "json_object" } }),
-  }, 25000);
-
-  if (!response.ok) {
-    const t = await response.text();
-    if (response.status === 429) throw new Error("RATE_LIMIT");
-    if (response.status === 402) throw new Error("PAYMENT_REQUIRED");
-    if (t.includes("context length") || t.includes("too many tokens")) throw new Error("CONTEXT_TOO_LARGE");
-    throw new Error(`Lovable AI error ${response.status}: ${t}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "";
-  const tokensInput = data.usage?.prompt_tokens ?? 0;
-  const tokensOutput = data.usage?.completion_tokens ?? 0;
-
-  return { content, provider: "lovable", model, tokensInput, tokensOutput };
-}
-
-async function getConfiguredApiKeys(supabaseClient: any) {
-  const { data, error } = await supabaseClient.from("ai_api_keys").select("provider, api_key");
-  if (error) throw error;
-  return data ?? [];
 }
 
 async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: string): Promise<{ limit: number; used: number; productId: string | null }> {
@@ -611,16 +459,14 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       console.log(`[AI] Configured providers: ${apiKeys?.map((k: any) => k.provider).join(",") || "none"}`);
 
       if (apiKeys && apiKeys.length > 0) {
-        const preferredOrder = ["google", "openai", "groq", "openrouter", "anthropic"];
-
-        for (const providerName of preferredOrder) {
+        for (const providerName of DEFAULT_PROVIDER_ORDER) {
           console.log(`[AI] Evaluating provider: ${providerName}`);
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
           if (!keyRow) continue;
 
           if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
 
-          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages);
+          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, { jsonMode: true });
           if (aiResult) {
             console.log(`[AI] Success with provider: ${providerName}`);
             break;
@@ -634,7 +480,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     // Fallback to Lovable AI
     if (!aiResult) {
       try {
-        aiResult = await tryLovableAI(messages);
+        aiResult = await tryLovableAI(messages, { jsonMode: true });
       } catch (e: any) {
         const errorMessage = getErrorMessage(e);
         if (errorMessage === "RATE_LIMIT") {

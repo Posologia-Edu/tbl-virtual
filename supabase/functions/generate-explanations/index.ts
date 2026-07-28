@@ -1,6 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { getCorsHeaders, CORS_HEADERS_SHORT } from "../_shared/cors.ts";
+import {
+  DEFAULT_PROVIDER_ORDER,
+  getConfiguredApiKeys,
+  tryExternalProvider,
+  tryLovableAI,
+  type AIResult,
+} from "../_shared/ai-providers.ts";
 
 const CLINICAL_CASE_SEPARATOR = "|||AFIRMACAO|||";
 
@@ -13,7 +20,6 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY")!;
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -102,32 +108,45 @@ Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no form
       })));
     }
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${lovableKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-      }),
-    });
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
-    if (!aiRes.ok) {
-      const txt = await aiRes.text();
-      return new Response(JSON.stringify({ error: "AI error", detail: txt }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Try the teacher's configured external providers first; only fall back
+    // to the Lovable AI gateway (platform default) if none are configured or
+    // all of them fail.
+    let aiResult: AIResult | null = null;
+
+    try {
+      const apiKeys = await getConfiguredApiKeys(admin);
+      if (apiKeys.length > 0) {
+        for (const providerName of DEFAULT_PROVIDER_ORDER) {
+          const keyRow = apiKeys.find((k) => k.provider === providerName);
+          if (!keyRow) continue;
+
+          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, { jsonMode: true });
+          if (aiResult) break;
+        }
+      }
+    } catch (e) {
+      console.error("[EXPLANATIONS] Error fetching external keys, falling back:", e);
     }
-    const aiData = await aiRes.json();
-    const content = aiData.choices?.[0]?.message?.content || "{}";
+
+    if (!aiResult) {
+      try {
+        aiResult = await tryLovableAI(messages, { jsonMode: true });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: "AI error", detail: e?.message || String(e) }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const result = aiResult!;
+
     let parsed: any;
-    try { parsed = JSON.parse(content); } catch { parsed = {}; }
+    try { parsed = JSON.parse(result.content || "{}"); } catch { parsed = {}; }
     const arr: { id: string; explanation: string }[] = parsed.explanations || [];
 
     let updated = 0;
@@ -141,14 +160,13 @@ Use linguagem clara, objetiva e técnica. Retorne APENAS um JSON válido no form
     }
 
     try {
-      const usage = aiData.usage || {};
       await admin.from("ai_usage_log").insert({
         user_id: user.id,
-        provider: "lovable",
-        model: "google/gemini-2.5-flash",
-        tokens_input: usage.prompt_tokens || 0,
-        tokens_output: usage.completion_tokens || 0,
-        tokens_used: usage.total_tokens || 0,
+        provider: result.provider,
+        model: result.model,
+        tokens_input: result.tokensInput,
+        tokens_output: result.tokensOutput,
+        tokens_used: result.tokensInput + result.tokensOutput,
         prompt_type: isApplication ? "explanations_application" : "explanations",
       });
     } catch (_) {}
