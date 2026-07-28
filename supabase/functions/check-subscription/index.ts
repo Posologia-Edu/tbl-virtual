@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
+import { resolveStripePlan } from "../_shared/stripe-plan-map.ts";
 
 const logStep = (step: string, details?: any) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -101,12 +102,11 @@ serve(async (req) => {
           trial_end: validSubscription.trial_end,
         });
 
-        // Sync Stripe plan to manual_subscriptions so admin panel shows correct plan
-        const productToPlan: Record<string, string> = {
-          "prod_U1oaz7iVie1pFU": "pro",
-          "prod_U1ob8n7iDfyGLT": "institutional",
-        };
-        const stripePlan = productId ? (productToPlan[productId] || "pro") : "pro";
+        // Sync Stripe plan to manual_subscriptions so admin panel shows correct plan.
+        const { plan: effectiveStripePlan, recognized } = resolveStripePlan(productId);
+        if (!recognized) {
+          logStep("WARNING: active Stripe subscription with unrecognized product_id — defaulting to free", { productId });
+        }
 
         // Check if manual sub exists
         const { data: existingManualSub } = await supabaseClient
@@ -120,15 +120,15 @@ serve(async (req) => {
           if (!existingManualSub.granted_by || existingManualSub.granted_by === user.id) {
             await supabaseClient
               .from("manual_subscriptions")
-              .update({ plan: stripePlan, expires_at: subscriptionEnd })
+              .update({ plan: effectiveStripePlan, expires_at: subscriptionEnd })
               .eq("id", existingManualSub.id);
-            logStep("Synced Stripe plan to manual_subscriptions", { stripePlan });
+            logStep("Synced Stripe plan to manual_subscriptions", { effectiveStripePlan });
           }
         } else {
           await supabaseClient
             .from("manual_subscriptions")
-            .insert({ user_id: user.id, plan: stripePlan, expires_at: subscriptionEnd });
-          logStep("Created manual_subscriptions from Stripe", { stripePlan });
+            .insert({ user_id: user.id, plan: effectiveStripePlan, expires_at: subscriptionEnd });
+          logStep("Created manual_subscriptions from Stripe", { effectiveStripePlan });
         }
       }
     }

@@ -5,8 +5,10 @@ import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 
 // Must mirror src/lib/stripe-plans.ts — only these plans may be purchased through
 // checkout. Prevents a client from passing an arbitrary/legacy/test Stripe price.
+// The free plan's price_id is deliberately excluded: there's no legitimate
+// reason to create a Stripe subscription (with a 7-day trial, applied
+// unconditionally below) for a R$0/month price.
 const ALLOWED_PRICE_IDS = new Set([
-  "price_1T3kxRH6ld7NmvcD24SoXT0g", // free
   "price_1T3kxkH6ld7NmvcDsA2078YR", // pro
   "price_1T3ky2H6ld7NmvcDoT8qGQfk", // institutional
 ]);
