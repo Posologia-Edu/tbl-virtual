@@ -2938,6 +2938,11 @@ export default function TeacherDashboard() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => window.open('/docs', '_blank')} className="cursor-pointer">
+                      <FileText className="w-4 h-4" /><span>Documentação</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
                     <SidebarMenuButton onClick={() => { signOut(); navigate('/'); }} className="cursor-pointer text-destructive hover:text-destructive">
                       <LogOut className="w-4 h-4" /><span>Sair</span>
                     </SidebarMenuButton>

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LogOut, DoorOpen } from 'lucide-react';
+import { LogOut, DoorOpen, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -136,6 +136,9 @@ export default function StudentDashboard() {
           </div>
           <div className="flex items-center gap-2">
             <ConnectionDot />
+            <Button variant="ghost" size="icon" onClick={() => window.open('/docs', '_blank')} aria-label="Documentação">
+              <FileText className="w-4 h-4" />
+            </Button>
             <AccessibilityMenu />
             <Button variant="ghost" size="icon" onClick={() => { signOut(); navigate('/'); }} aria-label={t('common.logout')}>
               <LogOut className="w-4 h-4" />
