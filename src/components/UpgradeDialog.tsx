@@ -15,15 +15,15 @@ type Props = {
 
 const FEATURE_PLAN_MAP: Record<string, PlanKey[]> = {
   'Geração de Questões com IA': ['pro', 'institutional'],
+  'Geração de Explicações com IA': ['pro', 'institutional'],
   'Relatórios Detalhados': ['pro', 'institutional'],
   'Exportar CSV/PDF': ['pro', 'institutional'],
   'Salas ilimitadas': ['pro', 'institutional'],
   'Alunos ilimitados': ['pro', 'institutional'],
   'Questionários ilimitados': ['pro', 'institutional'],
   'Questões ilimitadas por questionário': ['pro', 'institutional'],
-  'Painel Administrativo': ['institutional'],
-  'White-label': ['institutional'],
-  'Integração LMS': ['institutional'],
+  'Gestão de professores da instituição': ['institutional'],
+  'Relatórios consolidados entre professores': ['institutional'],
   'Múltiplos Professores': ['institutional'],
   'IA Ilimitada': ['institutional'],
 };

@@ -61,7 +61,64 @@ serve(async (req) => {
       throw new Error("Only admins or institutional plan owners can sync institution");
     }
 
-    const { institution, teacherId } = await req.json();
+    const { institution, teacherId, linkTeacherEmail, removeTeacherId } = await req.json();
+
+    // linkTeacherEmail: attach an existing teacher account to this caller's
+    // institution (grants 'pro'). Runs with the service role because
+    // manual_subscriptions can only be written by admins per RLS — this is
+    // the server-side path institutional (non-admin) owners must use.
+    if (linkTeacherEmail) {
+      const safeEmail = String(linkTeacherEmail).trim().toLowerCase();
+      if (!safeEmail) throw new Error("linkTeacherEmail is required");
+
+      const { data: matches, error: profileError } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", safeEmail)
+        .limit(1);
+      if (profileError) throw profileError;
+      if (!matches || matches.length === 0) {
+        throw new Error("Professor não encontrado. Use a opção de convidar.");
+      }
+      const linkTeacherId = matches[0].id;
+
+      const { error: upsertError } = await supabase
+        .from("manual_subscriptions")
+        .upsert({ user_id: linkTeacherId, plan: "pro", granted_by: callerId }, { onConflict: "user_id" });
+      if (upsertError) throw upsertError;
+
+      return new Response(
+        JSON.stringify({ success: true, teacherId: linkTeacherId }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
+    // removeTeacherId: detach a teacher from this caller's institution,
+    // downgrading them back to free. Only the owner who granted the
+    // subscription (or an admin) may do this.
+    if (removeTeacherId) {
+      const { data: existingSub, error: existingSubError } = await supabase
+        .from("manual_subscriptions")
+        .select("granted_by")
+        .eq("user_id", removeTeacherId)
+        .maybeSingle();
+      if (existingSubError) throw existingSubError;
+      if (!existingSub || (!isAdminResult && existingSub.granted_by !== callerId)) {
+        throw new Error("You can only remove teachers linked to your institution");
+      }
+
+      const { error: removeError } = await supabase
+        .from("manual_subscriptions")
+        .update({ plan: "free", granted_by: null })
+        .eq("user_id", removeTeacherId);
+      if (removeError) throw removeError;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     const safeInstitution = String(institution || "").trim();
     if (!safeInstitution) throw new Error("institution is required");
 

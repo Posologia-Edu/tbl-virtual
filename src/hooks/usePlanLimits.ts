@@ -20,6 +20,7 @@ export function usePlanLimits() {
   const canViewDetailedReports = limits.detailed_reports;
   const canExportCSV = limits.export_csv_pdf;
   const canUseAdminPanel = limits.admin_panel;
+  const canViewConsolidatedReports = limits.consolidated_reports;
 
   const maxRoomsPerMonth = limits.max_rooms_per_month;
   const maxStudents = limits.max_students;
@@ -47,6 +48,7 @@ export function usePlanLimits() {
     canViewDetailedReports,
     canExportCSV,
     canUseAdminPanel,
+    canViewConsolidatedReports,
     maxRoomsPerMonth,
     maxStudents,
     maxQuizzes,

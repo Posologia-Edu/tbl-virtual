@@ -23,6 +23,7 @@ export const STRIPE_PLANS = {
       detailed_reports: false,
       export_csv_pdf: false,
       admin_panel: false,
+      consolidated_reports: false,
     },
   },
   pro: {
@@ -48,6 +49,7 @@ export const STRIPE_PLANS = {
       detailed_reports: true,
       export_csv_pdf: true,
       admin_panel: false,
+      consolidated_reports: false,
     },
   },
   institutional: {
@@ -57,12 +59,10 @@ export const STRIPE_PLANS = {
     price: 149.90,
     features: [
       'Múltiplos professores',
-      'Painel administrativo',
+      'Gestão de professores da instituição',
       'IA ilimitada',
-      'White-label',
-      'Relatórios consolidados',
+      'Relatórios consolidados entre professores',
       'Suporte dedicado',
-      'Integração LMS',
     ],
     limits: {
       max_students: Infinity,
@@ -74,6 +74,7 @@ export const STRIPE_PLANS = {
       detailed_reports: true,
       export_csv_pdf: true,
       admin_panel: true,
+      consolidated_reports: true,
     },
   },
 } as const;

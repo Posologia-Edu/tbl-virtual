@@ -66,6 +66,16 @@ type Quiz = {
   questions?: { id: string }[];
 };
 
+type InstitutionReportRow = {
+  teacher_id: string;
+  teacher_name: string;
+  total_rooms: number;
+  finished_rooms: number;
+  unique_students: number;
+  irat_accuracy_pct: number | null;
+  trat_accuracy_pct: number | null;
+};
+
 type Question = {
   id: string;
   question_text: string;
@@ -197,6 +207,8 @@ export default function TeacherDashboard() {
   const [instInviteOpen, setInstInviteOpen] = useState(false);
   const [instName, setInstName] = useState('');
   const [instNameSaving, setInstNameSaving] = useState(false);
+  const [institutionReport, setInstitutionReport] = useState<InstitutionReportRow[]>([]);
+  const [institutionReportLoading, setInstitutionReportLoading] = useState(false);
 
   // Invite state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -282,13 +294,13 @@ export default function TeacherDashboard() {
     if (user) loadData();
   }, [user]);
 
-  const isInstitutionalPlan = planLimits.currentPlan === 'institutional';
+  const isInstitutionalPlan = planLimits.canUseAdminPanel;
 
   useEffect(() => {
     if (user && activeView === 'personal-data') loadProfile();
     if (user && activeView === 'admin-teachers' && isAdmin) { loadTeachers(); loadTrialTeachers(); }
     if (user && activeView === 'admin-subscribers' && isAdmin) loadAdminSubscribers();
-    if (user && activeView === 'institution' && isInstitutionalPlan) loadInstitutionTeachers();
+    if (user && activeView === 'institution' && isInstitutionalPlan) { loadInstitutionTeachers(); loadInstitutionReport(); }
     if (user && activeView === 'trash') loadTrash();
   }, [user, activeView]);
 
@@ -435,6 +447,20 @@ export default function TeacherDashboard() {
   };
 
   // ─── Institutional management ───
+  const loadInstitutionReport = async () => {
+    if (!user) return;
+    setInstitutionReportLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_institution_report');
+      if (error) throw error;
+      setInstitutionReport((data as InstitutionReportRow[]) || []);
+    } catch (err: any) {
+      console.error('Falha ao carregar relatório consolidado:', err);
+    } finally {
+      setInstitutionReportLoading(false);
+    }
+  };
+
   const loadInstitutionTeachers = async () => {
     if (!user) return;
     // Load institution name from own profile
@@ -496,37 +522,42 @@ export default function TeacherDashboard() {
     if (!instLinkEmail) { toast.error('Informe o e-mail do professor'); return; }
     setInstLinkLoading(true);
     try {
-      // Find existing user
-      const { data: profiles } = await supabase.from('profiles').select('id, email').eq('email', instLinkEmail);
-      if (!profiles || profiles.length === 0) { toast.error('Professor não encontrado. Use a opção de convidar.'); return; }
-      const teacherId = profiles[0].id;
-      // Grant pro plan linked to this institution
-      const { error } = await supabase.from('manual_subscriptions').upsert({
-        user_id: teacherId,
-        plan: 'pro',
-        granted_by: user!.id,
-      } as any, { onConflict: 'user_id' });
-      if (error) throw error;
-      // Also approve and set institution server-side (bypass RLS)
-      const { data: syncData, error: syncError } = await supabase.functions.invoke('sync-institution-teachers', {
-        body: { institution: instName.trim() || undefined, teacherId },
+      // Runs entirely server-side (service role) because manual_subscriptions
+      // can only be written by admins per RLS — institutional owners must
+      // go through this edge function rather than writing the table directly.
+      const { data, error } = await supabase.functions.invoke('sync-institution-teachers', {
+        body: { linkTeacherEmail: instLinkEmail.trim() },
       });
-      if (syncError) throw syncError;
-      if (syncData?.error) throw new Error(syncData.error);
+      if (error) throw error;
+      // Approve and propagate the institution name, if one is set.
+      if (instName.trim()) {
+        await supabase.functions.invoke('sync-institution-teachers', {
+          body: { institution: instName.trim(), teacherId: data.teacherId },
+        });
+      }
       toast.success('Professor vinculado à instituição!');
       setInstLinkEmail('');
       loadInstitutionTeachers();
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao vincular professor');
+      const parsed = await parseEdgeFunctionError(err);
+      toast.error(parsed?.message || parsed?.code || err.message || 'Erro ao vincular professor');
     } finally {
       setInstLinkLoading(false);
     }
   };
 
   const handleInstitutionRemove = async (teacherUserId: string) => {
-    await supabase.from('manual_subscriptions').update({ plan: 'free', granted_by: null } as any).eq('user_id', teacherUserId).eq('granted_by', user!.id);
-    toast.success('Professor removido da instituição');
-    loadInstitutionTeachers();
+    try {
+      const { error } = await supabase.functions.invoke('sync-institution-teachers', {
+        body: { removeTeacherId: teacherUserId },
+      });
+      if (error) throw error;
+      toast.success('Professor removido da instituição');
+      loadInstitutionTeachers();
+    } catch (err: any) {
+      const parsed = await parseEdgeFunctionError(err);
+      toast.error(parsed?.message || parsed?.code || err.message || 'Erro ao remover professor');
+    }
   };
 
   const blockTeacher = async (id: string, block: boolean) => {
@@ -2730,10 +2761,89 @@ export default function TeacherDashboard() {
         </CardContent>
       </Card>
 
+      {/* Consolidated report across owner + linked teachers */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" /> Relatório Consolidado
+          </CardTitle>
+          <CardDescription>Desempenho agregado de você e de todos os professores vinculados à sua instituição.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {institutionReportLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
+              Carregando relatório...
+            </div>
+          ) : institutionReport.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <BarChart3 className="w-10 h-10 mx-auto mb-2 opacity-40" />
+              <p>Nenhum dado disponível ainda.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{institutionReport.length}</div>
+                  <div className="text-xs text-muted-foreground">Professores</div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{institutionReport.reduce((sum, r) => sum + r.finished_rooms, 0)}</div>
+                  <div className="text-xs text-muted-foreground">Salas finalizadas</div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">{institutionReport.reduce((sum, r) => sum + r.unique_students, 0)}</div>
+                  <div className="text-xs text-muted-foreground">Alunos atendidos*</div>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold">
+                    {(() => {
+                      const withData = institutionReport.filter(r => r.irat_accuracy_pct !== null);
+                      if (withData.length === 0) return '—';
+                      const avg = withData.reduce((sum, r) => sum + Number(r.irat_accuracy_pct), 0) / withData.length;
+                      return `${avg.toFixed(0)}%`;
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Acerto médio iRAT</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">*Soma por professor; um mesmo aluno em salas de professores diferentes pode ser contado mais de uma vez.</p>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-primary/10">
+                    <TableHead>Professor</TableHead>
+                    <TableHead className="text-center">Salas</TableHead>
+                    <TableHead className="text-center">Finalizadas</TableHead>
+                    <TableHead className="text-center">Alunos</TableHead>
+                    <TableHead className="text-center">Acerto iRAT</TableHead>
+                    <TableHead className="text-center">Acerto tRAT</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {institutionReport.map(r => (
+                    <TableRow key={r.teacher_id}>
+                      <TableCell className="font-medium">
+                        {r.teacher_name}
+                        {r.teacher_id === user?.id && <Badge variant="secondary" className="ml-2">Você</Badge>}
+                      </TableCell>
+                      <TableCell className="text-center">{r.total_rooms}</TableCell>
+                      <TableCell className="text-center">{r.finished_rooms}</TableCell>
+                      <TableCell className="text-center">{r.unique_students}</TableCell>
+                      <TableCell className="text-center">{r.irat_accuracy_pct !== null ? `${r.irat_accuracy_pct}%` : '—'}</TableCell>
+                      <TableCell className="text-center">{r.trat_accuracy_pct !== null ? `${r.trat_accuracy_pct}%` : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground">
-            <strong>ℹ️ Importante:</strong> Os professores vinculados recebem acesso Pro automaticamente. 
+            <strong>ℹ️ Importante:</strong> Os professores vinculados recebem acesso Pro automaticamente.
             Caso seu plano Institucional seja cancelado, todos os professores vinculados voltarão ao plano Gratuito.
           </p>
         </CardContent>
