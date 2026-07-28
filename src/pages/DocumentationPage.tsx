@@ -1,4 +1,7 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -7,13 +10,28 @@ import {
   ArrowLeft, BookOpen, Users, Brain, Target, BarChart3, Shield, Zap,
   GraduationCap, Sparkles, Clock, Star, Award, Layers, Monitor,
   Globe, Eye, Wifi, WifiOff, MessageSquare, FileText, Settings,
-  Database, Server, Code2, Lock, Workflow, Cpu, HardDrive, Key, CloudCog
+  Database, Server, Code2, Lock, Workflow, Cpu, HardDrive, Key, CloudCog,
+  HelpCircle, type LucideIcon,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import Footer from '@/components/Footer';
+import { supabase } from '@/integrations/supabase/client';
+
+interface DocItem { q: string; a: string }
+interface DocSection { id: string; icon: string; title: string; items: DocItem[] }
+
+// Ícones que a documentação funcional pode referenciar. Mantido em sincronia
+// com o allow-list validado em supabase/functions/sync-documentation.
+const ICON_MAP: Record<string, LucideIcon> = {
+  Sparkles, Brain, Monitor, BookOpen, Users, Target, BarChart3,
+  GraduationCap, Award, MessageSquare, Eye, WifiOff, HelpCircle,
+};
+function resolveIcon(name: string): LucideIcon {
+  return ICON_MAP[name] || HelpCircle;
+}
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -26,10 +44,10 @@ const fadeUp = {
 export default function DocumentationPage() {
   const navigate = useNavigate();
 
-  const sections = [
+  const DEFAULT_SECTIONS: DocSection[] = [
     {
       id: 'getting-started',
-      icon: Sparkles,
+      icon: 'Sparkles',
       title: 'Primeiros Passos',
       items: [
         {
@@ -48,7 +66,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'quizzes',
-      icon: Brain,
+      icon: 'Brain',
       title: 'Questionários e IA',
       items: [
         {
@@ -67,7 +85,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'rooms',
-      icon: Monitor,
+      icon: 'Monitor',
       title: 'Salas e Sessões TBL',
       items: [
         {
@@ -90,7 +108,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'irat',
-      icon: BookOpen,
+      icon: 'BookOpen',
       title: 'Fase 1: iRAT (Individual)',
       items: [
         {
@@ -109,7 +127,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'trat',
-      icon: Users,
+      icon: 'Users',
       title: 'Fase 2: tRAT (Equipe)',
       items: [
         {
@@ -128,7 +146,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'application',
-      icon: Target,
+      icon: 'Target',
       title: 'Fase 3: Aplicação',
       items: [
         {
@@ -143,7 +161,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'reports',
-      icon: BarChart3,
+      icon: 'BarChart3',
       title: 'Relatórios e Análises',
       items: [
         {
@@ -162,7 +180,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'classes',
-      icon: GraduationCap,
+      icon: 'GraduationCap',
       title: 'Turmas e Alunos',
       items: [
         {
@@ -177,7 +195,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'gamification',
-      icon: Award,
+      icon: 'Award',
       title: 'Gamificação e Conquistas',
       items: [
         {
@@ -196,7 +214,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'appeals',
-      icon: MessageSquare,
+      icon: 'MessageSquare',
       title: 'Recursos (Appeals)',
       items: [
         {
@@ -211,7 +229,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'accessibility',
-      icon: Eye,
+      icon: 'Eye',
       title: 'Acessibilidade e Idiomas',
       items: [
         {
@@ -234,7 +252,7 @@ export default function DocumentationPage() {
     },
     {
       id: 'offline',
-      icon: WifiOff,
+      icon: 'WifiOff',
       title: 'Modo Offline e Resiliência',
       items: [
         {
@@ -252,6 +270,24 @@ export default function DocumentationPage() {
       ],
     },
   ];
+
+  const { data: docData } = useQuery({
+    queryKey: ['app_documentation'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_documentation')
+        .select('sections, updated_at')
+        .eq('id', 'main')
+        .maybeSingle();
+      if (error) throw error;
+      return data as { sections: DocSection[]; updated_at: string } | null;
+    },
+    placeholderData: { sections: DEFAULT_SECTIONS, updated_at: null } as any,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const sections: DocSection[] = docData?.sections?.length ? docData.sections : DEFAULT_SECTIONS;
+  const updatedAt = docData?.updated_at;
 
   const techSections = [
     {
@@ -641,6 +677,11 @@ supabase/
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
             Tudo o que você precisa saber para usar todas as funcionalidades da plataforma. Clique em cada seção para expandir as perguntas.
           </p>
+          {updatedAt && (
+            <p className="text-xs text-muted-foreground/70 mt-2">
+              Atualizado em {new Date(updatedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </p>
+          )}
         </motion.div>
 
         <Tabs defaultValue="functional" className="mb-10">
@@ -664,18 +705,21 @@ supabase/
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {sections.map(s => (
-                      <Button
-                        key={s.id}
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl text-xs"
-                        onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                      >
-                        <s.icon className="w-3.5 h-3.5 mr-1.5" />
-                        {s.title}
-                      </Button>
-                    ))}
+                    {sections.map(s => {
+                      const Icon = resolveIcon(s.icon);
+                      return (
+                        <Button
+                          key={s.id}
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl text-xs"
+                          onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        >
+                          <Icon className="w-3.5 h-3.5 mr-1.5" />
+                          {s.title}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -683,7 +727,9 @@ supabase/
 
             {/* Sections */}
             <div className="space-y-6">
-              {sections.map((section, sIdx) => (
+              {sections.map((section, sIdx) => {
+                const Icon = resolveIcon(section.icon);
+                return (
                 <motion.div
                   key={section.id}
                   id={section.id}
@@ -698,7 +744,7 @@ supabase/
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-3 text-xl">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                          <section.icon className="w-5 h-5 text-primary" />
+                          <Icon className="w-5 h-5 text-primary" />
                         </div>
                         {section.title}
                       </CardTitle>
@@ -711,7 +757,9 @@ supabase/
                               {item.q}
                             </AccordionTrigger>
                             <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
-                              {item.a}
+                              <div className="[&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1.5 [&_strong]:font-semibold">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.a}</ReactMarkdown>
+                              </div>
                             </AccordionContent>
                           </AccordionItem>
                         ))}
@@ -719,7 +767,8 @@ supabase/
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           </TabsContent>
 

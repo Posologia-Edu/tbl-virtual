@@ -1,0 +1,57 @@
+name: Sync documentation
+
+# Best-effort: on every push to main, sends the diff to the
+# sync-documentation edge function, which uses AI to decide whether any
+# user-facing functionality changed and, if so, updates the app_documentation
+# table (read live by the Oráculo chat bot and by the /docs page). Never
+# blocks or fails the pipeline — see continue-on-error below.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync-documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute diff and notify sync-documentation
+        continue-on-error: true
+        env:
+          DOCS_SYNC_SECRET: ${{ secrets.DOCS_SYNC_SECRET }}
+          SYNC_URL: https://hqrugxoyezoizjkiskcv.supabase.co/functions/v1/sync-documentation
+        run: |
+          set -e
+
+          if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+            echo "No previous commit to diff against, skipping."
+            exit 0
+          fi
+
+          DIFF=$(git diff HEAD~1 HEAD -- src/ supabase/functions/ supabase/migrations/ \
+            ':!**/*.test.ts' ':!**/*.test.tsx' ':!**/package-lock.json' ':!**/bun.lock')
+
+          if [ -z "$DIFF" ]; then
+            echo "No relevant changes in this push, skipping."
+            exit 0
+          fi
+
+          TRUNCATED_DIFF=$(echo "$DIFF" | head -c 15000)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%s HEAD)
+
+          PAYLOAD=$(jq -n \
+            --arg sha "$GITHUB_SHA" \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg diff "$TRUNCATED_DIFF" \
+            '{commitSha: $sha, commitMessage: $msg, diff: $diff}')
+
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$SYNC_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-docs-sync-secret: $DOCS_SYNC_SECRET" \
+            -d "$PAYLOAD")
+
+          echo "HTTP status: $HTTP_STATUS"
+          cat response.json
+          echo ""

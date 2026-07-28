@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.list-trial-teachers]
 verify_jwt = false
+
+[functions.oracle-chat]
+verify_jwt = false
+
+[functions.sync-documentation]
+verify_jwt = false

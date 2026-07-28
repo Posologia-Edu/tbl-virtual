@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ai_api_keys: {
@@ -113,6 +138,33 @@ export type Database = {
           referrer?: string | null
           session_id?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      app_documentation: {
+        Row: {
+          id: string
+          previous_sections: Json | null
+          sections: Json
+          updated_at: string
+          updated_by: string | null
+          version: string | null
+        }
+        Insert: {
+          id?: string
+          previous_sections?: Json | null
+          sections: Json
+          updated_at?: string
+          updated_by?: string | null
+          version?: string | null
+        }
+        Update: {
+          id?: string
+          previous_sections?: Json | null
+          sections?: Json
+          updated_at?: string
+          updated_by?: string | null
+          version?: string | null
         }
         Relationships: []
       }
@@ -1020,6 +1072,39 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_room_application_questions: {
+        Args: { p_room_id: string }
+        Returns: {
+          correct_answer: string
+          explanation: string
+          id: string
+          media: Json
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          quiz_id: string
+          room_id: string
+          sort_order: number
+        }[]
+      }
+      get_room_quiz_questions: {
+        Args: { p_room_id: string }
+        Returns: {
+          correct_option: string
+          explanation: string
+          id: string
+          media: Json
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          question_text: string
+          quiz_id: string
+          sort_order: number
+        }[]
+      }
       grant_student_achievement: {
         Args: {
           _achievement_description: string
@@ -1045,6 +1130,60 @@ export type Database = {
       is_team_member: {
         Args: { p_team_id: string; p_user_id: string }
         Returns: boolean
+      }
+      submit_irat_response: {
+        Args: {
+          p_points_a: number
+          p_points_b: number
+          p_points_c: number
+          p_points_d: number
+          p_question_id: string
+          p_room_id: string
+        }
+        Returns: {
+          id: string
+          is_correct: boolean
+          points_a: number
+          points_b: number
+          points_c: number
+          points_d: number
+          question_id: string
+          room_id: string
+          score: number
+          selected_option: string | null
+          student_id: string
+          submitted_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "irat_responses"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submit_trat_attempt: {
+        Args: {
+          p_question_id: string
+          p_room_id: string
+          p_selected_option: string
+        }
+        Returns: {
+          attempt_number: number
+          id: string
+          is_correct: boolean
+          question_id: string
+          room_id: string
+          selected_option: string
+          submitted_at: string
+          submitted_by: string
+          team_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trat_attempts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
@@ -1183,6 +1322,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["teacher", "student", "admin"],

@@ -25,6 +25,7 @@ import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import CookiesPage from "./pages/CookiesPage";
 import CookieConsent from "./components/CookieConsent";
+import OracleChat from "./components/OracleChat";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +93,7 @@ const App = () => (
           <AuthProvider>
             <a href="#main-content" className="skip-to-content">Skip to content</a>
             <CookieConsent />
+            <OracleChat />
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<AuthPage />} />
