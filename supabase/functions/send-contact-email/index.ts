@@ -1,12 +1,18 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_LONG);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -63,10 +69,10 @@ serve(async (req) => {
           <h1 style="color: #fff; margin: 0; font-size: 20px;">📬 Nova Mensagem de Contato${is_public ? ' (Visitante)' : ''}</h1>
         </div>
         <div style="padding: 32px;">
-          <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;"><strong>De:</strong> ${senderName} (${senderEmail})</p>
-          <p style="font-size: 14px; color: #6b7280; margin: 0 0 16px;"><strong>Assunto:</strong> ${subject}</p>
+          <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;"><strong>De:</strong> ${escapeHtml(senderName)} (${escapeHtml(senderEmail)})</p>
+          <p style="font-size: 14px; color: #6b7280; margin: 0 0 16px;"><strong>Assunto:</strong> ${escapeHtml(subject)}</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-          <div style="font-size: 15px; color: #374151; line-height: 1.7; white-space: pre-wrap;">${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+          <div style="font-size: 15px; color: #374151; line-height: 1.7; white-space: pre-wrap;">${escapeHtml(message)}</div>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0 16px;" />
           <p style="font-size: 12px; color: #9ca3af; text-align: center;">
             Enviado via TBL Virtual — Formulário de Contato

@@ -1,13 +1,18 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// Must mirror src/lib/stripe-plans.ts — only these plans may be purchased through
+// checkout. Prevents a client from passing an arbitrary/legacy/test Stripe price.
+const ALLOWED_PRICE_IDS = new Set([
+  "price_1T3kxRH6ld7NmvcD24SoXT0g", // free
+  "price_1T3kxkH6ld7NmvcDsA2078YR", // pro
+  "price_1T3ky2H6ld7NmvcDoT8qGQfk", // institutional
+]);
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_LONG);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -26,6 +31,7 @@ serve(async (req) => {
 
     const { priceId } = await req.json();
     if (!priceId) throw new Error("priceId is required");
+    if (!ALLOWED_PRICE_IDS.has(priceId)) throw new Error("Invalid priceId");
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", { apiVersion: "2025-08-27.basil" });
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });

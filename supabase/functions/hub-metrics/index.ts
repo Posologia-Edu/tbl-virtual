@@ -6,20 +6,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+// Constant-time string comparison to avoid leaking the shared secret via
+// response-time differences on a byte-by-byte "!==" check.
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = new TextEncoder().encode(a);
+  const bufB = new TextEncoder().encode(b);
+  if (bufA.length !== bufB.length) return false;
+  let diff = 0;
+  for (let i = 0; i < bufA.length; i++) diff |= bufA[i] ^ bufB[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Autenticação via chave compartilhada
-    const url = new URL(req.url);
-    const keyFromParam = url.searchParams.get("key");
-    const keyFromHeader = req.headers.get("x-hub-metrics-key");
-    const providedKey = keyFromParam || keyFromHeader;
-
+    // Shared-secret auth via header only — query strings get logged by proxies,
+    // browser history, and Referer headers.
+    const providedKey = req.headers.get("x-hub-metrics-key");
     const expectedKey = Deno.env.get("HUB_METRICS_KEY");
-    if (!expectedKey || providedKey !== expectedKey) {
+    if (!expectedKey || !providedKey || !timingSafeEqual(providedKey, expectedKey)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,13 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
-
-const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 
 interface Suggestion {
   title: string;
@@ -24,9 +17,6 @@ interface SuggestResponse {
   code?: string;
   provider?: string;
 }
-
-const respond = (payload: SuggestResponse) =>
-  new Response(JSON.stringify(payload), { status: 200, headers: jsonHeaders });
 
 // --- Provider configs (same pattern as generate-quiz-ai) ---
 
@@ -299,6 +289,11 @@ async function tryLovableAI(
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_LONG);
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+  const respond = (payload: SuggestResponse) =>
+    new Response(JSON.stringify(payload), { status: 200, headers: jsonHeaders });
+
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {

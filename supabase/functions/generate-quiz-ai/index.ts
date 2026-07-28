@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
+import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 
 async function extractPdfText(base64: string): Promise<string> {
   const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -10,12 +11,6 @@ async function extractPdfText(base64: string): Promise<string> {
   const cleaned = (Array.isArray(text) ? text.join("\n") : text).trim();
   return cleaned.slice(0, 35000);
 }
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
 
 const PLAN_AI_LIMITS: Record<string, number> = {
   "prod_U1oaoU5nQAqqW3": 0,
@@ -342,6 +337,7 @@ async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: 
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_LONG);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
