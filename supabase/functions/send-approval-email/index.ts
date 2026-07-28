@@ -63,7 +63,7 @@ serve(async (req: Request) => {
             Agora você pode acessar a plataforma e começar a criar suas atividades de Team-Based Learning.
           </p>
           <div style="text-align: center; margin: 28px 0;">
-            <a href="https://ace-team-learn.lovable.app/auth" 
+            <a href="https://tbl.posologia.app/auth"
                style="display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px;">
               Acessar TBL Virtual
             </a>

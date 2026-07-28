@@ -1,13 +1,15 @@
 // Shared CORS helper for all edge functions called from the browser.
 // Echoes the request's Origin back only when it matches a known app origin
-// (production domain, Lovable preview subdomains, or local dev), instead of
+// (production domain, Cloudflare Pages preview subdomains, legacy Lovable
+// domains kept while the two run in parallel, or local dev), instead of
 // blindly allowing "*". These functions authenticate via Bearer tokens (not
 // cookies), so a wide-open CORS policy isn't itself exploitable, but scoping
 // it is basic defense-in-depth and avoids exposing responses to arbitrary
 // third-party pages via fetch().
-const DEFAULT_ORIGIN = "https://ace-team-learn.lovable.app";
+const DEFAULT_ORIGIN = "https://tbl.posologia.app";
 
 const ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/([a-z0-9-]+\.)?tbl-virtual\.pages\.dev$/i,
   /^https:\/\/[a-z0-9-]+\.lovable\.app$/i,
   /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/i,
   /^http:\/\/localhost:\d+$/i,

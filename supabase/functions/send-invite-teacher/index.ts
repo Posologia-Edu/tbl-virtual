@@ -107,7 +107,7 @@ serve(async (req) => {
     }
 
     // ===== ALWAYS generate recovery link and send email =====
-    const origin = req.headers.get("origin") || "https://ace-team-learn.lovable.app";
+    const origin = req.headers.get("origin") || "https://tbl.posologia.app";
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
       type: "recovery",
       email,
