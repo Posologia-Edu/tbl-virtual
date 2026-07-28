@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { getCorsHeaders, CORS_HEADERS_LONG } from "../_shared/cors.ts";
 import {
@@ -10,6 +9,7 @@ import {
   tryLovableAI,
   type AIResult,
 } from "../_shared/ai-providers.ts";
+import { checkAIPlanLimit } from "../_shared/ai-plan-limits.ts";
 
 async function extractPdfText(base64: string): Promise<string> {
   const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -18,13 +18,6 @@ async function extractPdfText(base64: string): Promise<string> {
   const cleaned = (Array.isArray(text) ? text.join("\n") : text).trim();
   return cleaned.slice(0, 35000);
 }
-
-const PLAN_AI_LIMITS: Record<string, number> = {
-  "prod_U1oaoU5nQAqqW3": 0,
-  "prod_U1oaz7iVie1pFU": 50,
-  "prod_U1ob8n7iDfyGLT": Infinity,
-  admin: Infinity,
-};
 
 // Cost per 1M tokens (input/output) in USD
 const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
@@ -128,62 +121,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function getUserPlanLimit(supabaseClient: any, userId: string, userEmail: string): Promise<{ limit: number; used: number; productId: string | null }> {
-  const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { count: used } = await supabaseClient
-    .from("ai_usage_log")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("used_at", firstOfMonth);
-
-  const { data: isAdmin } = await supabaseClient.rpc("is_admin", { _user_id: userId });
-  if (isAdmin) {
-    return { limit: Infinity, used: used || 0, productId: "admin" };
-  }
-
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-  let productId: string | null = null;
-
-  if (stripeKey) {
-    try {
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-      const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
-      if (customers.data.length > 0) {
-        const subs = await stripe.subscriptions.list({ customer: customers.data[0].id, status: "active", limit: 1 });
-        if (subs.data.length > 0) {
-          productId = subs.data[0].items.data[0].price.product as string;
-        }
-      }
-    } catch (e) {
-      console.error("[AI] Stripe check failed:", e);
-    }
-  }
-
-  if (!productId) {
-    const { data: manualSub } = await supabaseClient
-      .from("manual_subscriptions")
-      .select("plan, expires_at")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (manualSub && manualSub.plan !== "free") {
-      const isExpired = manualSub.expires_at && new Date(manualSub.expires_at) < now;
-      if (!isExpired) {
-        const planToProduct: Record<string, string> = {
-          pro: "prod_U1oaz7iVie1pFU",
-          institutional: "prod_U1ob8n7iDfyGLT",
-        };
-        productId = planToProduct[manualSub.plan] || null;
-      }
-    }
-  }
-
-  if (!productId) productId = "prod_U1oaoU5nQAqqW3";
-  const limit = PLAN_AI_LIMITS[productId] ?? 0;
-  return { limit, used: used || 0, productId };
-}
-
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req, CORS_HEADERS_LONG);
   if (req.method === "OPTIONS") {
@@ -205,23 +142,11 @@ serve(async (req) => {
     if (userError || !userData.user) throw new Error("Não autorizado");
     const user = userData.user;
 
-    const { limit, used } = await getUserPlanLimit(adminClient, user.id, user.email!);
-    console.log(`[AI] User ${user.email} plan limit: ${limit}, used: ${used}`);
-
-    if (limit === 0) {
-      return new Response(JSON.stringify({
-        error: "PLAN_LIMIT",
-        message: "Seu plano atual não inclui geração de questões com IA. Faça upgrade para o plano Pro ou Institucional.",
-        used, limit,
-      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (isFinite(limit) && used >= limit) {
-      return new Response(JSON.stringify({
-        error: "PLAN_LIMIT",
-        message: `Você atingiu o limite de ${limit} gerações de IA este mês (${used}/${limit}). Faça upgrade para continuar.`,
-        used, limit,
-      }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const planCheck = await checkAIPlanLimit(adminClient, user.id, user.email!);
+    if (planCheck.blocked) {
+      return new Response(JSON.stringify(planCheck.body), {
+        status: planCheck.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body = await req.json();

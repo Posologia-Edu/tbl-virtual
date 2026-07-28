@@ -7,6 +7,7 @@ import { Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { isPlanLimitError } from '@/lib/planLimitError';
 
 type Step = 'code' | 'info' | 'reconnect';
 
@@ -169,11 +170,18 @@ export default function JoinRoomPage() {
     }
 
     const { data: codeData } = await supabase.rpc('generate_participant_code', { p_room_id: roomId });
-    await supabase.from('room_participants').insert({
+    const { error } = await supabase.from('room_participants').insert({
       room_id: roomId,
       user_id: userId,
       participant_code: codeData as string,
     });
+
+    if (error) {
+      toast.error(isPlanLimitError(error)
+        ? 'Esta turma atingiu o limite de alunos do plano do professor. Avise seu professor para fazer upgrade.'
+        : 'Falha ao entrar na sala');
+      return;
+    }
 
     toast.success('Entrou na sala!');
     navigate(`/room/${roomId}`);

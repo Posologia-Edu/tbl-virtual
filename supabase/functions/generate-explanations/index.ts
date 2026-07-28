@@ -8,6 +8,7 @@ import {
   tryLovableAI,
   type AIResult,
 } from "../_shared/ai-providers.ts";
+import { checkAIPlanLimit } from "../_shared/ai-plan-limits.ts";
 
 const CLINICAL_CASE_SEPARATOR = "|||AFIRMACAO|||";
 
@@ -45,6 +46,13 @@ serve(async (req) => {
     if (!quiz || quiz.teacher_id !== user.id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const planCheck = await checkAIPlanLimit(admin, user.id, user.email!);
+    if (planCheck.blocked) {
+      return new Response(JSON.stringify(planCheck.body), {
+        status: planCheck.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

@@ -14,6 +14,9 @@ import {
   ChevronDown, ChevronUp, FileText, Tag, BarChart3, Globe, Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePlanLimits } from '@/hooks/usePlanLimits';
+import { isPlanLimitError } from '@/lib/planLimitError';
+import UpgradeDialog from '@/components/UpgradeDialog';
 
 type SharedQuiz = {
   id: string;
@@ -57,6 +60,7 @@ const difficultyLabels: Record<string, { label: string; color: string }> = {
 };
 
 export default function QuestionBank({ userId }: QuestionBankProps) {
+  const { currentPlan, showUpgradeDialog, upgradeOpen, upgradeFeature, closeUpgradeDialog } = usePlanLimits();
   const [sharedQuizzes, setSharedQuizzes] = useState<SharedQuiz[]>([]);
   const [myQuizzes, setMyQuizzes] = useState<SharedQuiz[]>([]);
   const [search, setSearch] = useState('');
@@ -168,7 +172,7 @@ export default function QuestionBank({ userId }: QuestionBankProps) {
         difficulty_level: quiz.difficulty_level,
         is_shared: false,
       } as any).select().single();
-      if (error || !newQuiz) throw error;
+      if (error || !newQuiz) throw error || new Error('Falha ao duplicar');
 
       // Copy iRAT/tRAT questions
       const { data: origQs } = await supabase.from('questions').select('*').eq('quiz_id', quiz.id).order('sort_order');
@@ -197,7 +201,14 @@ export default function QuestionBank({ userId }: QuestionBankProps) {
       toast.success('Questionário duplicado com sucesso!');
       loadQuizzes();
     } catch (err: any) {
-      toast.error('Falha ao duplicar: ' + (err?.message || ''));
+      if (isPlanLimitError(err)) {
+        const feature = err.message?.includes('questões por questionário')
+          ? 'Questões ilimitadas por questionário'
+          : 'Questionários ilimitados';
+        showUpgradeDialog(feature);
+      } else {
+        toast.error('Falha ao duplicar: ' + (err?.message || ''));
+      }
     }
   };
 
@@ -291,13 +302,26 @@ export default function QuestionBank({ userId }: QuestionBankProps) {
     const title = file.name.replace(/\.csv$/i, '').replace(/_/g, ' ');
     const { data: quiz, error } = await supabase.from('quizzes')
       .insert({ title, teacher_id: userId } as any).select().single();
-    if (error || !quiz) { toast.error('Falha ao criar questionário'); return; }
-
-    if (iratQuestions.length) {
-      await supabase.from('questions').insert(iratQuestions.map(q => ({ ...q, quiz_id: quiz.id })));
+    if (error || !quiz) {
+      if (isPlanLimitError(error)) { showUpgradeDialog('Questionários ilimitados'); }
+      else { toast.error('Falha ao criar questionário'); }
+      return;
     }
-    if (appQuestions.length) {
-      await supabase.from('application_questions').insert(appQuestions.map(q => ({ ...q, quiz_id: quiz.id })));
+
+    if (iratQuestions.length + appQuestions.length > 0) {
+      const { error: qError } = iratQuestions.length
+        ? await supabase.from('questions').insert(iratQuestions.map(q => ({ ...q, quiz_id: quiz.id })))
+        : { error: null };
+      const { error: aqError } = appQuestions.length
+        ? await supabase.from('application_questions').insert(appQuestions.map(q => ({ ...q, quiz_id: quiz.id })))
+        : { error: null };
+      const insertError = qError || aqError;
+      if (insertError) {
+        if (isPlanLimitError(insertError)) { showUpgradeDialog('Questões ilimitadas por questionário'); }
+        else { toast.error('Falha ao importar questões do CSV'); }
+        if (csvInputRef.current) csvInputRef.current.value = '';
+        return;
+      }
     }
 
     toast.success(`Importado: ${iratQuestions.length} iRAT + ${appQuestions.length} aplicação`);
@@ -532,6 +556,13 @@ export default function QuestionBank({ userId }: QuestionBankProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={closeUpgradeDialog}
+        feature={upgradeFeature}
+        currentPlan={currentPlan}
+      />
     </div>
   );
 }

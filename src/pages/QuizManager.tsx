@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
+import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
+import { isPlanLimitError } from '@/lib/planLimitError';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -117,7 +119,12 @@ export default function QuizManager() {
       toast.success(`${data?.updated ?? 0} explicação(ões) gerada(s) com IA.`);
       await loadQuestions(selectedQuiz.id);
     } catch (e: any) {
-      toast.error(e?.message || 'Falha ao gerar explicações.');
+      const parsed = await parseEdgeFunctionError(e);
+      if (parsed?.code === 'PLAN_LIMIT') {
+        showUpgradeDialog('Geração de Explicações com IA');
+      } else {
+        toast.error(parsed?.message || e?.message || 'Falha ao gerar explicações.');
+      }
     } finally {
       setGenExplanationsLoading(false);
     }
@@ -149,7 +156,11 @@ export default function QuizManager() {
       return;
     }
     const { data, error } = await supabase.from('quizzes').insert({ title: newQuizTitle.trim(), teacher_id: user!.id }).select().single();
-    if (error || !data) { toast.error('Falha ao criar questionário'); return; }
+    if (error || !data) {
+      if (isPlanLimitError(error)) { showUpgradeDialog('Questionários ilimitados'); }
+      else { toast.error('Falha ao criar questionário'); }
+      return;
+    }
     setCreatedQuizId(data.id);
     setSelectedQuiz(data as Quiz);
     setQuestions([]);
@@ -205,7 +216,11 @@ export default function QuizManager() {
         media: qMedia as any,
         explanation: qExplanation.trim() || null,
       });
-      if (error) { toast.error('Falha ao adicionar questão'); return; }
+      if (error) {
+        if (isPlanLimitError(error)) { showUpgradeDialog('Questões ilimitadas por questionário'); }
+        else { toast.error('Falha ao adicionar questão'); }
+        return;
+      }
       toast.success('Questão salva!');
     }
     resetQuestionForm();
@@ -241,7 +256,11 @@ export default function QuizManager() {
         sort_order: appQuestions.length,
         media: appQMedia as any,
       });
-      if (error) { toast.error('Falha ao adicionar questão'); return; }
+      if (error) {
+        if (isPlanLimitError(error)) { showUpgradeDialog('Questões ilimitadas por questionário'); }
+        else { toast.error('Falha ao adicionar questão'); }
+        return;
+      }
       toast.success('Questão de aplicação salva!');
     }
     resetAppQuestionForm();
@@ -399,7 +418,6 @@ export default function QuizManager() {
       });
 
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
       // Create the quiz
       const { data: quiz, error: quizError } = await supabase.from('quizzes')
@@ -451,7 +469,12 @@ export default function QuizManager() {
       setViewMode('quiz-detail');
     } catch (err: any) {
       console.error('AI generation error:', err);
-      toast.error(extractErrorMessage(err));
+      const parsed = await parseEdgeFunctionError(err);
+      if (parsed?.code === 'PLAN_LIMIT') {
+        showUpgradeDialog('Geração de Questões com IA');
+      } else {
+        toast.error(parsed?.message || extractErrorMessage(err));
+      }
     } finally {
       setAiLoading(false);
     }
@@ -469,7 +492,6 @@ export default function QuizManager() {
         body: { files: filesPayload },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
       if (data.irat_questions?.length) {
         const iratInserts = data.irat_questions.map((q: any, i: number) => ({
@@ -500,7 +522,12 @@ export default function QuizManager() {
       await loadAppQuestions(selectedQuiz.id);
     } catch (err: any) {
       console.error('AI import error:', err);
-      toast.error(extractErrorMessage(err));
+      const parsed = await parseEdgeFunctionError(err);
+      if (parsed?.code === 'PLAN_LIMIT') {
+        showUpgradeDialog('Geração de Questões com IA');
+      } else {
+        toast.error(parsed?.message || extractErrorMessage(err));
+      }
     } finally {
       setAiImportLoading(false);
     }

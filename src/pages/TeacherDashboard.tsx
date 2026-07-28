@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
+import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
+import { isPlanLimitError } from '@/lib/planLimitError';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -220,7 +222,12 @@ export default function TeacherDashboard() {
       const { data: qData } = await supabase.from('questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
       setQuestions((qData as Question[]) || []);
     } catch (e: any) {
-      toast.error(e?.message || 'Erro ao gerar feedback');
+      const parsed = await parseEdgeFunctionError(e);
+      if (parsed?.code === 'PLAN_LIMIT') {
+        planLimits.showUpgradeDialog('Geração de Explicações com IA');
+      } else {
+        toast.error(parsed?.message || e?.message || 'Erro ao gerar feedback');
+      }
     } finally {
       setGenExplanationsLoading(false);
     }
@@ -238,7 +245,12 @@ export default function TeacherDashboard() {
       const { data: aData } = await supabase.from('application_questions').select('*').eq('quiz_id', selectedQuiz.id).is('deleted_at', null).order('sort_order');
       setAppQuestions(aData || []);
     } catch (e: any) {
-      toast.error(e?.message || 'Erro ao gerar feedback');
+      const parsed = await parseEdgeFunctionError(e);
+      if (parsed?.code === 'PLAN_LIMIT') {
+        planLimits.showUpgradeDialog('Geração de Explicações com IA');
+      } else {
+        toast.error(parsed?.message || e?.message || 'Erro ao gerar feedback');
+      }
     } finally {
       setGenAppExplanationsLoading(false);
     }
@@ -597,12 +609,18 @@ export default function TeacherDashboard() {
 
   const createRoom = async () => {
     if (!newRoomName.trim()) return;
-    // Check room limit for free plan
+    // Check room limit for free plan. Counts ALL rooms this calendar month,
+    // including soft-deleted ones (the `rooms` state excludes those), to
+    // match the server-side quota trigger and avoid a trash-bypass loophole.
     if (isFinite(planLimits.maxRoomsPerMonth)) {
       const now = new Date();
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const roomsThisMonth = rooms.filter(r => r.created_at >= firstOfMonth).length;
-      if (roomsThisMonth >= planLimits.maxRoomsPerMonth) {
+      const { count: roomsThisMonth } = await supabase
+        .from('rooms')
+        .select('id', { count: 'exact', head: true })
+        .eq('teacher_id', user!.id)
+        .gte('created_at', firstOfMonth);
+      if ((roomsThisMonth || 0) >= planLimits.maxRoomsPerMonth) {
         planLimits.showUpgradeDialog('Salas ilimitadas');
         return;
       }
@@ -618,7 +636,11 @@ export default function TeacherDashboard() {
       max_grade: parseFloat(newRoomMaxGrade) || 10,
       individual_pct: indPct, team_pct: tmPct, application_pct: appPct,
     } as any);
-    if (error) { toast.error('Falha ao criar sala'); return; }
+    if (error) {
+      if (isPlanLimitError(error)) { planLimits.showUpgradeDialog('Salas ilimitadas'); }
+      else { toast.error('Falha ao criar sala'); }
+      return;
+    }
     toast.success(`Sala criada! Código: ${code}`);
     setNewRoomName(''); setNewRoomQuiz(''); setCreateRoomOpen(false);
     setNewRoomMaxGrade('10'); setNewRoomIndPct('30'); setNewRoomTeamPct('40'); setNewRoomAppPct('30');
@@ -689,7 +711,11 @@ export default function TeacherDashboard() {
       return;
     }
     const { error } = await supabase.from('quizzes').insert({ title: newQuizTitle.trim(), teacher_id: user!.id });
-    if (error) { toast.error('Falha ao criar questionário'); return; }
+    if (error) {
+      if (isPlanLimitError(error)) { planLimits.showUpgradeDialog('Questionários ilimitados'); }
+      else { toast.error('Falha ao criar questionário'); }
+      return;
+    }
     toast.success('Questionário criado!');
     setNewQuizTitle(''); setNewQuizOptions('4');
     loadData();
@@ -719,7 +745,11 @@ export default function TeacherDashboard() {
         individual_pct: indPct, team_pct: tmPct, application_pct: appPct,
         show_answers_in_report: showAnswers, show_individual_in_team: showIndividualInTeam,
       } as any).select().single();
-      if (error) { toast.error('Falha ao criar sala: ' + error.message); console.error(error); return; }
+      if (error) {
+        if (isPlanLimitError(error)) { planLimits.showUpgradeDialog('Salas ilimitadas'); }
+        else { toast.error('Falha ao criar sala: ' + error.message); console.error(error); }
+        return;
+      }
       toast.success('Sala criada!');
       navigate(`/room/${room.id}/manage`);
     } catch (err) {
@@ -840,7 +870,11 @@ export default function TeacherDashboard() {
       media: qMedia as any,
       explanation: qExplanation.trim() || null,
     });
-    if (error) { toast.error('Falha ao adicionar questão'); return; }
+    if (error) {
+      if (isPlanLimitError(error)) { planLimits.showUpgradeDialog('Questões ilimitadas por questionário'); }
+      else { toast.error('Falha ao adicionar questão'); }
+      return;
+    }
     toast.success('Questão adicionada!');
     setQText(''); setOptA(''); setOptB(''); setOptC(''); setOptD(''); setCorrect('A'); setQMedia([]); setQExplanation('');
     setAddQOpen(false);
@@ -885,7 +919,11 @@ export default function TeacherDashboard() {
       sort_order: appQuestions.length,
       media: appQMedia as any,
     });
-    if (error) { toast.error('Falha ao adicionar questão de aplicação'); return; }
+    if (error) {
+      if (isPlanLimitError(error)) { planLimits.showUpgradeDialog('Questões ilimitadas por questionário'); }
+      else { toast.error('Falha ao adicionar questão de aplicação'); }
+      return;
+    }
     toast.success('Questão de aplicação adicionada!');
     setAppQText(''); setAppCaseText(''); setAppStatement(''); setAppCorrectAnswer('V'); setAppQMedia([]);
     setAddAppQOpen(false);
@@ -985,10 +1023,6 @@ export default function TeacherDashboard() {
       const filesPayload = await buildFilesPayload(selectedFiles);
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
       if (error) throw error;
-      if (data?.error) {
-        if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiLoading(false); return; }
-        throw new Error(data.message || data.error);
-      }
 
       const { data: quiz, error: qErr } = await supabase.from('quizzes').insert({ title: aiQuizTitle.trim(), teacher_id: user!.id }).select().single();
       if (qErr || !quiz) throw new Error('Falha ao criar questionário');
@@ -1018,10 +1052,11 @@ export default function TeacherDashboard() {
       setActiveView('edit-quiz');
     } catch (err: any) {
       console.error(err);
-      if (err.message?.includes('PLAN_LIMIT')) {
+      const parsed = await parseEdgeFunctionError(err);
+      if (parsed?.code === 'PLAN_LIMIT') {
         planLimits.showUpgradeDialog('Geração de Questões com IA');
       } else {
-        toast.error(extractAiErrorMessage(err));
+        toast.error(parsed?.message || extractAiErrorMessage(err));
       }
     } finally { setAiLoading(false); planLimits.refreshSubscription(); }
   };
@@ -1038,10 +1073,6 @@ export default function TeacherDashboard() {
       const filesPayload = await buildFilesPayload(selectedFiles);
       const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
       if (error) throw error;
-      if (data?.error) {
-        if (data.error === 'PLAN_LIMIT') { planLimits.showUpgradeDialog('Geração de Questões com IA'); setAiImportLoading(false); return; }
-        throw new Error(data.message || data.error);
-      }
 
       if (data.irat_questions?.length) {
         await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
@@ -1064,10 +1095,11 @@ export default function TeacherDashboard() {
       setAppQuestions(aData || []);
     } catch (err: any) {
       console.error(err);
-      if (err.message?.includes('PLAN_LIMIT')) {
+      const parsed = await parseEdgeFunctionError(err);
+      if (parsed?.code === 'PLAN_LIMIT') {
         planLimits.showUpgradeDialog('Geração de Questões com IA');
       } else {
-        toast.error(extractAiErrorMessage(err));
+        toast.error(parsed?.message || extractAiErrorMessage(err));
       }
     } finally { setAiImportLoading(false); planLimits.refreshSubscription(); }
   };

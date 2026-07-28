@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import StudentAchievements from '@/components/StudentAchievements';
 import AccessibilityMenu from '@/components/AccessibilityMenu';
 import { ConnectionDot } from '@/components/ConnectionStatus';
+import { isPlanLimitError } from '@/lib/planLimitError';
 
 type JoinedRoom = {
   room_id: string;
@@ -111,6 +112,8 @@ export default function StudentDashboard() {
       if (error) {
         if (error.code === '23505') {
           navigate(`/room/${room.id}`);
+        } else if (isPlanLimitError(error)) {
+          toast.error('Esta turma atingiu o limite de alunos do plano do professor. Avise seu professor para fazer upgrade.');
         } else {
           toast.error('Falha ao entrar na sala');
         }
