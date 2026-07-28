@@ -29,6 +29,9 @@ serve(async (req) => {
 
     let senderName: string;
     let senderEmail: string;
+    // Plan-based priority: only resolvable for authenticated senders, since
+    // the public contact form (no account yet) has no plan to look up.
+    let plan: string | null = null;
 
     if (is_public) {
       // Public contact form - no auth required
@@ -46,6 +49,10 @@ serve(async (req) => {
       if (callerError || !callerData.user) throw new Error("Not authenticated");
       senderName = callerData.user.user_metadata?.full_name || callerData.user.email || "Usuário";
       senderEmail = callerData.user.email || "desconhecido";
+
+      const { data: planData, error: planError } = await supabase.rpc("get_user_plan", { _user_id: callerData.user.id });
+      if (planError) console.error("[CONTACT] Failed to resolve sender plan:", planError.message);
+      else plan = planData;
     }
 
     if (!subject?.trim() || !message?.trim()) {
@@ -54,7 +61,17 @@ serve(async (req) => {
 
     const adminEmails = ["srfernandesaraujo@gmail.com"];
 
-    console.log(`[CONTACT] From: ${senderEmail}, To: ${adminEmails.join(", ")}, Subject: ${subject}`);
+    const PLAN_LABELS: Record<string, string> = {
+      free: "Gratuito",
+      pro: "Pro (suporte prioritário)",
+      institutional: "Institucional (suporte dedicado)",
+    };
+    const planLabel = plan ? (PLAN_LABELS[plan] || plan) : null;
+    // Pro/Institutional messages get a visible priority marker in the
+    // subject line so they stand out in the shared support inbox.
+    const priorityPrefix = plan === "institutional" ? "[URGENTE] " : plan === "pro" ? "[PRIORITÁRIO] " : "";
+
+    console.log(`[CONTACT] From: ${senderEmail} (plan: ${plan ?? "n/a"}), To: ${adminEmails.join(", ")}, Subject: ${subject}`);
 
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
     if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY not configured");
@@ -70,6 +87,7 @@ serve(async (req) => {
         </div>
         <div style="padding: 32px;">
           <p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;"><strong>De:</strong> ${escapeHtml(senderName)} (${escapeHtml(senderEmail)})</p>
+          ${planLabel ? `<p style="font-size: 14px; color: #6b7280; margin: 0 0 4px;"><strong>Plano:</strong> ${escapeHtml(planLabel)}</p>` : ""}
           <p style="font-size: 14px; color: #6b7280; margin: 0 0 16px;"><strong>Assunto:</strong> ${escapeHtml(subject)}</p>
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
           <div style="font-size: 15px; color: #374151; line-height: 1.7; white-space: pre-wrap;">${escapeHtml(message)}</div>
@@ -89,7 +107,7 @@ serve(async (req) => {
         from: "TBL Virtual <noreply@tbl.posologia.app>",
         to: adminEmails,
         reply_to: senderEmail,
-        subject: `[TBL Contato] ${subject}`,
+        subject: `${priorityPrefix}[TBL Contato] ${subject}`,
         html,
       }),
     });
