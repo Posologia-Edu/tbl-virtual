@@ -1,26 +1,34 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, CORS_HEADERS_SHORT } from "../_shared/cors.ts";
 
 serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_SHORT);
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { teacherId } = await req.json();
-    if (!teacherId) {
-      return new Response(JSON.stringify({ error: "teacherId is required" }), { status: 400, headers: corsHeaders });
-    }
-
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Verify caller is an admin
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return new Response(JSON.stringify({ error: "No authorization header" }), { status: 401, headers: corsHeaders });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: callerData, error: callerError } = await supabase.auth.getUser(token);
+    const callerId = callerData?.user?.id;
+    if (callerError || !callerId) return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401, headers: corsHeaders });
+
+    const { data: isAdminResult } = await supabase.rpc("is_admin", { _user_id: callerId });
+    if (!isAdminResult) return new Response(JSON.stringify({ error: "Only admins can send approval emails" }), { status: 403, headers: corsHeaders });
+
+    const { teacherId } = await req.json();
+    if (!teacherId) {
+      return new Response(JSON.stringify({ error: "teacherId is required" }), { status: 400, headers: corsHeaders });
+    }
 
     // Get teacher profile
     const { data: profile } = await supabase.from("profiles").select("full_name, email").eq("id", teacherId).single();

@@ -1,24 +1,35 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, CORS_HEADERS_SHORT } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req, CORS_HEADERS_SHORT);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { roomId } = await req.json();
-    if (!roomId) return new Response(JSON.stringify({ error: "roomId required" }), { status: 400, headers: corsHeaders });
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendKey = Deno.env.get("RESEND_API_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // Verify the caller is authenticated
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return new Response(JSON.stringify({ error: "No authorization header" }), { status: 401, headers: corsHeaders });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: callerData, error: callerError } = await supabase.auth.getUser(token);
+    const callerId = callerData?.user?.id;
+    if (callerError || !callerId) return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401, headers: corsHeaders });
+
+    const { roomId } = await req.json();
+    if (!roomId) return new Response(JSON.stringify({ error: "roomId required" }), { status: 400, headers: corsHeaders });
+
     const { data: room } = await supabase.from("rooms").select("*").eq("id", roomId).single();
     if (!room) return new Response(JSON.stringify({ error: "Room not found" }), { status: 404, headers: corsHeaders });
+
+    // Only the room's teacher (or an admin) may trigger report emails for it
+    if (room.teacher_id !== callerId) {
+      const { data: isAdminResult } = await supabase.rpc("is_admin", { _user_id: callerId });
+      if (!isAdminResult) return new Response(JSON.stringify({ error: "Not authorized for this room" }), { status: 403, headers: corsHeaders });
+    }
 
     const { data: participants } = await supabase.from("room_participants").select("user_id, participant_code, profiles:user_id(full_name, email)").eq("room_id", roomId);
     const { data: questions } = await supabase.from("questions").select("*").eq("quiz_id", room.quiz_id).order("sort_order");
@@ -136,7 +147,7 @@ Deno.serve(async (req) => {
       if (res.ok) emails.push(email);
     }
 
-    return new Response(JSON.stringify({ sent: emails.length, emails }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ sent: emails.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }

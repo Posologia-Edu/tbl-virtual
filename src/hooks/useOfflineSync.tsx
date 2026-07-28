@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 type PendingAction = {
   id: string;
   table: string;
-  method: 'insert' | 'upsert';
+  method: 'insert' | 'upsert' | 'rpc';
   data: Record<string, any>;
   timestamp: number;
 };
@@ -53,7 +53,7 @@ export function useOfflineSync() {
     setPendingCount(loadQueue().length);
   }, []);
 
-  const enqueue = useCallback((table: string, method: 'insert' | 'upsert', data: Record<string, any>) => {
+  const enqueue = useCallback((table: string, method: 'insert' | 'upsert' | 'rpc', data: Record<string, any>) => {
     const action: PendingAction = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       table,
@@ -87,6 +87,9 @@ export function useOfflineSync() {
           error = res.error;
         } else if (action.method === 'upsert') {
           const res = await (supabase.from(action.table as any) as any).upsert(action.data);
+          error = res.error;
+        } else if (action.method === 'rpc') {
+          const res = await (supabase as any).rpc(action.table, action.data);
           error = res.error;
         }
 
@@ -143,9 +146,9 @@ export function useOfflineSync() {
   // Resilient submit: tries Supabase first, falls back to local queue
   const resilientSubmit = useCallback(async (
     table: string,
-    method: 'insert' | 'upsert',
+    method: 'insert' | 'upsert' | 'rpc',
     data: Record<string, any>,
-  ): Promise<{ success: boolean; offline: boolean; error?: any }> => {
+  ): Promise<{ success: boolean; offline: boolean; error?: any; data?: any }> => {
     if (!isOnline) {
       enqueue(table, method, data);
       return { success: true, offline: true };
@@ -155,8 +158,10 @@ export function useOfflineSync() {
       let result: any;
       if (method === 'insert') {
         result = await (supabase.from(table as any) as any).insert(data);
-      } else {
+      } else if (method === 'upsert') {
         result = await (supabase.from(table as any) as any).upsert(data);
+      } else {
+        result = await (supabase as any).rpc(table, data);
       }
 
       if (result.error) {
@@ -168,7 +173,7 @@ export function useOfflineSync() {
         return { success: false, offline: false, error: result.error };
       }
 
-      return { success: true, offline: false };
+      return { success: true, offline: false, data: result.data };
     } catch (err) {
       // Network failure → cache locally
       enqueue(table, method, data);

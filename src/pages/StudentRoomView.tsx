@@ -211,10 +211,10 @@ export default function StudentRoomView() {
     if (data) setRoom(data as any);
   }, [roomId]);
 
-  const loadQuestions = useCallback(async (quizId: string) => {
-    const { data } = await supabase.from('questions').select('*').eq('quiz_id', quizId).order('sort_order');
+  const loadQuestions = useCallback(async () => {
+    const { data } = await (supabase as any).rpc('get_room_quiz_questions', { p_room_id: roomId! });
     if (data) setQuestions(data as Question[]);
-  }, []);
+  }, [roomId]);
 
   const loadMembership = useCallback(async () => {
     const { data } = await supabase
@@ -300,7 +300,7 @@ export default function StudentRoomView() {
 
   const loadAppData = useCallback(async () => {
     const [{ data: qs }, { data: rs }] = await Promise.all([
-      supabase.from('application_questions').select('*').eq('room_id', roomId!).order('sort_order'),
+      (supabase as any).rpc('get_room_application_questions', { p_room_id: roomId! }),
       membership
         ? supabase.from('application_responses').select('*').eq('team_id', membership.team_id).eq('room_id', roomId!)
         : Promise.resolve({ data: [] }),
@@ -327,7 +327,7 @@ export default function StudentRoomView() {
   // Only load questions when stage moves away from 'waiting' (teacher clicked "Iniciar TBL")
   useEffect(() => { 
     if (room?.quiz_id && room?.current_stage !== 'waiting') {
-      loadQuestions(room.quiz_id); 
+      loadQuestions();
     } else {
       // Clear questions when in waiting stage so student doesn't see them
       setQuestions([]);
@@ -601,17 +601,21 @@ export default function StudentRoomView() {
     if (iratSubmitted.has(questionId)) return;
     const total = distribution.A + distribution.B + distribution.C + distribution.D;
     if (total !== 4) { toast.error('Distribua exatamente 4 pontos'); return; }
-    const question = questions.find(q => q.id === questionId);
-    const correctOpt = question?.correct_option?.toUpperCase() as keyof IratPointDistribution;
-    const score = correctOpt ? distribution[correctOpt] : 0;
-    const data = {
-      student_id: user!.id, question_id: questionId, room_id: roomId!,
-      points_a: distribution.A, points_b: distribution.B, points_c: distribution.C, points_d: distribution.D,
-      score, is_correct: score > 0,
-    };
-    const result = await resilientSubmit('irat_responses', 'insert', data);
+    // Score is computed server-side from the real answer key (RPC submit_irat_response) —
+    // the client never knows/sends the correct option, so grades can't be forged.
+    const result = await resilientSubmit('submit_irat_response', 'rpc', {
+      p_question_id: questionId, p_room_id: roomId!,
+      p_points_a: distribution.A, p_points_b: distribution.B, p_points_c: distribution.C, p_points_d: distribution.D,
+    });
     if (!result.success) { toast.error('Falha ao enviar'); return; }
-    if (result.offline) { toast.info('Resposta salva localmente — será enviada quando a conexão voltar'); }
+    if (result.offline) {
+      toast.info('Resposta salva localmente — será enviada quando a conexão voltar');
+      setIratDistributions(prev => ({ ...prev, [questionId]: distribution }));
+      setIratSubmitted(prev => new Set(prev).add(questionId));
+      if (currentQ < questions.length - 1) setTimeout(() => setCurrentQ(prev => prev + 1), 300);
+      return;
+    }
+    const score = result.data?.score ?? 0;
     setIratDistributions(prev => ({ ...prev, [questionId]: distribution }));
     setIratScores(prev => ({ ...prev, [questionId]: score }));
     setIratSubmitted(prev => new Set(prev).add(questionId));
@@ -635,18 +639,17 @@ export default function StudentRoomView() {
   // ===== tRAT =====
   const submitTrat = async (questionId: string, option: string) => {
     if (!membership) return;
-    const question = questions.find(q => q.id === questionId);
     const existingAttempts = tratAttempts.filter(a => a.question_id === questionId);
     if (existingAttempts.some(a => a.is_correct)) return;
     if (existingAttempts.length >= 4) return;
     const attemptNumber = existingAttempts.length + 1;
-    const isCorrect = question?.correct_option === option;
-    const result = await resilientSubmit('trat_attempts', 'insert', {
-      team_id: membership.team_id, question_id: questionId, room_id: roomId!,
-      attempt_number: attemptNumber, selected_option: option, is_correct: isCorrect, submitted_by: user!.id,
+    // Correctness is computed server-side from the real answer key (RPC submit_trat_attempt).
+    const result = await resilientSubmit('submit_trat_attempt', 'rpc', {
+      p_question_id: questionId, p_room_id: roomId!, p_selected_option: option,
     });
     if (!result.success) { if (result.error?.code === '23505') toast.error('Opção já tentada'); else toast.error('Falha ao enviar'); return; }
-    if (result.offline) { toast.info('Resposta salva localmente'); }
+    if (result.offline) { toast.info('Resposta salva localmente'); setTratSelectedOption(null); return; }
+    const isCorrect = !!result.data?.is_correct;
     const points = isCorrect ? TRAT_SCORES[attemptNumber - 1] : 0;
     setTratFeedback({ correct: isCorrect, option, points });
     setTratSelectedOption(null);
