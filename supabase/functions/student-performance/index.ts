@@ -134,13 +134,14 @@ function describeApplicationAnswer(question: any, letter: string | null | undefi
 }
 
 // A test/instructor account can rack up a dozen+ rooms over time (confirmed
-// live: one QA account had 11 rooms / 92 iRAT answers) — dumping every room's
-// full per-question detail in one payload made Gemini's own follow-up call
-// time out (60s wasn't enough) even after the JSON stopped being truncated,
-// and would have produced an unreadable wall of text on WhatsApp regardless.
-// Default to the most recently created rooms only; a student who wants an
-// older one can name it via the optional `sala` argument.
-const DEFAULT_ROOM_LIMIT = 3;
+// live: one QA account had 11 rooms / 92 iRAT answers) — dumping even 3
+// rooms' full per-question detail in one payload still made Gemini's own
+// follow-up call time out at 60s, and would have produced an unreadable
+// wall of text on WhatsApp regardless. Default to just the single most
+// recently created room; a student who wants a different one can name it
+// via the optional `sala` argument, after being told (via
+// mais_salas_disponiveis, below) which other rooms exist.
+const DEFAULT_ROOM_LIMIT = 1;
 
 async function findStudentPerformance(supabase: any, email: string, salaFilter?: string | null) {
   const { data: profiles, error: profilesErr } = await supabase
