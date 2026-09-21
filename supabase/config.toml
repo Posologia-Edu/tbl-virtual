@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.sync-documentation]
 verify_jwt = false
+
+[functions.student-performance]
+verify_jwt = false
