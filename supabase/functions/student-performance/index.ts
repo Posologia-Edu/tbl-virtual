@@ -133,7 +133,16 @@ function describeApplicationAnswer(question: any, letter: string | null | undefi
   return question?.[`option_${String(letter).toLowerCase()}`] || letter;
 }
 
-async function findStudentPerformance(supabase: any, email: string) {
+// A test/instructor account can rack up a dozen+ rooms over time (confirmed
+// live: one QA account had 11 rooms / 92 iRAT answers) — dumping every room's
+// full per-question detail in one payload made Gemini's own follow-up call
+// time out (60s wasn't enough) even after the JSON stopped being truncated,
+// and would have produced an unreadable wall of text on WhatsApp regardless.
+// Default to the most recently created rooms only; a student who wants an
+// older one can name it via the optional `sala` argument.
+const DEFAULT_ROOM_LIMIT = 3;
+
+async function findStudentPerformance(supabase: any, email: string, salaFilter?: string | null) {
   const { data: profiles, error: profilesErr } = await supabase
     .from("profiles")
     .select("id")
@@ -169,16 +178,42 @@ async function findStudentPerformance(supabase: any, email: string) {
     }
   }
 
-  const roomIds = Array.from(new Set([...(iratRows || []).map((r: any) => r.room_id), ...teamByRoom.keys()]));
-  if (roomIds.length === 0) {
+  const candidateRoomIds = Array.from(new Set([...(iratRows || []).map((r: any) => r.room_id), ...teamByRoom.keys()]));
+  if (candidateRoomIds.length === 0) {
     return { aluno_email: email, encontrado: false, salas: [] };
   }
 
-  const { data: rooms, error: roomsErr } = await supabase
+  const { data: allRooms, error: allRoomsErr } = await supabase
     .from("rooms")
-    .select("id, name, current_stage, quiz_id, max_grade, individual_pct, team_pct, application_pct")
-    .in("id", roomIds);
-  if (roomsErr) throw roomsErr;
+    .select("id, name, current_stage, quiz_id, max_grade, individual_pct, team_pct, application_pct, created_at")
+    .in("id", candidateRoomIds);
+  if (allRoomsErr) throw allRoomsErr;
+
+  let rooms = allRooms || [];
+  if (salaFilter) {
+    const matched = rooms.filter((r: any) => (r.name || "").toLowerCase().includes(salaFilter.toLowerCase()));
+    if (matched.length === 0) {
+      return {
+        aluno_email: email,
+        encontrado: true,
+        sala_nao_encontrada: salaFilter,
+        salas_disponiveis: rooms.map((r: any) => r.name),
+        salas: [],
+      };
+    }
+    rooms = matched;
+  } else {
+    rooms = [...rooms].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+  const totalSalasDoAluno = rooms.length;
+  const maisSalasDisponiveis = !salaFilter && rooms.length > DEFAULT_ROOM_LIMIT
+    ? rooms.slice(DEFAULT_ROOM_LIMIT).map((r: any) => r.name)
+    : [];
+  if (!salaFilter) rooms = rooms.slice(0, DEFAULT_ROOM_LIMIT);
+
+  // From here on, every heavier query is scoped to just the rooms we're
+  // actually going to report on, not every room the student ever touched.
+  const roomIds = rooms.map((r: any) => r.id);
 
   // Fetched once with full columns and reused as a lookup map for both iRAT
   // and tRAT (they share the same quiz's question bank) — avoids a separate
@@ -200,7 +235,7 @@ async function findStudentPerformance(supabase: any, email: string) {
     questionById.set(q.id, q);
   }
 
-  const teamIds = Array.from(new Set(Array.from(teamByRoom.values()).map((t) => t.teamId)));
+  const teamIds = Array.from(new Set(roomIds.map((id: string) => teamByRoom.get(id)?.teamId).filter(Boolean)));
   const { data: tratRows, error: tratErr } = teamIds.length
     ? await supabase
         .from("trat_attempts")
@@ -353,7 +388,13 @@ async function findStudentPerformance(supabase: any, email: string) {
     };
   });
 
-  return { aluno_email: email, encontrado: true, salas };
+  return {
+    aluno_email: email,
+    encontrado: true,
+    total_salas_do_aluno: totalSalasDoAluno,
+    salas,
+    ...(maisSalasDisponiveis.length ? { mais_salas_disponiveis: maisSalasDisponiveis } : {}),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -371,17 +412,20 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     let email = url.searchParams.get("email");
     let code = url.searchParams.get("code");
+    let sala = url.searchParams.get("sala");
     if (!email && req.method === "POST") {
       try {
         const body = await req.json();
         email = body?.email ?? null;
         code = body?.code ?? code;
+        sala = body?.sala ?? sala;
       } catch {
         // no/invalid JSON body — email stays null, handled below
       }
     }
     email = (email || "").trim().toLowerCase();
     code = (code || "").trim();
+    sala = (sala || "").trim() || null;
 
     if (!email || !email.includes("@")) {
       return json({ error: "Parâmetro 'email' ausente ou inválido." }, 400);
@@ -433,7 +477,7 @@ Deno.serve(async (req) => {
         .update({ consumed_at: new Date().toISOString() })
         .eq("id", pending.id);
 
-      const result = await findStudentPerformance(supabase, email);
+      const result = await findStudentPerformance(supabase, email, sala);
       return json({ status: "verified", ...result });
     }
 
