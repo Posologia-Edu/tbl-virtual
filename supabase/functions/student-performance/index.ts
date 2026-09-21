@@ -30,14 +30,21 @@ import { Resend } from "npm:resend@4.0.0";
 // ever created) and treated as a SET of profile ids, never a single one.
 //
 // iRAT is individually scored and safe to report 1:1 ("you got question X
-// right/wrong"). tRAT and the application-of-concepts stage are scored per
-// TEAM (`trat_attempts`/`application_responses` keyed by team_id, not
-// student_id) — reported with "sua equipe" framing, never "você", since the
-// score reflects the whole team, not just this student. Application-stage
-// correctness is only revealed once the room's stage has actually reached
-// the feedback stage, mirroring the same masking the app's own
-// `get_room_application_questions` RPC applies, so this tool can't be used
-// to peek at the answer key before the teacher releases it.
+// right/wrong") WITH the actual question/answer/explanation text, since a
+// student who already has an irat_responses row has, by definition, already
+// answered that question — the app's own masking only hides correct_option/
+// explanation until answered, so there's nothing left to protect here.
+//
+// tRAT and the application-of-concepts stage are scored per TEAM
+// (`trat_attempts`/`application_responses` keyed by team_id, not student_id)
+// — reported with "sua equipe" framing, never "você", since the score
+// reflects the whole team, not just this student. Both stages' answer KEYS
+// (correct_option/explanation, as opposed to the team's own already-known
+// is_correct result) are only revealed once the room's stage has actually
+// reached the relevant feedback stage, mirroring the exact masking the app's
+// own get_room_quiz_questions/get_room_application_questions RPCs apply —
+// so this tool can't be used to leak the answer key to other teams still
+// working on the same room before the teacher releases it.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +59,13 @@ const FROM_EMAIL = "TBL Virtual <noreply@tbl.posologia.app>";
 
 // IF-AT scratch-card scoring: 1st try correct = 4 pts, 2nd = 2, 3rd = 1, 4th = 0.
 const TRAT_WEIGHT_BY_ATTEMPT = [4, 2, 1, 0];
+// Mirrors the exact stage lists get_room_quiz_questions/get_room_application_questions
+// (supabase/migrations/20260728050000_lock_down_answer_keys_and_grading.sql) use to
+// mask correct_option/explanation from the app's own UI — a team's own is_correct
+// result is always visible the instant they submit (scratch-card feedback), but the
+// question's answer KEY (correct_option/explanation) only becomes visible once the
+// whole room reaches these stages, so this tool can't leak it to other teams early.
+const TRAT_FEEDBACK_STAGES = ["trat_feedback", "appeals_open", "application_open", "application_feedback", "finished"];
 const APPLICATION_FEEDBACK_STAGES = ["application_feedback", "finished"];
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
@@ -94,6 +108,31 @@ function isApplicationAnswerCorrect(correctAnswer: string | null, selected: stri
   return selected === correctAnswer;
 }
 
+// Turns an iRAT/tRAT question's A/B/C/D answer key into the actual option
+// text, so the WhatsApp report can say what the correct answer WAS instead
+// of just the letter (which means nothing without the question in front of
+// you, unlike in the app's own UI).
+function describeMcAnswer(question: any, letter: string | null | undefined): string | null {
+  if (!letter) return null;
+  return question?.[`option_${String(letter).toLowerCase()}`] || letter;
+}
+
+// Same idea for an application-stage answer, which can be authored as a real
+// A/B/C/D option OR as a True/False question rendered with A/B buttons (see
+// isApplicationAnswerCorrect's V<->A / F<->B mapping) — option_a/b/c/d are
+// null for that V/F shape, so fall back to Verdadeiro/Falso by position.
+function describeApplicationAnswer(question: any, letter: string | null | undefined): string | null {
+  if (!letter) return null;
+  if (letter === "V") return "Verdadeiro";
+  if (letter === "F") return "Falso";
+  const hasRealOptions = question?.option_a || question?.option_b || question?.option_c || question?.option_d;
+  if (!hasRealOptions) {
+    if (letter === "A") return "Verdadeiro";
+    if (letter === "B") return "Falso";
+  }
+  return question?.[`option_${String(letter).toLowerCase()}`] || letter;
+}
+
 async function findStudentPerformance(supabase: any, email: string) {
   const { data: profiles, error: profilesErr } = await supabase
     .from("profiles")
@@ -108,7 +147,7 @@ async function findStudentPerformance(supabase: any, email: string) {
 
   const { data: iratRows, error: iratErr } = await supabase
     .from("irat_responses")
-    .select("room_id, question_id, score, is_correct, submitted_at, questions(question_text, sort_order, explanation)")
+    .select("room_id, question_id, score, is_correct, points_a, points_b, points_c, points_d, submitted_at")
     .in("student_id", profileIds);
   if (iratErr) throw iratErr;
 
@@ -141,28 +180,38 @@ async function findStudentPerformance(supabase: any, email: string) {
     .in("id", roomIds);
   if (roomsErr) throw roomsErr;
 
+  // Fetched once with full columns and reused as a lookup map for both iRAT
+  // and tRAT (they share the same quiz's question bank) — avoids a separate
+  // nested join per response row and keeps the "what does this question
+  // actually say" logic in one place.
   const quizIds = Array.from(new Set((rooms || []).map((r: any) => r.quiz_id).filter(Boolean)));
   const { data: quizQuestions, error: quizQErr } = quizIds.length
-    ? await supabase.from("questions").select("id, quiz_id").in("quiz_id", quizIds).is("deleted_at", null)
+    ? await supabase
+        .from("questions")
+        .select("id, quiz_id, sort_order, question_text, option_a, option_b, option_c, option_d, correct_option, explanation")
+        .in("quiz_id", quizIds)
+        .is("deleted_at", null)
     : { data: [], error: null };
   if (quizQErr) throw quizQErr;
   const questionCountByQuiz = new Map<string, number>();
+  const questionById = new Map<string, any>();
   for (const q of quizQuestions || []) {
     questionCountByQuiz.set(q.quiz_id, (questionCountByQuiz.get(q.quiz_id) || 0) + 1);
+    questionById.set(q.id, q);
   }
 
   const teamIds = Array.from(new Set(Array.from(teamByRoom.values()).map((t) => t.teamId)));
   const { data: tratRows, error: tratErr } = teamIds.length
     ? await supabase
         .from("trat_attempts")
-        .select("room_id, team_id, question_id, attempt_number, is_correct")
+        .select("room_id, team_id, question_id, attempt_number, is_correct, selected_option")
         .in("team_id", teamIds)
     : { data: [], error: null };
   if (tratErr) throw tratErr;
 
   const { data: appQuestions, error: appQErr } = await supabase
     .from("application_questions")
-    .select("id, room_id, quiz_id, sort_order, correct_answer")
+    .select("id, room_id, quiz_id, sort_order, question_text, option_a, option_b, option_c, option_d, correct_answer, explanation")
     .or([...roomIds.map((id) => `room_id.eq.${id}`), ...quizIds.map((id) => `quiz_id.eq.${id}`)].join(","))
     .is("deleted_at", null);
   if (appQErr) throw appQErr;
@@ -184,12 +233,12 @@ async function findStudentPerformance(supabase: any, email: string) {
 
     const roomIrat = (iratRows || [])
       .filter((r: any) => r.room_id === room.id)
-      .sort((a: any, b: any) => (a.questions?.sort_order ?? 0) - (b.questions?.sort_order ?? 0));
+      .sort((a: any, b: any) => (questionById.get(a.question_id)?.sort_order ?? 0) - (questionById.get(b.question_id)?.sort_order ?? 0));
     const iratRaw = roomIrat.reduce((sum: number, r: any) => sum + (r.score || 0), 0);
     const iratMax = quizQuestionCount * 4;
-    const explanationsUnlocked = room.current_stage !== "waiting";
 
     const team = teamByRoom.get(room.id) || null;
+    const tratFeedbackReleased = TRAT_FEEDBACK_STAGES.includes(room.current_stage);
 
     let tratDetalhes: any[] = [];
     let tratRaw = 0;
@@ -202,14 +251,20 @@ async function findStudentPerformance(supabase: any, email: string) {
         list.push(a);
         byQuestion.set(a.question_id, list);
       }
-      for (const attempts of byQuestion.values()) {
+      for (const [questionId, attempts] of byQuestion.entries()) {
+        const question = questionById.get(questionId);
+        attempts.sort((a, b) => a.attempt_number - b.attempt_number);
         const correctAttempt = attempts.find((a) => a.is_correct);
         const pontos = correctAttempt ? TRAT_WEIGHT_BY_ATTEMPT[correctAttempt.attempt_number - 1] || 0 : 0;
         tratRaw += pontos;
         tratDetalhes.push({
+          questao: question?.question_text || null,
+          respostas_tentadas_pela_equipe: attempts.map((a) => describeMcAnswer(question, a.selected_option)),
           acertou: !!correctAttempt,
           tentativas: attempts.length,
           pontos,
+          resposta_correta: tratFeedbackReleased ? describeMcAnswer(question, question?.correct_option) : null,
+          explicacao: tratFeedbackReleased ? question?.explanation || null : null,
         });
       }
     }
@@ -226,7 +281,13 @@ async function findStudentPerformance(supabase: any, email: string) {
         const response = (appResponses || []).find((r: any) => r.room_id === room.id && r.team_id === team.teamId && r.question_id === q.id);
         const acertou = isApplicationAnswerCorrect(q.correct_answer, response?.selected_option || null);
         if (acertou) appRaw += 1;
-        appDetalhes.push({ respondida: !!response, acertou });
+        appDetalhes.push({
+          questao: q.question_text,
+          resposta_da_equipe: response ? describeApplicationAnswer(q, response.selected_option) : null,
+          resposta_correta: describeApplicationAnswer(q, q.correct_answer),
+          acertou,
+          explicacao: q.explanation || null,
+        });
       }
     }
 
@@ -243,12 +304,24 @@ async function findStudentPerformance(supabase: any, email: string) {
         acertos: roomIrat.filter((r: any) => r.is_correct).length,
         pontuacao_bruta: iratRaw,
         pontuacao_maxima: iratMax,
-        detalhes: roomIrat.map((r: any) => ({
-          questao: r.questions?.question_text || null,
-          acertou: r.is_correct,
-          pontos: r.score,
-          explicacao: explanationsUnlocked ? r.questions?.explanation || null : null,
-        })),
+        // Correct_option/explanation are only masked by the app until the
+        // student has answered that question — since every row here IS an
+        // answered response, they're already visible in the app's own UI,
+        // so there's no release gate to apply on this side.
+        detalhes: roomIrat.map((r: any) => {
+          const question = questionById.get(r.question_id);
+          const pontosDistribuidos = { A: r.points_a ?? 0, B: r.points_b ?? 0, C: r.points_c ?? 0, D: r.points_d ?? 0 };
+          const escolhaPrincipal = Object.entries(pontosDistribuidos).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+          return {
+            questao: question?.question_text || null,
+            resposta_do_aluno: describeMcAnswer(question, escolhaPrincipal),
+            distribuicao_de_pontos: pontosDistribuidos,
+            resposta_correta: describeMcAnswer(question, question?.correct_option),
+            pontos_ganhos: r.score,
+            acertou: r.is_correct,
+            explicacao: question?.explanation || null,
+          };
+        }),
       },
       equipe: team
         ? {
@@ -258,6 +331,7 @@ async function findStudentPerformance(supabase: any, email: string) {
               total_questoes: quizQuestionCount,
               pontuacao_bruta: tratRaw,
               pontuacao_maxima: tratMax,
+              gabarito_liberado: tratFeedbackReleased,
               detalhes: tratDetalhes,
             },
             aplicacao: appFeedbackReleased
