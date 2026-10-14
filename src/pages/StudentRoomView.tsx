@@ -222,7 +222,7 @@ export default function StudentRoomView() {
       .select('team_id, teams(name, trat_started_at)')
       .eq('user_id', user!.id)
       .eq('room_id', roomId!)
-      .single();
+      .maybeSingle();
     if (data) {
       setMembership(data as any);
       const teamData = (data as any).teams;
