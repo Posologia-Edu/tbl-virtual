@@ -73,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         setTimeout(() => fetchUserData(session.user.id), 0);
-        setTimeout(() => checkSubscription(), 100);
       } else {
         setRole(null);
         setProfile(null);
@@ -87,7 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserData(session.user.id);
-        checkSubscription();
       }
       setLoading(false);
     });
@@ -96,19 +94,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    // Assinatura só interessa a professores/admins. Alunos não chamam a Edge Function
+    // (evita dezenas de chamadas simultâneas quando a turma inteira entra na sala).
+    if (!user || !role || role === 'student') return;
 
+    checkSubscription();
     // Keep subscription state fresh after checkout redirects/webhook propagation
     const retry1 = setTimeout(() => checkSubscription(), 3000);
     const retry2 = setTimeout(() => checkSubscription(), 10000);
-    const intervalId = setInterval(() => checkSubscription(), 60000);
+    const intervalId = setInterval(() => checkSubscription(), 5 * 60 * 1000);
 
     return () => {
       clearTimeout(retry1);
       clearTimeout(retry2);
       clearInterval(intervalId);
     };
-  }, [user, checkSubscription]);
+  }, [user, role, checkSubscription]);
 
   const signUp = async (email: string, password: string, fullName: string, role: AppRole) => {
     const { data, error } = await supabase.auth.signUp({

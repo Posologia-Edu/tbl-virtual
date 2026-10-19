@@ -506,8 +506,22 @@ export default function StudentRoomView() {
     roomRef.current = room;
   }, [room]);
 
+  // Equipe atual, para ignorar eventos Realtime de outras equipes
+  const myTeamIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    myTeamIdRef.current = membership?.team_id ?? null;
+  }, [membership?.team_id]);
+
   useEffect(() => {
     if (!roomId) return;
+
+    let realtimeConnected = false;
+    let participantsTimer: ReturnType<typeof setTimeout> | null = null;
+    // Só reage a eventos da própria equipe (sem team_id no payload, recarrega por segurança)
+    const isMyTeam = (payload: any) => {
+      const tid = payload?.new?.team_id ?? payload?.old?.team_id;
+      return !tid || !myTeamIdRef.current || tid === myTeamIdRef.current;
+    };
 
     const channel = supabase
       .channel(`student-room-${roomId}`)
@@ -537,25 +551,44 @@ export default function StudentRoomView() {
           }
         })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` },
-        () => { loadTratAttempts(); })
+        (payload) => { if (isMyTeam(payload)) loadTratAttempts(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` },
-        () => { loadMembership(); })
+        (payload) => {
+          // Sem equipe ainda: qualquer entrada pode ser a minha. Com equipe: só a minha.
+          const p: any = payload;
+          if (!myTeamIdRef.current || p?.new?.user_id === user?.id || p?.new?.team_id === myTeamIdRef.current) loadMembership();
+        })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` },
-        () => { loadMembership(); })
+        (payload) => {
+          const id = (payload as any)?.new?.id;
+          if (!id || !myTeamIdRef.current || id === myTeamIdRef.current) loadMembership();
+        })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` },
         () => { loadAppData(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` },
-        () => { loadAppData(); })
+        (payload) => { if (isMyTeam(payload)) loadAppData(); })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` },
-        () => { loadParticipants(); })
+        () => {
+          // Entradas em rajada (turma entrando junta) viram uma única recarga
+          if (participantsTimer) return;
+          participantsTimer = setTimeout(() => { participantsTimer = null; loadParticipants(); }, 2000 + Math.random() * 3000);
+        })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` },
-        () => { loadAppeals(); })
+        (payload) => { if (isMyTeam(payload)) loadAppeals(); })
       .subscribe((status) => {
         console.log('[StudentRoom] Realtime status:', status);
+        realtimeConnected = status === 'SUBSCRIBED';
       });
 
-    // Polling fallback: keep room + application data synced even if realtime misses events
+    // Polling fallback: com Realtime conectado só reconcilia a cada 10s; sem Realtime, a cada 2s.
+    let lastPoll = 0;
+    let polling = false;
     const pollInterval = setInterval(async () => {
+      const now = Date.now();
+      if (polling || (realtimeConnected && now - lastPoll < 10000)) return;
+      polling = true;
+      lastPoll = now;
+      try {
       await loadRoomRef.current();
       const latestRoom = roomRef.current;
       if (latestRoom?.current_stage === 'application_open') {
@@ -573,13 +606,17 @@ export default function StudentRoomView() {
       ) {
         await loadAppeals();
       }
+      } finally {
+        polling = false;
+      }
     }, 2000);
 
     return () => {
       clearInterval(pollInterval);
+      if (participantsTimer) clearTimeout(participantsTimer);
       supabase.removeChannel(channel);
     };
-  }, [roomId, loadTratAttempts, loadMembership, loadAppData, loadParticipants, loadAppeals, navigate]);
+  }, [roomId, user?.id, loadTratAttempts, loadMembership, loadAppData, loadParticipants, loadAppeals, navigate]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

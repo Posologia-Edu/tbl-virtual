@@ -241,30 +241,44 @@ export default function TeacherRoomManage() {
 
   useEffect(() => {
     if (!roomId) return;
-    let realtimeWorking = false;
+    let realtimeConnected = false;
+
+    // Agrupa rajadas de eventos (ex.: turma inteira enviando o iRAT) em uma única recarga.
+    // Throttle com trailing: no máximo 1 loadAll por segundo, sem adiar indefinidamente.
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (reloadTimer) return;
+      reloadTimer = setTimeout(() => { reloadTimer = null; loadAllRef.current(); }, 1000);
+    };
 
     const channel = supabase
       .channel(`teacher-room-${roomId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` }, () => { realtimeWorking = true; loadAllRef.current(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_members', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trat_attempts', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'irat_responses', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_responses', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'application_questions', filter: `room_id=eq.${roomId}` }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appeals', filter: `room_id=eq.${roomId}` }, scheduleReload)
       .subscribe((status) => {
         console.log('[TeacherRoom] Realtime status:', status);
+        realtimeConnected = status === 'SUBSCRIBED';
       });
 
-    // Polling fallback: refresh every 5s if realtime hasn't fired
+    // Polling fallback: 5s sem Realtime; com Realtime conectado só reconcilia a cada 20s
+    let lastPoll = Date.now();
     const pollInterval = setInterval(() => {
+      const now = Date.now();
+      if (realtimeConnected && now - lastPoll < 20000) return;
+      lastPoll = now;
       loadAllRef.current();
     }, 5000);
 
     return () => {
       clearInterval(pollInterval);
+      if (reloadTimer) clearTimeout(reloadTimer);
       supabase.removeChannel(channel);
     };
   }, [roomId]);
