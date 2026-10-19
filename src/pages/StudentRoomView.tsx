@@ -192,6 +192,10 @@ export default function StudentRoomView() {
   const [appWaiting, setAppWaiting] = useState(true);
   const [isTeamLeader, setIsTeamLeader] = useState(false);
 
+  // Conexão em tempo real: aviso ao aluno e gatilho de re-subscribe
+  const [realtimeDown, setRealtimeDown] = useState(false);
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
   // Achievement granting
   const grantAchievement = async (key: string, name: string, description: string, icon: string) => {
     if (!user) return;
@@ -506,6 +510,17 @@ export default function StudentRoomView() {
     roomRef.current = room;
   }, [room]);
 
+  // Ressincroniza o estado da etapa atual (após queda de rede, volta à aba, reconexão do Realtime).
+  // Usa ref para sempre chamar as versões mais recentes dos loaders.
+  const resyncRef = useRef<() => Promise<void>>(async () => {});
+  resyncRef.current = async () => {
+    await loadRoom();
+    const stage = roomRef.current?.current_stage;
+    if (stage === 'irat_open') await loadIratResponses();
+    if (stage === 'trat_open') { await loadMembership(); await loadTratAttempts(); await loadAppeals(); }
+    if (stage === 'application_open') { await loadMembership(); await loadAppData(); await loadAppeals(); }
+  };
+
   // Equipe atual, para ignorar eventos Realtime de outras equipes
   const myTeamIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -516,6 +531,8 @@ export default function StudentRoomView() {
     if (!roomId) return;
 
     let realtimeConnected = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let wasDown = false;
     let participantsTimer: ReturnType<typeof setTimeout> | null = null;
     // Só reage a eventos da própria equipe (sem team_id no payload, recarrega por segurança)
     const isMyTeam = (payload: any) => {
@@ -578,7 +595,31 @@ export default function StudentRoomView() {
       .subscribe((status) => {
         console.log('[StudentRoom] Realtime status:', status);
         realtimeConnected = status === 'SUBSCRIBED';
+        if (status === 'SUBSCRIBED') {
+          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+          setRealtimeDown(false);
+          // Eventos perdidos durante a queda: ressincroniza ao reconectar
+          if (wasDown) { wasDown = false; resyncRef.current(); }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          wasDown = true;
+          setRealtimeDown(true);
+          // Se não voltar sozinho em 5s, recria o canal
+          if (!retryTimer) retryTimer = setTimeout(() => {
+            retryTimer = null;
+            if (!realtimeConnected) setReconnectNonce(n => n + 1);
+          }, 5000);
+        }
       });
+
+    // Ao voltar para a aba ou recuperar a rede (celular bloqueado, troca de Wi-Fi): ressincroniza
+    // e, se o canal não estiver conectado, recria.
+    const handleResume = () => {
+      if (document.visibilityState === 'hidden') return;
+      resyncRef.current();
+      if (!realtimeConnected) setReconnectNonce(n => n + 1);
+    };
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('online', handleResume);
 
     // Polling fallback: com Realtime conectado só reconcilia a cada 10s; sem Realtime, a cada 2s.
     let lastPoll = 0;
@@ -614,9 +655,12 @@ export default function StudentRoomView() {
     return () => {
       clearInterval(pollInterval);
       if (participantsTimer) clearTimeout(participantsTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('online', handleResume);
       supabase.removeChannel(channel);
     };
-  }, [roomId, user?.id, loadTratAttempts, loadMembership, loadAppData, loadParticipants, loadAppeals, navigate]);
+  }, [roomId, user?.id, reconnectNonce, loadTratAttempts, loadMembership, loadAppData, loadParticipants, loadAppeals, navigate]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -1916,7 +1960,7 @@ export default function StudentRoomView() {
   return (
     <>
       <AchievementToast />
-      <ConnectionStatus pendingCount={pendingCount} syncing={syncing} />
+      <ConnectionStatus pendingCount={pendingCount} syncing={syncing} reconnecting={realtimeDown} />
       <div className="min-h-screen bg-background">
         {room.current_stage !== 'waiting' && room.current_stage !== 'irat_open' && room.current_stage !== 'trat_open' && room.current_stage !== 'application_open' && room.current_stage !== 'application_feedback' && room.current_stage !== 'trat_feedback' && room.current_stage !== 'appeals_open' && (
           <header className="border-b bg-card">

@@ -239,9 +239,13 @@ export default function TeacherRoomManage() {
   const loadAllRef = useRef(loadAll);
   loadAllRef.current = loadAll;
 
+  const [teacherReconnectNonce, setTeacherReconnectNonce] = useState(0);
+
   useEffect(() => {
     if (!roomId) return;
     let realtimeConnected = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let wasDown = false;
 
     // Agrupa rajadas de eventos (ex.: turma inteira enviando o iRAT) em uma única recarga.
     // Throttle com trailing: no máximo 1 loadAll por segundo, sem adiar indefinidamente.
@@ -265,7 +269,26 @@ export default function TeacherRoomManage() {
       .subscribe((status) => {
         console.log('[TeacherRoom] Realtime status:', status);
         realtimeConnected = status === 'SUBSCRIBED';
+        if (status === 'SUBSCRIBED') {
+          if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+          if (wasDown) { wasDown = false; loadAllRef.current(); }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          wasDown = true;
+          if (!retryTimer) retryTimer = setTimeout(() => {
+            retryTimer = null;
+            if (!realtimeConnected) setTeacherReconnectNonce(n => n + 1);
+          }, 5000);
+        }
       });
+
+    // Ao voltar para a aba ou recuperar a rede: recarrega e, se preciso, recria o canal
+    const handleResume = () => {
+      if (document.visibilityState === 'hidden') return;
+      loadAllRef.current();
+      if (!realtimeConnected) setTeacherReconnectNonce(n => n + 1);
+    };
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('online', handleResume);
 
     // Polling fallback: 5s sem Realtime; com Realtime conectado só reconcilia a cada 20s
     let lastPoll = Date.now();
@@ -279,9 +302,12 @@ export default function TeacherRoomManage() {
     return () => {
       clearInterval(pollInterval);
       if (reloadTimer) clearTimeout(reloadTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('online', handleResume);
       supabase.removeChannel(channel);
     };
-  }, [roomId]);
+  }, [roomId, teacherReconnectNonce]);
 
   const handleAdvanceClick = () => {
     if (!room) return;

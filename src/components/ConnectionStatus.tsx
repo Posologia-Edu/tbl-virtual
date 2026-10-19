@@ -6,15 +6,17 @@ import { useTranslation } from 'react-i18next';
 interface ConnectionStatusProps {
   pendingCount?: number;
   syncing?: boolean;
+  /** Online, mas a conexão em tempo real com a sala caiu (reconectando) */
+  reconnecting?: boolean;
 }
 
-export default function ConnectionStatus({ pendingCount = 0, syncing = false }: ConnectionStatusProps) {
+export default function ConnectionStatus({ pendingCount = 0, syncing = false, reconnecting = false }: ConnectionStatusProps) {
   const isOnline = useConnectionStatus();
   const { t } = useTranslation();
 
   return (
     <AnimatePresence>
-      {(!isOnline || pendingCount > 0) && (
+      {(!isOnline || pendingCount > 0 || reconnecting) && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -38,6 +40,11 @@ export default function ConnectionStatus({ pendingCount = 0, syncing = false }: 
             <>
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               <span>{t('offline.syncing', 'Sincronizando respostas...')}</span>
+            </>
+          ) : pendingCount === 0 && reconnecting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              <span>{t('offline.reconnecting', 'Reconectando à sala...')}</span>
             </>
           ) : (
             <>

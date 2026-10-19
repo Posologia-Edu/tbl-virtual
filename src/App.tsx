@@ -2,30 +2,38 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AccessibilityProvider } from "@/hooks/useAccessibility";
 import { useTranslation } from "react-i18next";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
-import TeacherDashboard from "./pages/TeacherDashboard";
-import StudentDashboard from "./pages/StudentDashboard";
-import QuizManager from "./pages/QuizManager";
 import JoinRoomPage from "./pages/JoinRoomPage";
-import StudentRoomView from "./pages/StudentRoomView";
-import TeacherRoomManage from "./pages/TeacherRoomManage";
 import NotFound from "./pages/NotFound";
-import DocumentationPage from "./pages/DocumentationPage";
-import PricingPage from "./pages/PricingPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import FeaturesPage from "./pages/FeaturesPage";
-import ContactPage from "./pages/ContactPage";
-import TermsPage from "./pages/TermsPage";
-import PrivacyPage from "./pages/PrivacyPage";
-import CookiesPage from "./pages/CookiesPage";
 import CookieConsent from "./components/CookieConsent";
-import OracleChat from "./components/OracleChat";
+
+const TeacherDashboard = lazy(() => import("./pages/TeacherDashboard"));
+const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
+const QuizManager = lazy(() => import("./pages/QuizManager"));
+const StudentRoomView = lazy(() => import("./pages/StudentRoomView"));
+const TeacherRoomManage = lazy(() => import("./pages/TeacherRoomManage"));
+const DocumentationPage = lazy(() => import("./pages/DocumentationPage"));
+const PricingPage = lazy(() => import("./pages/PricingPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const FeaturesPage = lazy(() => import("./pages/FeaturesPage"));
+const ContactPage = lazy(() => import("./pages/ContactPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const CookiesPage = lazy(() => import("./pages/CookiesPage"));
+const OracleChat = lazy(() => import("./components/OracleChat"));
+
+const PageFallback = () => (
+  <div className="flex items-center justify-center min-h-screen" role="status" aria-live="polite">
+    <div className="h-8 w-48 rounded-xl bg-muted animate-pulse" />
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -93,7 +101,8 @@ const App = () => (
           <AuthProvider>
             <a href="#main-content" className="skip-to-content">Skip to content</a>
             <CookieConsent />
-            <OracleChat />
+            <Suspense fallback={null}><OracleChat /></Suspense>
+            <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<AuthPage />} />
@@ -114,6 +123,7 @@ const App = () => (
               <Route path="/cookies" element={<CookiesPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
