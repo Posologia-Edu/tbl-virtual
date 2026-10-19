@@ -16,6 +16,7 @@ import {
   GraduationCap, FileText, Download, ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { computeRoomScores } from '@/lib/tblScoring';
 
 type ClassItem = {
   id: string;
@@ -45,8 +46,16 @@ type StudentInClass = {
 type ReportRow = {
   student_id: string;
   full_name: string;
-  rooms: { room_id: string; room_name: string; irat_score: number; trat_score: number; app_score: number; final_score: number }[];
+  // final_score null = aluno não participou da sala
+  rooms: { room_id: string; room_name: string; irat_score: number; trat_score: number; app_score: number; final_score: number | null; team_name?: string | null }[];
   average: number;
+};
+
+// Snapshot salvo em class_reports: não depende do estado atual das salas até ser regenerado.
+type SavedReport = {
+  rooms: { id: string; name: string }[];
+  rows: ReportRow[];
+  generated_at: string;
 };
 
 const stageLabels: Record<string, string> = {
@@ -60,7 +69,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
   const [rooms, setRooms] = useState<RoomInClass[]>([]);
   const [unassignedRooms, setUnassignedRooms] = useState<RoomInClass[]>([]);
   const [students, setStudents] = useState<StudentInClass[]>([]);
-  const [report, setReport] = useState<ReportRow[]>([]);
+  const [report, setReport] = useState<SavedReport | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Dialog state
@@ -72,6 +82,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editSemester, setEditSemester] = useState('');
+
+  const [activeTab, setActiveTab] = useState('rooms');
 
   const loadClasses = useCallback(async () => {
     const { data } = await supabase
@@ -126,6 +138,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
 
   const openClass = async (cls: ClassItem) => {
     setSelectedClass(cls);
+    setActiveTab('rooms');
+    setReport(null);
     await loadClassDetails(cls.id);
   };
 
@@ -135,6 +149,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
       supabase.from('rooms').select('id, name, code, current_stage, created_at, class_id').eq('teacher_id', userId).is('class_id', null).is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('class_students').select('id, student_id, enrolled_at').eq('class_id', classId),
     ]);
+    const { data: saved } = await (supabase as any).from('class_reports').select('data, generated_at').eq('class_id', classId).maybeSingle();
+    setReport(saved ? { ...saved.data, generated_at: saved.generated_at } : null);
     setRooms((classRooms as RoomInClass[]) || []);
     setUnassignedRooms((allRooms as RoomInClass[]) || []);
 
@@ -193,7 +209,8 @@ export default function ClassManagement({ userId }: { userId: string }) {
     if (selectedClass) loadClassDetails(selectedClass.id);
   };
 
-  // Generate consolidated report
+  // Gera o boletim com exatamente a fórmula do Relatório Final da sala (src/lib/tblScoring.ts)
+  // e grava no banco, sobrescrevendo o boletim anterior da turma.
   const generateReport = async () => {
     if (!selectedClass || rooms.length === 0 || students.length === 0) {
       toast.info('Vincule salas e matricule alunos primeiro');
@@ -202,92 +219,87 @@ export default function ClassManagement({ userId }: { userId: string }) {
     const finishedRooms = rooms.filter(r => r.current_stage === 'finished');
     if (finishedRooms.length === 0) { toast.info('Nenhuma sala finalizada nesta turma'); return; }
 
-    const roomIds = finishedRooms.map(r => r.id);
-    const studentIds = students.map(s => s.student_id);
+    setGenerating(true);
+    try {
+      const roomIds = finishedRooms.map(r => r.id);
+      const [
+        { data: roomsDetail }, { data: participants }, { data: teamsData }, { data: appealsData },
+        { data: iratData }, { data: tratData }, { data: appQData }, { data: appRespData },
+      ] = await Promise.all([
+        supabase.from('rooms').select('*').in('id', roomIds),
+        supabase.from('room_participants').select('room_id, user_id').in('room_id', roomIds),
+        supabase.from('teams').select('id, room_id, name, team_members(user_id)').in('room_id', roomIds),
+        supabase.from('appeals').select('*').in('room_id', roomIds),
+        supabase.from('irat_responses').select('*').in('room_id', roomIds),
+        supabase.from('trat_attempts').select('*').in('room_id', roomIds),
+        supabase.from('application_questions').select('*').in('room_id', roomIds),
+        supabase.from('application_responses').select('*').in('room_id', roomIds),
+      ]);
+      const quizIds = [...new Set((roomsDetail || []).map((r: any) => r.quiz_id).filter(Boolean))] as string[];
+      const { data: questionsData } = quizIds.length > 0
+        ? await supabase.from('questions').select('id, quiz_id').in('quiz_id', quizIds)
+        : { data: [] as any[] };
 
-    const [{ data: iratData }, { data: tratData }, { data: appRespData }, { data: appQData }, { data: roomsDetail }] = await Promise.all([
-      supabase.from('irat_responses').select('*').in('room_id', roomIds).in('student_id', studentIds),
-      supabase.from('trat_attempts').select('*').in('room_id', roomIds),
-      supabase.from('application_responses').select('*').in('room_id', roomIds),
-      supabase.from('application_questions').select('*').in('room_id', roomIds),
-      supabase.from('rooms').select('*').in('id', roomIds),
-    ]);
-
-    // Get team memberships
-    const { data: teamMembers } = await supabase.from('team_members').select('*').in('room_id', roomIds).in('user_id', studentIds);
-    const { data: questions } = await supabase.from('questions').select('*');
-
-    const reportRows: ReportRow[] = students.map(student => {
-      const roomScores = finishedRooms.map(room => {
-        const roomDetail = (roomsDetail || []).find((r: any) => r.id === room.id) as any;
-        const maxGrade = roomDetail?.max_grade || 10;
-        const indPct = (roomDetail?.individual_pct || 30) / 100;
-        const tmPct = (roomDetail?.team_pct || 40) / 100;
-        const appPct = (roomDetail?.application_pct || 30) / 100;
-
-        // iRAT score
-        const studentIrat = (iratData || []).filter((r: any) => r.room_id === room.id && r.student_id === student.student_id);
-        const totalQ = (questions || []).filter((q: any) => q.quiz_id === roomDetail?.quiz_id).length || 1;
-        const iratRaw = studentIrat.reduce((s: number, r: any) => s + (r.score || 0), 0);
-        const iratMax = totalQ * 4;
-        const iratNorm = iratMax > 0 ? (iratRaw / iratMax) : 0;
-
-        // tRAT score
-        const tm = (teamMembers || []).find((m: any) => m.room_id === room.id && m.user_id === student.student_id);
-        let tratNorm = 0;
-        if (tm) {
-          const teamAttempts = (tratData || []).filter((a: any) => a.room_id === room.id && a.team_id === tm.team_id);
-          const qIds = [...new Set(teamAttempts.map((a: any) => a.question_id))];
-          let tratRaw = 0;
-          qIds.forEach(qid => {
-            const correct = teamAttempts.find((a: any) => a.question_id === qid && a.is_correct);
-            if (correct) tratRaw += [4, 2, 1, 0][(correct.attempt_number || 1) - 1] || 0;
-          });
-          tratNorm = iratMax > 0 ? (tratRaw / iratMax) : 0;
-        }
-
-        // App score
-        let appNorm = 0;
-        if (tm) {
-          const teamAppResp = (appRespData || []).filter((r: any) => r.room_id === room.id && r.team_id === tm.team_id);
-          const roomAppQ = (appQData || []).filter((q: any) => q.room_id === room.id);
-          if (roomAppQ.length > 0) {
-            let correct = 0;
-            teamAppResp.forEach((r: any) => {
-              const q = roomAppQ.find((q: any) => q.id === r.question_id);
-              if (q && r.selected_option?.trim() === q.correct_answer?.trim()) correct++;
-            });
-            appNorm = correct / roomAppQ.length;
-          }
-        }
-
-        const final_score = parseFloat(((iratNorm * indPct + tratNorm * tmPct + appNorm * appPct) * maxGrade).toFixed(2));
-        return {
-          room_id: room.id, room_name: room.name,
-          irat_score: parseFloat((iratNorm * maxGrade).toFixed(2)),
-          trat_score: parseFloat((tratNorm * maxGrade).toFixed(2)),
-          app_score: parseFloat((appNorm * maxGrade).toFixed(2)),
-          final_score,
-        };
+      // roomId -> (userId -> score)
+      const scoresByRoom: Record<string, Record<string, ReturnType<typeof computeRoomScores>[number]>> = {};
+      finishedRooms.forEach(room => {
+        const detail = (roomsDetail || []).find((r: any) => r.id === room.id) as any;
+        const inRoom = (arr: any[] | null) => (arr || []).filter(x => x.room_id === room.id);
+        const scores = computeRoomScores({
+          room: detail || {},
+          participantIds: inRoom(participants).map(p => p.user_id),
+          questions: (questionsData || []).filter((q: any) => q.quiz_id === detail?.quiz_id),
+          // o relatório da sala só considera times com membros
+          teams: inRoom(teamsData).filter(t => (t.team_members || []).length > 0),
+          iratResponses: inRoom(iratData),
+          tratAttempts: inRoom(tratData),
+          appeals: inRoom(appealsData),
+          appQuestions: inRoom(appQData),
+          appResponses: inRoom(appRespData),
+        });
+        scoresByRoom[room.id] = Object.fromEntries(scores.map(s => [s.studentId, s]));
       });
 
-      const avg = roomScores.length > 0 ? parseFloat((roomScores.reduce((s, r) => s + r.final_score, 0) / roomScores.length).toFixed(2)) : 0;
-      return { student_id: student.student_id, full_name: student.full_name, rooms: roomScores, average: avg };
-    });
+      const rows: ReportRow[] = students.map(student => {
+        const roomScores = finishedRooms.map(room => {
+          const s = scoresByRoom[room.id][student.student_id];
+          if (!s) return { room_id: room.id, room_name: room.name, irat_score: 0, trat_score: 0, app_score: 0, final_score: null, team_name: null };
+          return {
+            room_id: room.id, room_name: room.name,
+            irat_score: parseFloat(s.iratGrade.toFixed(2)),
+            trat_score: parseFloat(s.tratGrade.toFixed(2)),
+            app_score: parseFloat(s.appGrade.toFixed(2)),
+            final_score: parseFloat(s.finalGrade.toFixed(2)),
+            team_name: s.teamName,
+          };
+        });
+        const graded = roomScores.filter(r => r.final_score !== null) as { final_score: number }[];
+        const average = graded.length > 0
+          ? parseFloat((graded.reduce((sum, r) => sum + r.final_score, 0) / graded.length).toFixed(2))
+          : 0;
+        return { student_id: student.student_id, full_name: student.full_name, rooms: roomScores, average };
+      });
+      rows.sort((a, b) => b.average - a.average);
 
-    reportRows.sort((a, b) => b.average - a.average);
-    setReport(reportRows);
-    toast.success('Boletim gerado!');
+      const generated_at = new Date().toISOString();
+      const data = { rooms: finishedRooms.map(r => ({ id: r.id, name: r.name })), rows };
+      const { error } = await (supabase as any).from('class_reports')
+        .upsert({ class_id: selectedClass.id, data, generated_at }, { onConflict: 'class_id' });
+      if (error) toast.error('Boletim gerado, mas falhou ao salvar no banco');
+      else toast.success('Boletim gerado e salvo!');
+      setReport({ ...data, generated_at });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const exportCSV = () => {
-    if (report.length === 0) return;
-    const finishedRooms = rooms.filter(r => r.current_stage === 'finished');
-    const headers = ['Aluno', ...finishedRooms.map(r => r.name), 'Média'];
-    const rows = report.map(r => {
-      const scores = finishedRooms.map(room => {
+    if (!report || report.rows.length === 0) return;
+    const headers = ['Aluno', ...report.rooms.flatMap(r => [r.name, 'Grupo - ' + r.name]), 'Média'];
+    const rows = report.rows.map(r => {
+      const scores = report.rooms.flatMap(room => {
         const s = r.rooms.find(rs => rs.room_id === room.id);
-        return s ? s.final_score.toString() : '-';
+        return [s && s.final_score !== null ? s.final_score.toString() : '-', s?.team_name || '-'];
       });
       return [r.full_name, ...scores, r.average.toString()];
     });
@@ -404,7 +416,7 @@ export default function ClassManagement({ userId }: { userId: string }) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => { setSelectedClass(null); setReport([]); }}>
+        <Button variant="ghost" size="icon" onClick={() => { setSelectedClass(null); setReport(null); }}>
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
@@ -416,7 +428,7 @@ export default function ClassManagement({ userId }: { userId: string }) {
         </div>
       </div>
 
-      <Tabs defaultValue="rooms">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="rooms" className="gap-1"><FolderOpen className="w-4 h-4" /> Salas</TabsTrigger>
           <TabsTrigger value="students" className="gap-1"><Users className="w-4 h-4" /> Alunos</TabsTrigger>
@@ -515,46 +527,49 @@ export default function ClassManagement({ userId }: { userId: string }) {
         {/* Report Tab */}
         <TabsContent value="report" className="space-y-4 mt-4">
           <div className="flex gap-2">
-            <Button onClick={generateReport}>
-              <FileText className="w-4 h-4 mr-1" /> Gerar Boletim
+            <Button onClick={generateReport} disabled={generating}>
+              <FileText className="w-4 h-4 mr-1" /> {generating ? 'Gerando...' : report ? 'Regenerar Boletim' : 'Gerar Boletim'}
             </Button>
-            {report.length > 0 && (
+            {report && report.rows.length > 0 && (
               <Button variant="outline" onClick={exportCSV}>
                 <Download className="w-4 h-4 mr-1" /> Exportar CSV
               </Button>
             )}
           </div>
 
-          {report.length > 0 && (
+          {report && report.rows.length > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Boletim Consolidado — {selectedClass.name}</CardTitle>
-                <CardDescription>{finishedRooms.length} atividade(s) finalizada(s)</CardDescription>
+                <CardDescription>
+                  {report.rooms.length} atividade(s) finalizada(s) · gerado em {new Date(report.generated_at).toLocaleString('pt-BR')}
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-primary/10">
                       <TableHead className="sticky left-0 bg-card z-10">Aluno</TableHead>
-                      {finishedRooms.map(r => (
+                      {report.rooms.map(r => (
                         <TableHead key={r.id} className="text-center min-w-[100px]">{r.name}</TableHead>
                       ))}
                       <TableHead className="text-center font-bold">Média</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {report.map(row => (
+                    {report.rows.map(row => (
                       <TableRow key={row.student_id}>
                         <TableCell className="font-medium sticky left-0 bg-card z-10">{row.full_name}</TableCell>
-                        {finishedRooms.map(room => {
+                        {report.rooms.map(room => {
                           const s = row.rooms.find(rs => rs.room_id === room.id);
                           return (
                             <TableCell key={room.id} className="text-center">
-                              {s ? s.final_score : '-'}
+                              {s && s.final_score !== null ? s.final_score.toFixed(2) : '-'}
+                              {s?.team_name && <div className="text-xs text-muted-foreground font-normal">{s.team_name}</div>}
                             </TableCell>
                           );
                         })}
-                        <TableCell className="text-center font-bold">{row.average}</TableCell>
+                        <TableCell className="text-center font-bold">{row.average.toFixed(2)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

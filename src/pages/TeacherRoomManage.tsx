@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { computeRoomScores } from '@/lib/tblScoring';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClinicalCaseQuestion, splitClinicalCase } from '@/components/ClinicalCaseQuestion';
@@ -1507,68 +1508,25 @@ export default function TeacherRoomManage() {
   const APP_PCT = ((room as any).application_pct ?? 30) / 100;
 
   const maxGradeVal = parseFloat((room as any).max_grade) || 10;
-  const maxIratScore = questions.length * 4;
-  const maxTratScore = questions.length * 4;
-  const maxAppScore = appQuestions.length > 0 ? appQuestions.length : 1;
 
-  // Compute per-student data for final report
+  // Compute per-student data for final report (fórmula compartilhada com o Boletim: src/lib/tblScoring.ts)
   const computeStudentReport = () => {
-    return participants.map((p: any) => {
-      const studentId = p.user_id;
-      const name = p.profiles?.full_name || 'Aluno';
-      const ra = p.participant_code || '—';
-
-      const studentIrat = iratResponses.filter((r: any) => r.student_id === studentId);
-      const iratRawScore = studentIrat.reduce((sum: number, r: any) => sum + r.score, 0);
-
-      const studentTeam = teams.find((t: any) =>
-        (t.team_members || []).some((m: any) => m.user_id === studentId)
-      );
-      const teamId = studentTeam?.id;
-
-      let tratRawScore = 0;
-      if (teamId) {
-        const teamAttempts = tratAttemptsAll.filter((a: any) => a.team_id === teamId && a.is_correct);
-        tratRawScore = teamAttempts.reduce((sum: number, a: any) => sum + [4, 2, 1, 0][a.attempt_number - 1], 0);
-        
-        // Add bonus for accepted appeals: grant full points (4) minus what they already got
-        const acceptedAppeals = appeals.filter((ap: any) => ap.team_id === teamId && ap.status === 'accepted');
-        acceptedAppeals.forEach((ap: any) => {
-          const existingAttempt = tratAttemptsAll.find((a: any) => a.team_id === teamId && a.question_id === ap.question_id && a.is_correct);
-          const existingScore = existingAttempt ? [4, 2, 1, 0][existingAttempt.attempt_number - 1] : 0;
-          tratRawScore += (4 - existingScore); // Grant full marks minus what was already awarded
-        });
-      }
-
-      let appRawScore = 0;
-      if (teamId && appQuestions.length > 0) {
-        appRawScore = appQuestions.filter(q =>
-          appResponses.some((r: any) => r.question_id === q.id && r.team_id === teamId && (
-            (q.correct_answer === 'V' && r.selected_option === 'A') ||
-            (q.correct_answer === 'F' && r.selected_option === 'B') ||
-            (q.correct_answer === 'A' && r.selected_option === 'A') ||
-            (q.correct_answer === 'B' && r.selected_option === 'B') ||
-            (q.correct_answer === 'C' && r.selected_option === 'C') ||
-            (q.correct_answer === 'D' && r.selected_option === 'D')
-          ))
-        ).length;
-      }
-
-      const iratBaseGrade = maxIratScore > 0 ? (iratRawScore / maxIratScore) * maxGradeVal : 0;
-      const tratBaseGrade = maxTratScore > 0 ? (tratRawScore / maxTratScore) * maxGradeVal : 0;
-      const appBaseGrade = maxAppScore > 0 ? (appRawScore / maxAppScore) * maxGradeVal : 0;
-
-      // Stage points must respect configured maxima (ex.: 3.00, 4.00, 3.00 for 30/40/30 on max 10)
-      const iratGrade = iratBaseGrade * IRAT_PCT;
-      const tratGrade = tratBaseGrade * TRAT_PCT;
-      const appGrade = appBaseGrade * APP_PCT;
-      const finalGrade = iratGrade + tratGrade + appGrade;
-
+    const scores = computeRoomScores({
+      room: room as any,
+      participantIds: participants.map((p: any) => p.user_id),
+      questions, teams, iratResponses,
+      tratAttempts: tratAttemptsAll, appeals, appQuestions, appResponses,
+    });
+    return participants.map((p: any, i: number) => {
+      const s = scores[i];
       return {
-        ra, name, studentId, teamName: studentTeam?.name || '—',
-        iratRaw: iratRawScore, tratRaw: tratRawScore, appRaw: appRawScore,
-        iratGrade: iratGrade.toFixed(2), tratGrade: tratGrade.toFixed(2),
-        appGrade: appGrade.toFixed(2), finalGrade: finalGrade.toFixed(2),
+        ra: p.participant_code || '—',
+        name: p.profiles?.full_name || 'Aluno',
+        studentId: p.user_id,
+        teamName: s.teamName || '—',
+        iratRaw: s.iratRaw, tratRaw: s.tratRaw, appRaw: s.appRaw,
+        iratGrade: s.iratGrade.toFixed(2), tratGrade: s.tratGrade.toFixed(2),
+        appGrade: s.appGrade.toFixed(2), finalGrade: s.finalGrade.toFixed(2),
       };
     });
   };
