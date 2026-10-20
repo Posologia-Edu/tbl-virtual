@@ -12,6 +12,7 @@ import AuthPage from "./pages/AuthPage";
 import JoinRoomPage from "./pages/JoinRoomPage";
 import NotFound from "./pages/NotFound";
 import CookieConsent from "./components/CookieConsent";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 const TeacherDashboard = lazy(() => import("./pages/TeacherDashboard"));
 const StudentDashboard = lazy(() => import("./pages/StudentDashboard"));
@@ -102,6 +103,7 @@ const App = () => (
             <a href="#main-content" className="skip-to-content">Skip to content</a>
             <CookieConsent />
             <Suspense fallback={null}><OracleChat /></Suspense>
+            <AppErrorBoundary>
             <Suspense fallback={<PageFallback />}>
             <Routes>
               <Route path="/" element={<LandingPage />} />
@@ -124,6 +126,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
             </Suspense>
+            </AppErrorBoundary>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

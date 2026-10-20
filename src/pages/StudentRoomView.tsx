@@ -899,13 +899,15 @@ export default function StudentRoomView() {
     }
 
     if (questions.length === 0) return <p className="text-center text-muted-foreground py-8">Nenhuma questão carregada.</p>;
-    const q = questions[currentQ];
+    // Índice fora do intervalo (ex.: lista recarregada) derrubaria a tela; usa a última questão válida
+    const qIdx = Math.min(Math.max(currentQ, 0), questions.length - 1);
+    const q = questions[qIdx];
     const submitted = iratSubmitted.has(q.id);
     const dist = getIratDist(q.id);
     const total = dist.A + dist.B + dist.C + dist.D;
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" key={q.id}>
         <div className="text-center space-y-1">
           <div className="flex items-center justify-center gap-2">
             <Zap className="w-5 h-5 text-primary" />
