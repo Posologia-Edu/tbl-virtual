@@ -429,6 +429,7 @@ export default function QuizManager() {
           option_c: null,
           option_d: null,
           correct_answer: q.correct_answer,
+          explanation: q.explanation || null,
           sort_order: i,
         }));
         await supabase.from('application_questions').insert(appInserts);
@@ -488,6 +489,7 @@ export default function QuizManager() {
           question_text: q.question_text,
           option_a: 'V', option_b: 'F', option_c: null, option_d: null,
           correct_answer: q.correct_answer,
+          explanation: q.explanation || null,
           sort_order: appQuestions.length + i,
         }));
         await supabase.from('application_questions').insert(appInserts);

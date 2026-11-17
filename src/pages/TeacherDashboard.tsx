@@ -1035,12 +1035,12 @@ export default function TeacherDashboard() {
 
       if (data.irat_questions?.length) {
         await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
-          quiz_id: quiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, sort_order: i,
+          quiz_id: quiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, explanation: q.explanation || null, sort_order: i,
         })));
       }
       if (data.application_questions?.length) {
         await supabase.from('application_questions').insert(data.application_questions.map((q: any, i: number) => ({
-          quiz_id: quiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, sort_order: i,
+          quiz_id: quiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, explanation: q.explanation || null, sort_order: i,
         })));
       }
 
@@ -1082,12 +1082,12 @@ export default function TeacherDashboard() {
 
       if (data.irat_questions?.length) {
         await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
-          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, sort_order: questions.length + i,
+          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, correct_option: q.correct_option, explanation: q.explanation || null, sort_order: questions.length + i,
         })));
       }
       if (data.application_questions?.length) {
         await supabase.from('application_questions').insert(data.application_questions.map((q: any, i: number) => ({
-          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, sort_order: appQuestions.length + i,
+          quiz_id: selectedQuiz.id, question_text: q.question_text, option_a: 'V', option_b: 'F', option_c: null, option_d: null, correct_answer: q.correct_answer, explanation: q.explanation || null, sort_order: appQuestions.length + i,
         })));
       }
 

@@ -52,6 +52,7 @@ export function auditIrat(questions: IratQuestion[]): Map<number, string[]> {
         add(i, `a alternativa correta é a mais curta (${cLen} caracteres contra média ${Math.round(mean)}); ajuste os distratores para tamanho parecido`);
       }
     }
+    if (!/segundo o material/i.test(q.explanation ?? "")) add(i, "a explicação não termina com \"Segundo o material: «trecho literal»\"");
     LETTERS.forEach((l) => {
       const t = getOpt(q, l);
       if (ALL_NONE.test(t)) add(i, `alternativa ${l} usa "todas/nenhuma das anteriores"`);
@@ -107,7 +108,7 @@ Defeitos que exigem reescrita:
 - alternativas com tamanho diferente (a correta não pode ser a mais longa nem a mais curta, diferença de até ~10%);
 - o enunciado afirma "deve" onde o material diz "considerar/pode/sugere", ou afirma algo que o material não sustenta;
 - fármaco, associação, dose ou valor que não existe ou não consta do material;
-- explicação que cita letras de alternativas (descreva pelo conteúdo).
+- explicação que cita letras de alternativas (descreva pelo conteúdo) ou que não termina com: Segundo o material: «trecho literal curto» (o trecho deve existir no material; se o fato não tem sustentação no material, troque o fato).
 Ao reescrever, mantenha o mesmo fato de base do material e eleve a plausibilidade dos distratores (leituras parciais, valores próximos, mecanismos de classes vizinhas). Mantenha 4 alternativas.
 
 O campo "problemas_automaticos" lista defeitos já detectados por código; corrija-os, mas também aplique o teste acima às questões sem problemas listados.

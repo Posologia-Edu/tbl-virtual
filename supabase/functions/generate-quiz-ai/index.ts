@@ -296,6 +296,9 @@ FORMATO OBRIGATÓRIO PARA AS 3 QUESTÕES DE APLICAÇÃO (CRÍTICO):
   • Listas (-, 1.) e ênfase moderada (**negrito**, *itálico*) quando agregar clareza.
   Use formatação SOMENTE quando ela melhorar a compreensão clínica/científica; texto comum ainda é o padrão.
 - Em "correct_answer", use apenas "V" ou "F".
+- Cada afirmação deve ser SUSTENTADA PELO MATERIAL: o gabarito precisa ser defensável pela fonte, sem depender de interpretação própria nem de outra diretriz.
+- PROIBIDO tornar uma afirmação falsa apenas por um absoluto ("obrigatoriamente", "sempre", "nunca", "exclusivamente", "somente") a não ser que o material use esse termo. A falsidade deve vir de um erro técnico real (dose, critério, conduta, mecanismo, classificação).
+- Cada afirmação deve ter também o campo "explanation": 2 a 4 frases justificando V ou F e terminando com: Segundo o material: «trecho literal curto». Não cite números de afirmação.
 
 PROIBIDO:
 - Omitir o caso clínico nas questões 2 e 3 (o caso DEVE estar nas 3, idêntico).
@@ -314,6 +317,7 @@ EXPLICAÇÃO (obrigatória para cada questão do iRAT/tRAT):
   1) Indique qual é a alternativa correta (descrevendo o seu conteúdo) e justifique tecnicamente por que ela está correta (com base no material).
   2) Comente brevemente por que cada uma das demais está errada, descrevendo-as pelo CONTEÚDO.
   3) NÃO cite letras de alternativas (A, B, C, D) na explicação: a ordem das alternativas pode ser reorganizada depois da geração.
+  4) Termine SEMPRE com a frase: Segundo o material: «trecho literal curto do material que sustenta a resposta». O trecho deve existir de fato no material; se não houver sustentação clara no material, NÃO use esse fato na questão.
 - Use linguagem didática, técnica e fundamentada no material.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
@@ -333,15 +337,18 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
   "application_questions": [
     {
       "question_text": "[CASO CLÍNICO INTEGRAL — 180-320 palavras]|||AFIRMACAO|||[afirmação 1, sem rótulo]",
-      "correct_answer": "V"
+      "correct_answer": "V",
+      "explanation": "Verdadeiro porque ... Segundo o material: «trecho»"
     },
     {
       "question_text": "[MESMO CASO CLÍNICO INTEGRAL, IDÊNTICO ao da questão 1]|||AFIRMACAO|||[afirmação 2, sem rótulo]",
-      "correct_answer": "F"
+      "correct_answer": "F",
+      "explanation": "Falso porque ... Segundo o material: «trecho»"
     },
     {
       "question_text": "[MESMO CASO CLÍNICO INTEGRAL, IDÊNTICO ao da questão 1]|||AFIRMACAO|||[afirmação 3, sem rótulo]",
-      "correct_answer": "V"
+      "correct_answer": "V",
+      "explanation": "Verdadeiro porque ... Segundo o material: «trecho»"
     }
   ]
 }`;
@@ -419,6 +426,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     // Total time budget for AI calls (edge functions are cut off at ~150s).
     const AI_BUDGET_MS = 130000;
     const PRIMARY_MAX_MS = 75000;
+    const REVIEW_MAX_MS = 50000;
     const FAST_GOOGLE_MODEL = Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview";
     const FAST_LOVABLE_MODEL = Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview";
     const startedAt = Date.now();
@@ -539,10 +547,18 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
           const keyRow = apiKeys.find((k: any) => k.provider === providerName);
           if (!keyRow) continue;
           if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
+          // Main model first, bounded so the fast model still has time as a fallback.
           repaired = await tryExternalProvider(providerName, keyRow.api_key, repairMessages, {
-            jsonMode: true, model: providerName === "google" ? FAST_GOOGLE_MODEL : undefined, timeoutMs: Math.max(15000, remainingMs - 15000),
+            jsonMode: true, timeoutMs: Math.min(REVIEW_MAX_MS, Math.max(15000, remainingMs - 15000)),
           });
           if (repaired) break;
+        }
+        const reviewLeftMs = AI_BUDGET_MS - (Date.now() - startedAt);
+        const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
+        if (!repaired && googleKeyRow && reviewLeftMs > 25000) {
+          repaired = await tryExternalProvider("google", googleKeyRow.api_key, repairMessages, {
+            jsonMode: true, model: FAST_GOOGLE_MODEL, timeoutMs: reviewLeftMs - 8000,
+          });
         }
         if (!repaired) {
           repaired = await tryLovableAI(repairMessages, { jsonMode: true, model: FAST_LOVABLE_MODEL, timeoutMs: Math.max(15000, remainingMs - 15000) }).catch(() => null);
