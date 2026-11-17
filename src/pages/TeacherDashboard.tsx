@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
-import { extractPdfTextInBrowser, renderPdfPagesAsImages } from '@/lib/pdfText';
 import { isPlanLimitError } from '@/lib/planLimitError';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -1010,47 +1010,8 @@ export default function TeacherDashboard() {
     return message || 'Falha ao gerar questões com IA';
   };
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-  const buildFilesPayload = async (files: File[]) => {
-    const payload: { fileContent: string; fileName: string; mimeType?: string }[] = [];
-    for (const file of files) {
-      const isText = file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv');
-      const mimeType = getMimeType(file.name);
-      if (mimeType === 'application/pdf') {
-        try {
-          const text = await extractPdfTextInBrowser(file);
-          if (text.length >= 50) {
-            payload.push({ fileContent: text, fileName: file.name });
-            continue;
-          }
-          // No text layer (slides as images / scan): send page images instead.
-          const pages = await renderPdfPagesAsImages(file);
-          pages.forEach((img, i) => payload.push({ fileContent: img, fileName: `${file.name} (img ${i + 1})`, mimeType: 'image/jpeg' }));
-          continue;
-        } catch (e) {
-          console.warn('Extração local do PDF falhou, tentando no servidor', e);
-        }
-        const fileContent = await readFileAsBase64(file);
-        const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-          body: { mode: 'extract_text', files: [{ fileContent, fileName: file.name, mimeType }] },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        if (!Array.isArray(data?.files) || !data.files[0]?.fileContent) {
-          throw new Error(`Não foi possível preparar o PDF "${file.name}" para a geração. Tente novamente em alguns instantes.`);
-        }
-        payload.push(data.files[0]);
-        continue;
-      }
-      payload.push({
-        fileContent: isText ? await readFileAsText(file) : await readFileAsBase64(file),
-        fileName: file.name,
-        mimeType: isText ? undefined : mimeType,
-      });
-    }
-    return payload;
-  };
+  const buildFilesPayload = (files: File[]) => buildAiFilesPayload(files);
 
   const generateWithAI = async () => {
     const selectedFiles = aiFile ?? [];
@@ -1061,8 +1022,8 @@ export default function TeacherDashboard() {
     }
     if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
     if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
-    const oversized = selectedFiles.find(file => file.size > MAX_FILE_SIZE);
-    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo 10MB por arquivo.`); return; }
+    const oversized = selectedFiles.find(file => file.size > MAX_AI_FILE_SIZE);
+    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo ${MAX_AI_FILE_SIZE_LABEL} por arquivo.`); return; }
     setAiLoading(true);
     try {
       const filesPayload = await buildFilesPayload(selectedFiles);
@@ -1111,8 +1072,8 @@ export default function TeacherDashboard() {
     if (selectedFiles.length === 0 || !selectedQuiz) return;
     if (!planLimits.canUseAI) { planLimits.showUpgradeDialog('Geração de Questões com IA'); return; }
     if (planLimits.isAiLimitReached) { planLimits.showUpgradeDialog('IA Ilimitada'); return; }
-    const oversized = selectedFiles.find(file => file.size > MAX_FILE_SIZE);
-    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo 10MB por arquivo.`); return; }
+    const oversized = selectedFiles.find(file => file.size > MAX_AI_FILE_SIZE);
+    if (oversized) { toast.error(`Arquivo muito grande: ${oversized.name}. Máximo ${MAX_AI_FILE_SIZE_LABEL} por arquivo.`); return; }
     setAiImportLoading(true);
     try {
       const filesPayload = await buildFilesPayload(selectedFiles);

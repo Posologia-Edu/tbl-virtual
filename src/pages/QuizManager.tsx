@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
@@ -373,31 +374,8 @@ export default function QuizManager() {
     return message || 'Falha ao gerar questões com IA';
   };
 
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-  const buildFilesPayload = async (files: File[]) => {
-    const payload: { fileContent: string; fileName: string; mimeType?: string }[] = [];
-    for (const f of files) {
-      const isTextFile = f.name.endsWith('.txt') || f.name.endsWith('.md') || f.name.endsWith('.csv');
-      const mimeType = getMimeType(f.name);
-      if (mimeType === 'application/pdf') {
-        const fileContent = await readFileAsBase64(f);
-        const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-          body: { mode: 'extract_text', files: [{ fileContent, fileName: f.name, mimeType }] },
-        });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        if (!Array.isArray(data?.files) || !data.files[0]?.fileContent) {
-          throw new Error(`Não foi possível preparar o PDF "${f.name}" para a geração. Tente novamente em alguns instantes.`);
-        }
-        payload.push(data.files[0]);
-        continue;
-      }
-      const fileContent = isTextFile ? await readFileAsText(f) : await readFileAsBase64(f);
-      payload.push({ fileContent, fileName: f.name, mimeType: isTextFile ? undefined : mimeType });
-    }
-    return payload;
-  };
+  const buildFilesPayload = (files: File[]) => buildAiFilesPayload(files);
 
   const generateWithAI = async () => {
     if (aiFiles.length === 0) { toast.error('Selecione ao menos um arquivo'); return; }
@@ -406,8 +384,8 @@ export default function QuizManager() {
       showUpgradeDialog('Questionários ilimitados');
       return;
     }
-    const oversize = aiFiles.find(f => f.size > MAX_FILE_SIZE);
-    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
+    const oversize = aiFiles.find(f => f.size > MAX_AI_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo ${MAX_AI_FILE_SIZE_LABEL} por arquivo.`); return; }
 
     setAiLoading(true);
     try {
@@ -482,8 +460,8 @@ export default function QuizManager() {
 
   const generateForExistingQuiz = async () => {
     if (aiImportFiles.length === 0 || !selectedQuiz) return;
-    const oversize = aiImportFiles.find(f => f.size > MAX_FILE_SIZE);
-    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo 10MB por arquivo.`); return; }
+    const oversize = aiImportFiles.find(f => f.size > MAX_AI_FILE_SIZE);
+    if (oversize) { toast.error(`Arquivo muito grande: ${oversize.name}. Máximo ${MAX_AI_FILE_SIZE_LABEL} por arquivo.`); return; }
     setAiImportLoading(true);
     try {
       const filesPayload = await buildFilesPayload(aiImportFiles);
