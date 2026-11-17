@@ -10,6 +10,13 @@ import {
   type AIResult,
 } from "../_shared/ai-providers.ts";
 import { checkAIPlanLimit } from "../_shared/ai-plan-limits.ts";
+import {
+  applyRepairs,
+  auditIrat,
+  balanceCorrectPositions,
+  buildRepairInstruction,
+  type IratQuestion,
+} from "./quality.ts";
 
 async function extractPdfText(base64: string): Promise<string> {
   const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -224,6 +231,29 @@ REGRAS ANTI-ÓBVIO (CRÍTICAS) PARA O iRAT:
 - **OBRIGATÓRIO**: o enunciado deve testar um FATO específico que precisa ter sido estudado — não algo que se infere pelo nome do fármaco/conceito. Prefira perguntar "qual o mecanismo molecular", "qual o efeito adverso mais comum", "qual a dose inicial recomendada", "qual o critério diagnóstico segundo [diretriz]", "qual a contraindicação absoluta", em vez de "qual o papel de X".
 - Antes de finalizar cada questão do iRAT, faça uma checagem: "Um aluno que NÃO leu o material conseguiria acertar apenas lendo o enunciado e as alternativas?". Se sim, REESCREVA a questão.
 
+REGRAS DE CONSTRUÇÃO DAS ALTERNATIVAS (CRÍTICAS — serão verificadas automaticamente):
+1. **Comprimento parecido**: as 4 alternativas devem ter tamanho semelhante (diferença de até ~10%). A correta NUNCA pode ser a mais longa nem a mais curta. Se a correta ficou longa, ALONGUE os distratores com detalhe plausível, em vez de encurtar a correta.
+2. **Mesmo fato em todas**: as 4 alternativas devem afirmar a mesma coisa de base e diferir só no ponto testado (mecanismo, valor, critério, conduta). Assim o aluno não elimina por coerência.
+3. **Sem absolutos nos distratores**: proibido "sempre", "nunca", "apenas", "somente", "exclusivamente", "em nenhum caso", "todos os pacientes". Proibido "todas as anteriores" e "nenhuma das anteriores".
+4. **Cada distrator com UM erro definido e plausível**, de tipos variados: leitura parcial do dado, mecanismo de outra classe, valor/limiar próximo porém errado, conduta que ignora o contexto do paciente, característica trocada entre fármacos parecidos.
+5. **Sem marca própria da correta**: não deixe só a correta com números, só a correta com ressalva ("exceto quando...") ou só a correta repetindo termos do enunciado. Distratores também devem trazer números/ressalvas quando a correta trouxer.
+6. **Varie a letra da correta** ao longo das questões (use as quatro letras).
+7. **Prefira aplicação a memorização pura**: quando o material permitir, o enunciado traz um dado (cálculo, valor laboratorial, escore, situação) e exige interpretar e decidir. Use também "armadilhas do número bonito" (um valor que parece bom mas não trata a causa) e contraste entre dois contextos parecidos com condutas diferentes.
+
+EXEMPLOS DE ESTRUTURA (apenas do formato e do nível; NÃO reutilize estes temas, use o material fornecido):
+- Enunciado: "Segundo as diretrizes GOLD, qual critério espirométrico confirma a limitação persistente ao fluxo aéreo?"
+  A) Relação VEF1/CVF pós-broncodilatador inferior a 0,70, confirmada em exame repetido ou único conforme a diretriz
+  B) Relação VEF1/CVF pré-broncodilatador inferior a 0,80, confirmada em exame repetido ou único conforme a diretriz
+  C) VEF1 pós-broncodilatador inferior a 80% do previsto, confirmado em exame repetido ou único conforme a diretriz
+  D) CVF pós-broncodilatador inferior a 70% do previsto, confirmada em exame repetido ou único conforme a diretriz
+  (as quatro têm o mesmo tamanho e a mesma estrutura; cada distrator troca um parâmetro real do exame.)
+- Enunciado: "Qual o mecanismo responsável pela tosse seca persistente associada aos inibidores da ECA?"
+  A) Bloqueio de receptores β2 nas vias aéreas, com aumento do tônus broncomotor e tosse seca
+  B) Liberação de histamina por degranulação de mastócitos, com edema da mucosa e tosse seca
+  C) Acúmulo de bradicinina e substância P nas vias aéreas, por redução da degradação pela enzima inibida
+  D) Aumento de angiotensina II local, com hiperreatividade brônquica e tosse seca
+  (todas plausíveis para quem não estudou; nenhuma usa palavras do enunciado como pista.)
+
 2. **EXATAMENTE 3 questões de aplicação (V/F) baseadas em UM ÚNICO caso clínico compartilhado** — padrão de prova de residência médica/concurso público de alto nível (USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC, Cebraspe).
 
 REGRAS OBRIGATÓRIAS PARA O CASO CLÍNICO COMPARTILHADO:
@@ -274,8 +304,9 @@ Antes de responder, faça uma checagem interna: o caso tem densidade de banca? A
 
 EXPLICAÇÃO (obrigatória para cada questão do iRAT/tRAT):
 - Para cada questão de iRAT/tRAT, gere um campo "explanation" com 2 a 5 frases que:
-  1) Indique a alternativa correta e justifique tecnicamente por que ela está correta (com base no material).
-  2) Comente brevemente por que as demais alternativas estão erradas (pode citar A, B, C, D).
+  1) Indique qual é a alternativa correta (descrevendo o seu conteúdo) e justifique tecnicamente por que ela está correta (com base no material).
+  2) Comente brevemente por que cada uma das demais está errada, descrevendo-as pelo CONTEÚDO.
+  3) NÃO cite letras de alternativas (A, B, C, D) na explicação: a ordem das alternativas pode ser reorganizada depois da geração.
 - Use linguagem didática, técnica e fundamentada no material.
 
 Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
@@ -289,7 +320,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       "option_c": "Alternativa C",
       "option_d": "Alternativa D",
       "correct_option": "A",
-      "explanation": "A alternativa A está correta porque ... A alternativa B está errada porque ... C está errada porque ... D está errada porque ..."
+      "explanation": "A resposta correta (descreva o conteúdo dela) está certa porque ... A opção que afirma X está errada porque ... A opção que afirma Y está errada porque ... (sem citar letras)"
     }
   ],
   "application_questions": [
@@ -459,6 +490,47 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     console.log(`[AI] Usage logged: ${aiResult.provider}/${aiResult.model} | ${aiResult.tokensInput}+${aiResult.tokensOutput} tokens | $${cost.toFixed(6)}`);
 
     const questions = parseGeneratedQuestions(aiResult.content);
+
+    // Quality pass: fix option length / absolutes with a targeted rewrite,
+    // then rebalance the position of the correct answer in code.
+    try {
+      let irat: IratQuestion[] = questions.irat_questions;
+      const issues = auditIrat(irat);
+      console.log(`[QA] ${issues.size} questão(ões) com problemas:`, JSON.stringify([...issues.entries()]));
+      const remainingMs = AI_BUDGET_MS - (Date.now() - startedAt);
+      if (issues.size > 0 && remainingMs > 40000) {
+        const repairMessages = [
+          { role: "system", content: "Você é um revisor rigoroso de questões de múltipla escolha para TBL. Responda somente com JSON válido." },
+          {
+            role: "user",
+            content: Array.isArray(userContent)
+              ? [...userContent, { type: "text", text: buildRepairInstruction(irat, issues) }]
+              : `${userContent}\n\n${buildRepairInstruction(irat, issues)}`,
+          },
+        ];
+        let repaired: AIResult | null = null;
+        const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
+        for (const providerName of DEFAULT_PROVIDER_ORDER) {
+          const keyRow = apiKeys.find((k: any) => k.provider === providerName);
+          if (!keyRow) continue;
+          if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
+          repaired = await tryExternalProvider(providerName, keyRow.api_key, repairMessages, {
+            jsonMode: true, timeoutMs: Math.max(15000, remainingMs - 15000),
+          });
+          if (repaired) break;
+        }
+        if (!repaired) {
+          repaired = await tryLovableAI(repairMessages, { jsonMode: true, timeoutMs: Math.max(15000, remainingMs - 15000) }).catch(() => null);
+        }
+        if (repaired?.content) {
+          irat = applyRepairs(irat, repaired.content);
+          console.log(`[QA] Reparo aplicado; problemas restantes: ${auditIrat(irat).size}`);
+        }
+      }
+      questions.irat_questions = balanceCorrectPositions(irat);
+    } catch (qaError) {
+      console.error("[QA] Falha na verificação de qualidade, mantendo questões originais:", qaError);
+    }
 
     return new Response(JSON.stringify(questions), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
