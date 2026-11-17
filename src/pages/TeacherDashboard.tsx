@@ -3163,7 +3163,7 @@ export default function TeacherDashboard() {
 
     {/* AI Create New Quiz Dialog */}
     <Dialog open={showAiDialog} onOpenChange={v => { if (!aiLoading) setShowAiDialog(v); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" /> Criar Questionário com IA
@@ -3172,7 +3172,7 @@ export default function TeacherDashboard() {
             Envie um ou mais materiais de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 min-w-0">
           <div className="space-y-2">
             <Label>Nome do Questionário</Label>
             <Input value={aiQuizTitle} onChange={e => setAiQuizTitle(e.target.value)} placeholder="Ex: Farmacologia - Antibióticos" disabled={aiLoading} />
@@ -3206,7 +3206,7 @@ export default function TeacherDashboard() {
 
     {/* AI Import into Existing Quiz Dialog */}
     <Dialog open={showAiImportDialog} onOpenChange={v => { if (!aiImportLoading) setShowAiImportDialog(v); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-500" /> Gerar Questões com IA
@@ -3215,7 +3215,7 @@ export default function TeacherDashboard() {
             Envie um ou mais materiais de apoio e a IA criará 10 questões iRAT/tRAT e 3 casos clínicos de aplicação.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 min-w-0">
           <div className="space-y-2">
             <Label>Material(is) de Apoio</Label>
             <input ref={aiImportFileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.txt" className="hidden" onChange={e => { const picked = Array.from(e.target.files || []); if (picked.length) setAiImportFile(prev => [...(prev ?? []), ...picked]); e.target.value = ''; }} />

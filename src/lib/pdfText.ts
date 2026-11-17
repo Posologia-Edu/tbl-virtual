@@ -26,7 +26,7 @@ export async function extractPdfTextInBrowser(file: File): Promise<string> {
 
 // Fallback for PDFs without a text layer (slides exported as images, scans):
 // render pages to JPEG so the vision-capable model can read them.
-const MAX_IMAGE_PAGES = 20;
+const MAX_IMAGE_PAGES = 15;
 const IMAGE_WIDTH = 1100;
 
 export async function renderPdfPagesAsImages(file: File): Promise<string[]> {

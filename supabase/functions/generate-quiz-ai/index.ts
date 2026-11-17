@@ -378,6 +378,10 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       { role: "user", content: userContent },
     ];
 
+    // Total time budget for AI calls (edge functions are cut off at ~150s).
+    const AI_BUDGET_MS = 130000;
+    const startedAt = Date.now();
+
     // Try external providers first
     let aiResult: AIResult | null = null;
 
@@ -393,7 +397,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
           if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
 
-          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, { jsonMode: true });
+          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, { jsonMode: true, timeoutMs: Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt) - 20000) });
           if (aiResult) {
             console.log(`[AI] Success with provider: ${providerName}`);
             break;
@@ -407,7 +411,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     // Fallback to Lovable AI
     if (!aiResult) {
       try {
-        aiResult = await tryLovableAI(messages, { jsonMode: true });
+        aiResult = await tryLovableAI(messages, { jsonMode: true, timeoutMs: Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt)) });
       } catch (e: any) {
         const errorMessage = getErrorMessage(e);
         if (errorMessage === "RATE_LIMIT") {
