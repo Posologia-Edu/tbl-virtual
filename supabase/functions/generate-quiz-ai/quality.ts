@@ -106,6 +106,22 @@ export interface AppQuestion {
 
 const SEP = "|||AFIRMACAO|||";
 
+/** Automated checks for the case-based V/F statements. */
+export function auditApp(app: AppQuestion[]): string[] {
+  const out: string[] = [];
+  const answers = app.map((a) => String(a.correct_answer ?? "").trim().toUpperCase().charAt(0));
+  if (app.length >= 2 && answers.every((a) => a === answers[0])) {
+    out.push(
+      `as ${app.length} afirmações têm o mesmo gabarito (${answers[0]}); reescreva ao menos uma para ter gabarito ${answers[0] === "V" ? "F" : "V"}, com um ERRO TÉCNICO REAL (dose, critério, conduta, mecanismo ou classificação trocados), não apenas um absoluto`,
+    );
+  }
+  app.forEach((a, i) => {
+    const st = a.question_text.split(SEP)[1] ?? "";
+    if (answers[i] === "F" && ABSOLUTES.test(st)) out.push(`a afirmação ${i + 1} é falsa e usa termo absoluto; a falsidade deve vir de um erro técnico real`);
+  });
+  return out;
+}
+
 export function buildReviewInstruction(
   questions: IratQuestion[],
   issues: Map<number, string[]>,
@@ -117,6 +133,7 @@ export function buildReviewInstruction(
     questao: q,
   }));
   const caso = app[0]?.question_text.split(SEP)[0] ?? "";
+  const appProblems = auditApp(app);
   const appItems = app.map((a, i) => ({
     indice: i,
     afirmacao: a.question_text.split(SEP)[1] ?? "",
@@ -139,7 +156,8 @@ B) AFIRMAÇÕES V/F do caso clínico. Para cada uma verifique:
 - o trecho citado em "Segundo o material" sustenta EXATAMENTE a afirmação (mesmo parâmetro, mesma comparação, mesmo grupo de pacientes). Se o trecho fala de outra comparação, reescreva a afirmação ou o gabarito;
 - uma afirmação NÃO pode ser falsa apenas por causa de um absoluto ("obrigatória", "sempre", "nunca", "independentemente", "exclusivamente"); a falsidade deve vir de um erro técnico real;
 - o gabarito é defensável pelo material e pelo caso (dados numéricos do caso coerentes com a afirmação);
-- não repete tema já testado nas questões de iRAT; mantenha pelo menos uma V e uma F;
+- não repete tema já testado nas questões de iRAT (ex.: se o iRAT já cobra a antibioticoterapia ou a classificação GOLD, a afirmação deve testar outro raciocínio sobre o caso); as 3 afirmações NÃO podem ter o mesmo gabarito: pelo menos uma deve ser FALSA, com um erro técnico real e plausível (dose trocada, critério errado, conduta inadequada ao caso), e pelo menos uma VERDADEIRA;
+- afirmações do tipo "o paciente deve receber X" só são V se o material sustenta X para ESTE perfil; se o caso tem uma armadilha (ex.: internação por pneumonia não é exacerbação de DPOC), use-a;
 - explicação termina com: Segundo o material: «trecho literal curto».
 NÃO altere o caso clínico; reescreva apenas a afirmação, o gabarito e a explicação.
 
@@ -155,7 +173,9 @@ QUESTÕES DE iRAT:
 ${JSON.stringify(iratItems, null, 2)}
 
 AFIRMAÇÕES V/F:
-${JSON.stringify(appItems, null, 2)}`;
+${JSON.stringify(appItems, null, 2)}
+
+PROBLEMAS AUTOMÁTICOS DAS AFIRMAÇÕES (corrija obrigatoriamente): ${JSON.stringify(appProblems)}`;
 }
 
 /** Applies reviewed items (matched by "indice") if they are structurally valid. */

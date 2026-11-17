@@ -12,6 +12,7 @@ import {
 import { checkAIPlanLimit } from "../_shared/ai-plan-limits.ts";
 import {
   applyReview,
+  auditApp,
   auditIrat,
   balanceCorrectPositions,
   buildReviewInstruction,
@@ -436,7 +437,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
         const reviewStart = Date.now();
         const REVIEW_BUDGET_MS = 125000;
         const leftMs = () => REVIEW_BUDGET_MS - (Date.now() - reviewStart);
-        review.issuesBefore = auditIrat(irat).size;
+        review.issuesBefore = auditIrat(irat).size + auditApp(app).length;
         console.log(`[QA] ${review.issuesBefore} questão(ões) com problemas automáticos:`, JSON.stringify([...auditIrat(irat).entries()]));
         const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
         const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
@@ -479,7 +480,7 @@ ${instruction}`,
         // Round 1 reviews everything; round 2 (only if automated defects remain and time allows) fixes what is left.
         for (let round = 1; round <= 2; round++) {
           const issues = auditIrat(irat);
-          if (round === 2 && (issues.size === 0 || leftMs() < 40000)) break;
+          if (round === 2 && ((issues.size === 0 && auditApp(app).length === 0) || leftMs() < 40000)) break;
           const reviewed = await callReview(buildReviewInstruction(irat, issues, app));
           review.rounds = round;
           if (!reviewed?.content) {
@@ -493,9 +494,9 @@ ${instruction}`,
           app = applied.app;
           review.changedIrat += applied.changedIrat;
           review.changedApp += applied.changedApp;
-          console.log(`[QA] Rodada ${round} (${review.model}): ${applied.changedIrat} iRAT e ${applied.changedApp} V/F reescritas; problemas restantes: ${auditIrat(irat).size}`);
+          console.log(`[QA] Rodada ${round} (${review.model}): ${applied.changedIrat} iRAT e ${applied.changedApp} V/F reescritas; problemas restantes: ${auditIrat(irat).size + auditApp(app).length}`);
         }
-        review.issuesAfter = auditIrat(irat).size;
+        review.issuesAfter = auditIrat(irat).size + auditApp(app).length;
       } catch (e) {
         review.error = getErrorMessage(e);
         console.error("[QA] Falha na revisão, mantendo questões originais:", e);
