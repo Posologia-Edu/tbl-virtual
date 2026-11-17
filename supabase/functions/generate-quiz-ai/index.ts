@@ -25,6 +25,8 @@ const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
   "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
   "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
   "gemini-2.5-flash": { input: 0.15, output: 0.60 },
+  "gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
+  "google/gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
   "google/gemini-2.5-flash": { input: 0.15, output: 0.60 },
 };
 

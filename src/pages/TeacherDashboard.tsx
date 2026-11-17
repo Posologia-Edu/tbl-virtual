@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
+import { extractPdfTextInBrowser } from '@/lib/pdfText';
 import { isPlanLimitError } from '@/lib/planLimitError';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -1017,6 +1018,15 @@ export default function TeacherDashboard() {
       const isText = file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.csv');
       const mimeType = getMimeType(file.name);
       if (mimeType === 'application/pdf') {
+        try {
+          const text = await extractPdfTextInBrowser(file);
+          if (text.length >= 50) {
+            payload.push({ fileContent: text, fileName: file.name });
+            continue;
+          }
+        } catch (e) {
+          console.warn('Extração local do PDF falhou, tentando no servidor', e);
+        }
         const fileContent = await readFileAsBase64(file);
         const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
           body: { mode: 'extract_text', files: [{ fileContent, fileName: file.name, mimeType }] },

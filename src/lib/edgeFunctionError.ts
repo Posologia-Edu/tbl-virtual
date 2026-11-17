@@ -13,7 +13,10 @@ export async function parseEdgeFunctionError(error: unknown): Promise<EdgeFuncti
   if (!context || typeof context !== 'object' || !('json' in context)) return null;
   try {
     const body = await (context as Response).clone().json();
-    return { code: body?.error, message: body?.message };
+    // Some functions return { error: "<human message>" } with no separate
+    // message field; surface that text instead of the generic SDK message.
+    const isCode = typeof body?.error === 'string' && /^[A-Z_]+$/.test(body.error);
+    return { code: body?.error, message: body?.message ?? (isCode ? undefined : body?.error) };
   } catch {
     return null;
   }

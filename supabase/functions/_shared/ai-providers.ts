@@ -36,11 +36,11 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   },
   openrouter: {
     url: "https://openrouter.ai/api/v1/chat/completions",
-    model: "google/gemini-2.5-flash",
+    model: Deno.env.get("AI_MODEL_OPENROUTER") ?? "google/gemini-3.1-pro-preview",
   },
   google: {
     url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    model: "gemini-2.5-flash",
+    model: Deno.env.get("AI_MODEL_GOOGLE") ?? "gemini-3.1-pro-preview",
   },
 };
 
@@ -154,7 +154,7 @@ export async function tryLovableAI(
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-  const model = options.model ?? "google/gemini-2.5-flash";
+  const model = options.model ?? Deno.env.get("AI_MODEL_LOVABLE") ?? "google/gemini-3.1-pro-preview";
   console.log("[AI] Using Lovable AI (platform default fallback)");
 
   const body: any = { model, messages };
