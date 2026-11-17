@@ -2,6 +2,7 @@
 // Everything is converted to plain text (or page images for PDFs without a
 // text layer) in the browser, so the server never receives the original
 // file and large files no longer hit request-size or CPU limits.
+import { toast } from 'sonner';
 import { extractPdfTextInBrowser, renderPdfPagesAsImages } from '@/lib/pdfText';
 
 export const MAX_AI_FILE_SIZE = 200 * 1024 * 1024; // 200MB: browser memory is the only real limit
@@ -128,10 +129,21 @@ export async function invokeQuizGeneration(filesPayload: AiFilePayload[]) {
       body: { mode: 'review', files: filesPayload, questions: data },
     });
     if (!reviewError && Array.isArray(reviewed?.irat_questions) && Array.isArray(reviewed?.application_questions)) {
+      const r = reviewed.review ?? {};
+      const changed = (r.changedIrat ?? 0) + (r.changedApp ?? 0);
+      if (r.error || !r.rounds) {
+        toast.warning('Revisão automática não concluída: confira as questões com atenção.');
+      } else if (r.issuesAfter > 0) {
+        toast.warning(`Revisão automática: ${changed} ajustada(s), mas ${r.issuesAfter} questão(ões) ainda podem ter problemas. Confira.`);
+      } else {
+        toast.success(`Revisão automática concluída: ${changed} questão(ões) ajustada(s).`);
+      }
       return reviewed;
     }
+    toast.warning('Revisão automática indisponível: confira as questões com atenção.');
     console.warn('Revisão das questões indisponível, usando as geradas.', reviewError);
   } catch (e) {
+    toast.warning('Revisão automática falhou: confira as questões com atenção.');
     console.warn('Revisão das questões falhou, usando as geradas.', e);
   }
   return data;

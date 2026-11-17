@@ -431,59 +431,71 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       }
       let irat: IratQuestion[] = input.irat_questions;
       let app: AppQuestion[] = input.application_questions;
-      const review = { issuesBefore: 0, changedIrat: 0, changedApp: 0, model: "", error: "" };
+      const review = { issuesBefore: 0, issuesAfter: 0, rounds: 0, changedIrat: 0, changedApp: 0, model: "", error: "" };
       try {
         const reviewStart = Date.now();
         const REVIEW_BUDGET_MS = 125000;
         const leftMs = () => REVIEW_BUDGET_MS - (Date.now() - reviewStart);
-        const issues = auditIrat(irat);
-        review.issuesBefore = issues.size;
-        console.log(`[QA] ${issues.size} questão(ões) com problemas automáticos:`, JSON.stringify([...issues.entries()]));
-        const instruction = buildReviewInstruction(irat, issues, app);
-        const reviewMessages = [
-          { role: "system", content: "Você é um revisor rigoroso e exigente de questões de múltipla escolha para TBL e residência médica. Responda somente com JSON válido." },
-          {
-            role: "user",
-            content: Array.isArray(userContent)
-              ? [...userContent, { type: "text", text: instruction }]
-              : `${userContent}
+        review.issuesBefore = auditIrat(irat).size;
+        console.log(`[QA] ${review.issuesBefore} questão(ões) com problemas automáticos:`, JSON.stringify([...auditIrat(irat).entries()]));
+        const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
+        const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
+
+        const callReview = async (instruction: string): Promise<AIResult | null> => {
+          const reviewMessages = [
+            { role: "system", content: "Você é um revisor rigoroso e exigente de questões de múltipla escolha para TBL e residência médica. Responda somente com JSON válido." },
+            {
+              role: "user",
+              content: Array.isArray(userContent)
+                ? [...userContent, { type: "text", text: instruction }]
+                : `${userContent}
 
 ${instruction}`,
-          },
-        ];
-        let reviewed: AIResult | null = null;
-        const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
-        for (const providerName of DEFAULT_PROVIDER_ORDER) {
-          const keyRow = apiKeys.find((k: any) => k.provider === providerName);
-          if (!keyRow) continue;
-          if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
-          reviewed = await tryExternalProvider(providerName, keyRow.api_key, reviewMessages, {
-            jsonMode: true, timeoutMs: Math.min(80000, Math.max(15000, leftMs() - 15000)),
-          });
-          if (reviewed) break;
-        }
-        const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
-        if (!reviewed && googleKeyRow && leftMs() > 25000) {
-          reviewed = await tryExternalProvider("google", googleKeyRow.api_key, reviewMessages, {
-            jsonMode: true, model: Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
-          });
-        }
-        if (!reviewed && leftMs() > 25000) {
-          reviewed = await tryLovableAI(reviewMessages, {
-            jsonMode: true, model: Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
-          }).catch(() => null);
-        }
-        if (reviewed?.content) {
+            },
+          ];
+          let reviewed: AIResult | null = null;
+          for (const providerName of DEFAULT_PROVIDER_ORDER) {
+            const keyRow = apiKeys.find((k: any) => k.provider === providerName);
+            if (!keyRow) continue;
+            if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
+            reviewed = await tryExternalProvider(providerName, keyRow.api_key, reviewMessages, {
+              jsonMode: true, timeoutMs: Math.min(70000, Math.max(15000, leftMs() - 15000)),
+            });
+            if (reviewed) break;
+          }
+          if (!reviewed && googleKeyRow && leftMs() > 25000) {
+            reviewed = await tryExternalProvider("google", googleKeyRow.api_key, reviewMessages, {
+              jsonMode: true, model: Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
+            });
+          }
+          if (!reviewed && leftMs() > 25000) {
+            reviewed = await tryLovableAI(reviewMessages, {
+              jsonMode: true, model: Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
+            }).catch(() => null);
+          }
+          return reviewed;
+        };
+
+        // Round 1 reviews everything; round 2 (only if automated defects remain and time allows) fixes what is left.
+        for (let round = 1; round <= 2; round++) {
+          const issues = auditIrat(irat);
+          if (round === 2 && (issues.size === 0 || leftMs() < 40000)) break;
+          const reviewed = await callReview(buildReviewInstruction(irat, issues, app));
+          review.rounds = round;
+          if (!reviewed?.content) {
+            console.log(`[QA] Rodada ${round}: nenhum provedor respondeu; mantendo questões atuais.`);
+            if (round === 1) review.error = "Nenhum modelo respondeu a revisão a tempo.";
+            break;
+          }
           review.model = `${reviewed.provider}/${reviewed.model}`;
           const applied = applyReview(irat, app, reviewed.content);
           irat = applied.irat;
           app = applied.app;
-          review.changedIrat = applied.changedIrat;
-          review.changedApp = applied.changedApp;
-          console.log(`[QA] Revisão (${review.model}): ${applied.changedIrat} iRAT e ${applied.changedApp} V/F reescritas; problemas restantes: ${auditIrat(irat).size}`);
-        } else {
-          console.log("[QA] Nenhum provedor respondeu a revisão; mantendo questões originais.");
+          review.changedIrat += applied.changedIrat;
+          review.changedApp += applied.changedApp;
+          console.log(`[QA] Rodada ${round} (${review.model}): ${applied.changedIrat} iRAT e ${applied.changedApp} V/F reescritas; problemas restantes: ${auditIrat(irat).size}`);
         }
+        review.issuesAfter = auditIrat(irat).size;
       } catch (e) {
         review.error = getErrorMessage(e);
         console.error("[QA] Falha na revisão, mantendo questões originais:", e);
