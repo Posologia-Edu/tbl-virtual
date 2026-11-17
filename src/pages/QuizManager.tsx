@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
+import { invokeQuizGeneration, buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
@@ -391,11 +391,7 @@ export default function QuizManager() {
     try {
       const filesPayload = await buildFilesPayload(aiFiles);
 
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { files: filesPayload },
-      });
-
-      if (error) throw error;
+      const data = await invokeQuizGeneration(filesPayload);
 
       // Create the quiz
       const { data: quiz, error: quizError } = await supabase.from('quizzes')
@@ -467,10 +463,7 @@ export default function QuizManager() {
     try {
       const filesPayload = await buildFilesPayload(aiImportFiles);
 
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', {
-        body: { files: filesPayload },
-      });
-      if (error) throw error;
+      const data = await invokeQuizGeneration(filesPayload);
 
       if (data.irat_questions?.length) {
         const iratInserts = data.irat_questions.map((q: any, i: number) => ({
@@ -1073,7 +1066,7 @@ export default function QuizManager() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Analisando material e gerando questões... Isso pode levar até 1 minuto.
+                    Analisando material e gerando questões... Isso pode levar até 3 minutos.
                   </div>
                   <Progress value={undefined} className="animate-pulse" />
                 </div>
@@ -1238,7 +1231,7 @@ export default function QuizManager() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Analisando material e gerando questões... Isso pode levar até 1 minuto.
+                  Analisando material e gerando questões... Isso pode levar até 3 minutos.
                 </div>
                 <Progress value={undefined} className="animate-pulse" />
               </div>

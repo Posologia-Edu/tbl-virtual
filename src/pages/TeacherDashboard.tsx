@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
+import { invokeQuizGeneration, buildAiFilesPayload, MAX_AI_FILE_SIZE, MAX_AI_FILE_SIZE_LABEL } from '@/lib/aiFilePayload';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
@@ -1027,8 +1027,7 @@ export default function TeacherDashboard() {
     setAiLoading(true);
     try {
       const filesPayload = await buildFilesPayload(selectedFiles);
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
-      if (error) throw error;
+      const data = await invokeQuizGeneration(filesPayload);
 
       const { data: quiz, error: qErr } = await supabase.from('quizzes').insert({ title: aiQuizTitle.trim(), teacher_id: user!.id }).select().single();
       if (qErr || !quiz) throw new Error('Falha ao criar questionário');
@@ -1077,8 +1076,7 @@ export default function TeacherDashboard() {
     setAiImportLoading(true);
     try {
       const filesPayload = await buildFilesPayload(selectedFiles);
-      const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
-      if (error) throw error;
+      const data = await invokeQuizGeneration(filesPayload);
 
       if (data.irat_questions?.length) {
         await supabase.from('questions').insert(data.irat_questions.map((q: any, i: number) => ({
@@ -3152,7 +3150,7 @@ export default function TeacherDashboard() {
           </div>
           {aiLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 1 minuto.
+              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 3 minutos.
             </div>
           )}
         </div>
@@ -3191,7 +3189,7 @@ export default function TeacherDashboard() {
           </div>
           {aiImportLoading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 1 minuto.
+              <Loader2 className="w-4 h-4 animate-spin" /> Analisando material e gerando questões... Isso pode levar até 3 minutos.
             </div>
           )}
         </div>

@@ -11,10 +11,11 @@ import {
 } from "../_shared/ai-providers.ts";
 import { checkAIPlanLimit } from "../_shared/ai-plan-limits.ts";
 import {
-  applyRepairs,
+  applyReview,
   auditIrat,
   balanceCorrectPositions,
-  buildRepairInstruction,
+  buildReviewInstruction,
+  type AppQuestion,
   type IratQuestion,
 } from "./quality.ts";
 
@@ -245,6 +246,7 @@ REGRAS DE CONSTRUÇÃO DAS ALTERNATIVAS (CRÍTICAS — serão verificadas automa
 9. **O enunciado não pode entregar quais alternativas são erradas**: não cite a doença ou classe contrastante que identifica os distratores (ex.: "em comparação com a asma" faz o aluno eliminar tudo que é de asma). Pergunte pelo fato, não pelo contraste.
 10. **Fidelidade ao grau de recomendação do material**: reproduza exatamente "considerar", "pode", "deve", "preferencialmente", "sugere". Nunca transforme "considerar/pode" em "deve". Se houver dúvida, formule a pergunta sobre o que o material afirma sem ambiguidade.
 11. **Só cite produtos, associações e doses que existem de fato.** Em perguntas sobre combinações de fármacos, TODAS as alternativas devem ser combinações reais e disponíveis; use os nomes e as doses como aparecem no material.
+13. **Cobertura**: cada uma das 10 questões deve testar um SUBTÓPICO DIFERENTE do material (sem repetir o mesmo conceito com outras palavras), e as 3 afirmações do caso não devem repetir o que as questões de iRAT já testaram.
 12. **Nenhum tema dos exemplos abaixo pode aparecer nas questões**: os exemplos são de áreas não relacionadas ao material, apenas para mostrar o padrão.
 
 EXEMPLOS DE PADRÃO (áreas não relacionadas ao material; NÃO reutilize estes temas):
@@ -418,6 +420,81 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       userContent = parts;
     }
 
+    // Review mode: critic pass over already generated questions (separate request = own time budget).
+    // Intentionally NOT logged to ai_usage_log so it does not consume an extra monthly generation.
+    if (body?.mode === "review") {
+      const input = body?.questions;
+      if (!Array.isArray(input?.irat_questions) || !Array.isArray(input?.application_questions)) {
+        return new Response(JSON.stringify({ error: "Questões inválidas para revisão" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      let irat: IratQuestion[] = input.irat_questions;
+      let app: AppQuestion[] = input.application_questions;
+      const review = { issuesBefore: 0, changedIrat: 0, changedApp: 0, model: "", error: "" };
+      try {
+        const reviewStart = Date.now();
+        const REVIEW_BUDGET_MS = 125000;
+        const leftMs = () => REVIEW_BUDGET_MS - (Date.now() - reviewStart);
+        const issues = auditIrat(irat);
+        review.issuesBefore = issues.size;
+        console.log(`[QA] ${issues.size} questão(ões) com problemas automáticos:`, JSON.stringify([...issues.entries()]));
+        const instruction = buildReviewInstruction(irat, issues, app);
+        const reviewMessages = [
+          { role: "system", content: "Você é um revisor rigoroso e exigente de questões de múltipla escolha para TBL e residência médica. Responda somente com JSON válido." },
+          {
+            role: "user",
+            content: Array.isArray(userContent)
+              ? [...userContent, { type: "text", text: instruction }]
+              : `${userContent}
+
+${instruction}`,
+          },
+        ];
+        let reviewed: AIResult | null = null;
+        const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
+        for (const providerName of DEFAULT_PROVIDER_ORDER) {
+          const keyRow = apiKeys.find((k: any) => k.provider === providerName);
+          if (!keyRow) continue;
+          if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
+          reviewed = await tryExternalProvider(providerName, keyRow.api_key, reviewMessages, {
+            jsonMode: true, timeoutMs: Math.min(80000, Math.max(15000, leftMs() - 15000)),
+          });
+          if (reviewed) break;
+        }
+        const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
+        if (!reviewed && googleKeyRow && leftMs() > 25000) {
+          reviewed = await tryExternalProvider("google", googleKeyRow.api_key, reviewMessages, {
+            jsonMode: true, model: Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
+          });
+        }
+        if (!reviewed && leftMs() > 25000) {
+          reviewed = await tryLovableAI(reviewMessages, {
+            jsonMode: true, model: Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview", timeoutMs: leftMs() - 8000,
+          }).catch(() => null);
+        }
+        if (reviewed?.content) {
+          review.model = `${reviewed.provider}/${reviewed.model}`;
+          const applied = applyReview(irat, app, reviewed.content);
+          irat = applied.irat;
+          app = applied.app;
+          review.changedIrat = applied.changedIrat;
+          review.changedApp = applied.changedApp;
+          console.log(`[QA] Revisão (${review.model}): ${applied.changedIrat} iRAT e ${applied.changedApp} V/F reescritas; problemas restantes: ${auditIrat(irat).size}`);
+        } else {
+          console.log("[QA] Nenhum provedor respondeu a revisão; mantendo questões originais.");
+        }
+      } catch (e) {
+        review.error = getErrorMessage(e);
+        console.error("[QA] Falha na revisão, mantendo questões originais:", e);
+      }
+      return new Response(JSON.stringify({
+        irat_questions: balanceCorrectPositions(irat),
+        application_questions: app,
+        review,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const messages = [
       { role: "system", content: systemPrompt },
       { role: "user", content: userContent },
@@ -425,8 +502,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
     // Total time budget for AI calls (edge functions are cut off at ~150s).
     const AI_BUDGET_MS = 130000;
-    const PRIMARY_MAX_MS = 75000;
-    const REVIEW_MAX_MS = 50000;
+    const PRIMARY_MAX_MS = 90000;
     const FAST_GOOGLE_MODEL = Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview";
     const FAST_LOVABLE_MODEL = Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview";
     const startedAt = Date.now();
@@ -524,53 +600,11 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
     const questions = parseGeneratedQuestions(aiResult.content);
 
-    // Quality pass: fix option length / absolutes with a targeted rewrite,
-    // then rebalance the position of the correct answer in code.
+    // Question review (AI critic) runs in a separate request (mode "review") so it gets its own time budget.
     try {
-      let irat: IratQuestion[] = questions.irat_questions;
-      const issues = auditIrat(irat);
-      console.log(`[QA] ${issues.size} questão(ões) com problemas:`, JSON.stringify([...issues.entries()]));
-      const remainingMs = AI_BUDGET_MS - (Date.now() - startedAt);
-      if (irat.length > 0 && remainingMs > 35000) {
-        const repairMessages = [
-          { role: "system", content: "Você é um revisor rigoroso e exigente de questões de múltipla escolha para TBL e residência médica. Responda somente com JSON válido." },
-          {
-            role: "user",
-            content: Array.isArray(userContent)
-              ? [...userContent, { type: "text", text: buildRepairInstruction(irat, issues) }]
-              : `${userContent}\n\n${buildRepairInstruction(irat, issues)}`,
-          },
-        ];
-        let repaired: AIResult | null = null;
-        const apiKeys = await getConfiguredApiKeys(adminClient).catch(() => []);
-        for (const providerName of DEFAULT_PROVIDER_ORDER) {
-          const keyRow = apiKeys.find((k: any) => k.provider === providerName);
-          if (!keyRow) continue;
-          if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
-          // Main model first, bounded so the fast model still has time as a fallback.
-          repaired = await tryExternalProvider(providerName, keyRow.api_key, repairMessages, {
-            jsonMode: true, timeoutMs: Math.min(REVIEW_MAX_MS, Math.max(15000, remainingMs - 15000)),
-          });
-          if (repaired) break;
-        }
-        const reviewLeftMs = AI_BUDGET_MS - (Date.now() - startedAt);
-        const googleKeyRow = apiKeys.find((k: any) => k.provider === "google");
-        if (!repaired && googleKeyRow && reviewLeftMs > 25000) {
-          repaired = await tryExternalProvider("google", googleKeyRow.api_key, repairMessages, {
-            jsonMode: true, model: FAST_GOOGLE_MODEL, timeoutMs: reviewLeftMs - 8000,
-          });
-        }
-        if (!repaired) {
-          repaired = await tryLovableAI(repairMessages, { jsonMode: true, model: FAST_LOVABLE_MODEL, timeoutMs: Math.max(15000, remainingMs - 15000) }).catch(() => null);
-        }
-        if (repaired?.content) {
-          irat = applyRepairs(irat, repaired.content);
-          console.log(`[QA] Reparo aplicado; problemas restantes: ${auditIrat(irat).size}`);
-        }
-      }
-      questions.irat_questions = balanceCorrectPositions(irat);
+      questions.irat_questions = balanceCorrectPositions(questions.irat_questions);
     } catch (qaError) {
-      console.error("[QA] Falha na verificação de qualidade, mantendo questões originais:", qaError);
+      console.error("[QA] Falha ao equilibrar alternativas:", qaError);
     }
 
     return new Response(JSON.stringify(questions), {

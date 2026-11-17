@@ -16,7 +16,7 @@ export interface IratQuestion {
 const LETTERS = ["A", "B", "C", "D"] as const;
 type Letter = (typeof LETTERS)[number];
 
-const ABSOLUTES = /\b(sempre|nunca|apenas|somente|exclusivamente|jamais|em nenhum (caso|cen[áa]rio)|em todos os (casos|cen[áa]rios)|todos os pacientes|nenhum paciente|definitiv[ao]s?|completamente|integralmente|imediatamente|totalmente)\b/i;
+const ABSOLUTES = /\b(sempre|nunca|apenas|somente|exclusiv[ao]s?(?:mente)?|obrigatori[ao]s?|obrigatoriamente|necessariamente|invariavelmente|unicamente|jamais|em nenhum (caso|cen[áa]rio)|em todos os (casos|cen[áa]rios)|todos os pacientes|nenhum paciente|definitiv[ao]s?|completamente|integralmente|imediatamente|totalmente)\b/i;
 const ALL_NONE = /\b(todas|nenhuma) (as|das) (anteriores|alternativas)\b|\b(todas|nenhuma) as anteriores\b/i;
 // Explanations that cite option letters cannot survive a reshuffle of the options.
 const CITES_LETTER = /\b(alternativas?|op[çc](?:ão|ões)|letras?|itens?)\s+[A-D]\b|\(\s*[A-D]\s*\)|\b[A-D]\)/i;
@@ -53,6 +53,13 @@ export function auditIrat(questions: IratQuestion[]): Map<number, string[]> {
       }
     }
     if (!/segundo o material/i.test(q.explanation ?? "")) add(i, "a explicação não termina com \"Segundo o material: «trecho literal»\"");
+    // Long stem words that appear ONLY in the correct option are a giveaway.
+    const stemWords = new Set((q.question_text.toLowerCase().match(/[a-zà-ú0-9]{10,}/g) ?? []));
+    const correctText = getOpt(q, correct).toLowerCase();
+    const leaks = [...stemWords].filter(
+      (w) => correctText.includes(w) && LETTERS.filter((l) => l !== correct).every((l) => !getOpt(q, l).toLowerCase().includes(w)),
+    );
+    if (leaks.length > 0) add(i, `a palavra-chave do enunciado "${leaks[0]}" aparece só na alternativa correta; reformule para não entregar a resposta`);
     LETTERS.forEach((l) => {
       const t = getOpt(q, l);
       if (ALL_NONE.test(t)) add(i, `alternativa ${l} usa "todas/nenhuma das anteriores"`);
@@ -91,59 +98,110 @@ export function balanceCorrectPositions(questions: IratQuestion[]): IratQuestion
   });
 }
 
-export function buildRepairInstruction(questions: IratQuestion[], issues: Map<number, string[]>): string {
-  const items = questions.map((q, i) => ({
+export interface AppQuestion {
+  question_text: string;
+  correct_answer: string;
+  explanation?: string;
+}
+
+const SEP = "|||AFIRMACAO|||";
+
+export function buildReviewInstruction(
+  questions: IratQuestion[],
+  issues: Map<number, string[]>,
+  app: AppQuestion[],
+): string {
+  const iratItems = questions.map((q, i) => ({
     indice: i,
     problemas_automaticos: issues.get(i) ?? [],
     questao: q,
   }));
-  return `REVISÃO CRÍTICA DAS QUESTÕES DE iRAT. Você é um revisor exigente de provas de residência. Revise TODAS as questões abaixo contra o material fornecido e REESCREVA SOMENTE as que tiverem algum defeito, mantendo o conteúdo-alvo do material.
+  const caso = app[0]?.question_text.split(SEP)[0] ?? "";
+  const appItems = app.map((a, i) => ({
+    indice: i,
+    afirmacao: a.question_text.split(SEP)[1] ?? "",
+    gabarito: a.correct_answer,
+    explicacao: a.explanation ?? "",
+  }));
+  return `REVISÃO CRÍTICA. Você é um revisor exigente de provas de residência. Revise as questões abaixo contra o MATERIAL fornecido e REESCREVA SOMENTE as que tiverem algum defeito, mantendo o conteúdo-alvo do material.
 
-Teste de chute (aplique a cada questão): "Um aluno que NÃO estudou o material acertaria por bom senso, por eliminar alternativas absurdas ou por pistas no enunciado?". Se sim, reescreva.
-
-Defeitos que exigem reescrita:
-- distrator absurdo, de outra categoria da correta (ex.: um corticoide numa pergunta sobre antibiótico) ou "contrário impossível" da correta; todos os distratores devem ser da MESMA categoria e REAIS (se a pergunta é sobre associações de fármacos, todas devem ser associações reais);
-- o enunciado entrega quais alternativas são erradas (ex.: cita "em comparação com a asma" e duas alternativas são claramente de asma) ou repete palavra-chave da correta;
-- absoluto disfarçado em distrator (definitiva, imediata, completa, total, sempre, nunca, apenas, somente);
+A) QUESTÕES DE iRAT. Teste de chute (aplique a cada uma): "Um aluno que NÃO estudou acertaria por bom senso, por eliminar alternativas absurdas ou por pistas no enunciado?". Se sim, reescreva. Defeitos que exigem reescrita:
+- distrator absurdo, de outra categoria da correta ou "contrário impossível" da correta; todos os distratores devem ser da MESMA categoria e REAIS (se a pergunta é sobre associações de fármacos, todas devem ser associações reais);
+- o enunciado entrega quais alternativas são erradas (ex.: cita "em comparação com a asma" e três alternativas são claramente de asma) ou repete palavra-chave que só aparece na correta;
+- absoluto em distrator (definitiva, imediata, completa, total, sempre, nunca, apenas, somente, exclusiva, obrigatoriamente...);
 - alternativas com tamanho diferente (a correta não pode ser a mais longa nem a mais curta, diferença de até ~10%);
 - o enunciado afirma "deve" onde o material diz "considerar/pode/sugere", ou afirma algo que o material não sustenta;
 - fármaco, associação, dose ou valor que não existe ou não consta do material;
-- explicação que cita letras de alternativas (descreva pelo conteúdo) ou que não termina com: Segundo o material: «trecho literal curto» (o trecho deve existir no material; se o fato não tem sustentação no material, troque o fato).
-Ao reescrever, mantenha o mesmo fato de base do material e eleve a plausibilidade dos distratores (leituras parciais, valores próximos, mecanismos de classes vizinhas). Mantenha 4 alternativas.
+- explicação que cita letras de alternativas ou que não termina com: Segundo o material: «trecho literal curto» (o trecho deve existir no material e sustentar EXATAMENTE a resposta; se o fato não tem sustentação, troque o fato);
+- duas questões testando o mesmo subtópico (a mais fraca deve ser trocada por outro tópico do material).
 
-O campo "problemas_automaticos" lista defeitos já detectados por código; corrija-os, mas também aplique o teste acima às questões sem problemas listados.
+B) AFIRMAÇÕES V/F do caso clínico. Para cada uma verifique:
+- o trecho citado em "Segundo o material" sustenta EXATAMENTE a afirmação (mesmo parâmetro, mesma comparação, mesmo grupo de pacientes). Se o trecho fala de outra comparação, reescreva a afirmação ou o gabarito;
+- uma afirmação NÃO pode ser falsa apenas por causa de um absoluto ("obrigatória", "sempre", "nunca", "independentemente", "exclusivamente"); a falsidade deve vir de um erro técnico real;
+- o gabarito é defensável pelo material e pelo caso (dados numéricos do caso coerentes com a afirmação);
+- não repete tema já testado nas questões de iRAT; mantenha pelo menos uma V e uma F;
+- explicação termina com: Segundo o material: «trecho literal curto».
+NÃO altere o caso clínico; reescreva apenas a afirmação, o gabarito e a explicação.
 
-Responda EXCLUSIVAMENTE em JSON, incluindo apenas as questões reescritas: {"irat_questions":[{"indice":<mesmo índice>,"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"A","explanation":"..."}]}. Se nenhuma precisar de ajuste, responda {"irat_questions":[]}.
+Responda EXCLUSIVAMENTE em JSON, incluindo apenas os itens reescritos:
+{"irat_questions":[{"indice":<mesmo índice>,"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"A","explanation":"..."}],
+ "application_questions":[{"indice":<mesmo índice>,"afirmacao":"...","correct_answer":"V","explanation":"..."}]}
+Se nada precisar de ajuste, responda {"irat_questions":[],"application_questions":[]}.
 
-QUESTÕES:
-${JSON.stringify(items, null, 2)}`;
+CASO CLÍNICO (compartilhado):
+${caso}
+
+QUESTÕES DE iRAT:
+${JSON.stringify(iratItems, null, 2)}
+
+AFIRMAÇÕES V/F:
+${JSON.stringify(appItems, null, 2)}`;
 }
 
-/** Applies repaired questions (matched by "indice") if they are structurally valid. */
-export function applyRepairs(questions: IratQuestion[], raw: string): IratQuestion[] {
+/** Applies reviewed items (matched by "indice") if they are structurally valid. */
+export function applyReview(
+  questions: IratQuestion[],
+  app: AppQuestion[],
+  raw: string,
+): { irat: IratQuestion[]; app: AppQuestion[]; changedIrat: number; changedApp: number } {
   let parsed: any;
   try {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    parsed = JSON.parse(raw.slice(start, end + 1));
+    parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
   } catch {
-    return questions;
+    return { irat: questions, app, changedIrat: 0, changedApp: 0 };
   }
-  const fixed = Array.isArray(parsed?.irat_questions) ? parsed.irat_questions : [];
-  const out = [...questions];
-  for (const f of fixed) {
+  const irat = [...questions];
+  let changedIrat = 0;
+  for (const f of Array.isArray(parsed?.irat_questions) ? parsed.irat_questions : []) {
     const idx = Number(f?.indice);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= out.length) continue;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= irat.length) continue;
     if (!f.question_text || !f.option_a || !f.option_b || !f.option_c || !f.option_d || !normLetter(f.correct_option)) continue;
-    out[idx] = {
+    irat[idx] = {
       question_text: String(f.question_text),
       option_a: String(f.option_a),
       option_b: String(f.option_b),
       option_c: String(f.option_c),
       option_d: String(f.option_d),
       correct_option: normLetter(f.correct_option)!,
+      explanation: f.explanation ? String(f.explanation) : irat[idx].explanation,
+    };
+    changedIrat++;
+  }
+  const out = [...app];
+  let changedApp = 0;
+  for (const f of Array.isArray(parsed?.application_questions) ? parsed.application_questions : []) {
+    const idx = Number(f?.indice);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= out.length) continue;
+    const ans = String(f?.correct_answer ?? "").trim().toUpperCase().charAt(0);
+    if (!f.afirmacao || (ans !== "V" && ans !== "F")) continue;
+    const caso = out[idx].question_text.split(SEP)[0];
+    out[idx] = {
+      ...out[idx],
+      question_text: `${caso}${SEP}${String(f.afirmacao).trim()}`,
+      correct_answer: ans,
       explanation: f.explanation ? String(f.explanation) : out[idx].explanation,
     };
+    changedApp++;
   }
-  return out;
+  return { irat, app: out, changedIrat, changedApp };
 }

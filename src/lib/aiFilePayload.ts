@@ -113,3 +113,26 @@ export async function buildAiFilesPayload(
   }
   return payload;
 }
+
+/**
+ * Generates questions and then runs the critic/review pass in a second request
+ * (each request gets its own edge-function time budget). If the review fails
+ * for any reason, the originally generated questions are used.
+ */
+export async function invokeQuizGeneration(filesPayload: AiFilePayload[]) {
+  const { supabase } = await import('@/integrations/supabase/client');
+  const { data, error } = await supabase.functions.invoke('generate-quiz-ai', { body: { files: filesPayload } });
+  if (error) throw error;
+  try {
+    const { data: reviewed, error: reviewError } = await supabase.functions.invoke('generate-quiz-ai', {
+      body: { mode: 'review', files: filesPayload, questions: data },
+    });
+    if (!reviewError && Array.isArray(reviewed?.irat_questions) && Array.isArray(reviewed?.application_questions)) {
+      return reviewed;
+    }
+    console.warn('Revisão das questões indisponível, usando as geradas.', reviewError);
+  } catch (e) {
+    console.warn('Revisão das questões falhou, usando as geradas.', e);
+  }
+  return data;
+}
