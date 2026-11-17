@@ -33,6 +33,8 @@ const TOKEN_COSTS: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
   "gemini-2.5-flash": { input: 0.15, output: 0.60 },
   "gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
+  "gemini-3-flash-preview": { input: 0.5, output: 3.0 },
+  "google/gemini-3-flash-preview": { input: 0.5, output: 3.0 },
   "google/gemini-3.1-pro-preview": { input: 2.0, output: 12.0 },
   "google/gemini-2.5-flash": { input: 0.15, output: 0.60 },
 };
@@ -411,6 +413,9 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
     // Total time budget for AI calls (edge functions are cut off at ~150s).
     const AI_BUDGET_MS = 130000;
+    const PRIMARY_MAX_MS = 75000;
+    const FAST_GOOGLE_MODEL = Deno.env.get("AI_MODEL_GOOGLE_FAST") ?? "gemini-3-flash-preview";
+    const FAST_LOVABLE_MODEL = Deno.env.get("AI_MODEL_LOVABLE_FAST") ?? "google/gemini-3-flash-preview";
     const startedAt = Date.now();
 
     // Try external providers first
@@ -428,11 +433,26 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
 
           if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
 
-          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, { jsonMode: true, timeoutMs: Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt) - 20000) });
+          // The main (thinking) model gets at most PRIMARY_MAX_MS, so a slow answer
+          // still leaves time for the fast fallback below.
+          aiResult = await tryExternalProvider(providerName, keyRow.api_key, messages, {
+            jsonMode: true,
+            timeoutMs: Math.min(PRIMARY_MAX_MS, Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt) - 20000)),
+          });
           if (aiResult) {
             console.log(`[AI] Success with provider: ${providerName}`);
             break;
           }
+        }
+
+        // Fast Gemini model on the same Google key when the main model was too slow.
+        const googleKey = apiKeys.find((k: any) => k.provider === "google");
+        const leftMs = AI_BUDGET_MS - (Date.now() - startedAt);
+        if (!aiResult && googleKey && leftMs > 30000) {
+          console.log(`[AI] Retrying Google with fast model ${FAST_GOOGLE_MODEL}`);
+          aiResult = await tryExternalProvider("google", googleKey.api_key, messages, {
+            jsonMode: true, model: FAST_GOOGLE_MODEL, timeoutMs: leftMs - 10000,
+          });
         }
       }
     } catch (e) {
@@ -442,7 +462,7 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
     // Fallback to Lovable AI
     if (!aiResult) {
       try {
-        aiResult = await tryLovableAI(messages, { jsonMode: true, timeoutMs: Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt)) });
+        aiResult = await tryLovableAI(messages, { jsonMode: true, model: FAST_LOVABLE_MODEL, timeoutMs: Math.max(20000, AI_BUDGET_MS - (Date.now() - startedAt)) });
       } catch (e: any) {
         const errorMessage = getErrorMessage(e);
         if (errorMessage === "RATE_LIMIT") {
@@ -515,12 +535,12 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
           if (!keyRow) continue;
           if (!allText && (providerName === "groq" || providerName === "anthropic")) continue;
           repaired = await tryExternalProvider(providerName, keyRow.api_key, repairMessages, {
-            jsonMode: true, timeoutMs: Math.max(15000, remainingMs - 15000),
+            jsonMode: true, model: providerName === "google" ? FAST_GOOGLE_MODEL : undefined, timeoutMs: Math.max(15000, remainingMs - 15000),
           });
           if (repaired) break;
         }
         if (!repaired) {
-          repaired = await tryLovableAI(repairMessages, { jsonMode: true, timeoutMs: Math.max(15000, remainingMs - 15000) }).catch(() => null);
+          repaired = await tryLovableAI(repairMessages, { jsonMode: true, model: FAST_LOVABLE_MODEL, timeoutMs: Math.max(15000, remainingMs - 15000) }).catch(() => null);
         }
         if (repaired?.content) {
           irat = applyRepairs(irat, repaired.content);

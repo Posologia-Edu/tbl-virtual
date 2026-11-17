@@ -63,6 +63,7 @@ export async function fetchWithTimeout(input: string, init: RequestInit, timeout
 }
 
 interface ChatOptions {
+  model?: string;
   jsonMode?: boolean;
   tools?: any[];
   toolChoice?: any;
@@ -92,13 +93,13 @@ export async function tryExternalProvider(
     let body: any;
     if (isAnthropic) {
       body = {
-        model: config.model,
+        model: options.model ?? config.model,
         max_tokens: 8192,
         system: messages.find((m: any) => m.role === "system")?.content || "",
         messages: messages.filter((m: any) => m.role !== "system"),
       };
     } else {
-      body = { model: config.model, messages };
+      body = { model: options.model ?? config.model, messages };
       if (options.jsonMode) body.response_format = { type: "json_object" };
       if (options.tools) {
         body.tools = options.tools;
@@ -140,7 +141,7 @@ export async function tryExternalProvider(
 
     if (!content && !toolArguments) return null;
 
-    return { content: content || "", provider, model: config.model, tokensInput, tokensOutput, toolArguments };
+    return { content: content || "", provider, model: options.model ?? config.model, tokensInput, tokensOutput, toolArguments };
   } catch (e) {
     console.error(`[AI] ${provider} error:`, e);
     return null;
