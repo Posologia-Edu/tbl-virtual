@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { usePlanLimits } from '@/hooks/usePlanLimits';
 import { parseEdgeFunctionError } from '@/lib/edgeFunctionError';
-import { extractPdfTextInBrowser } from '@/lib/pdfText';
+import { extractPdfTextInBrowser, renderPdfPagesAsImages } from '@/lib/pdfText';
 import { isPlanLimitError } from '@/lib/planLimitError';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -1024,6 +1024,10 @@ export default function TeacherDashboard() {
             payload.push({ fileContent: text, fileName: file.name });
             continue;
           }
+          // No text layer (slides as images / scan): send page images instead.
+          const pages = await renderPdfPagesAsImages(file);
+          pages.forEach((img, i) => payload.push({ fileContent: img, fileName: `${file.name} (img ${i + 1})`, mimeType: 'image/jpeg' }));
+          continue;
         } catch (e) {
           console.warn('Extração local do PDF falhou, tentando no servidor', e);
         }
