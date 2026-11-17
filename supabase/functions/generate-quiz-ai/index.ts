@@ -241,20 +241,25 @@ REGRAS DE CONSTRUÇÃO DAS ALTERNATIVAS (CRÍTICAS — serão verificadas automa
 5. **Sem marca própria da correta**: não deixe só a correta com números, só a correta com ressalva ("exceto quando...") ou só a correta repetindo termos do enunciado. Distratores também devem trazer números/ressalvas quando a correta trouxer.
 6. **Varie a letra da correta** ao longo das questões (use as quatro letras).
 7. **Prefira aplicação a memorização pura**: quando o material permitir, o enunciado traz um dado (cálculo, valor laboratorial, escore, situação) e exige interpretar e decidir. Use também "armadilhas do número bonito" (um valor que parece bom mas não trata a causa) e contraste entre dois contextos parecidos com condutas diferentes.
+8. **Distratores da MESMA CATEGORIA da correta e todos reais**: se a correta é um fármaco, os distratores são outros fármacos reais; se é um mecanismo, outros mecanismos reais; se é um valor, valores próximos reais. PROIBIDO distrator de outra categoria (ex.: um corticoide como opção numa pergunta sobre antibiótico), PROIBIDO distrator fisiologicamente absurdo ou o "contrário impossível" da correta, e PROIBIDO absoluto disfarçado ("definitiva", "imediata", "completa", "total", "irrestrita").
+9. **O enunciado não pode entregar quais alternativas são erradas**: não cite a doença ou classe contrastante que identifica os distratores (ex.: "em comparação com a asma" faz o aluno eliminar tudo que é de asma). Pergunte pelo fato, não pelo contraste.
+10. **Fidelidade ao grau de recomendação do material**: reproduza exatamente "considerar", "pode", "deve", "preferencialmente", "sugere". Nunca transforme "considerar/pode" em "deve". Se houver dúvida, formule a pergunta sobre o que o material afirma sem ambiguidade.
+11. **Só cite produtos, associações e doses que existem de fato.** Em perguntas sobre combinações de fármacos, TODAS as alternativas devem ser combinações reais e disponíveis; use os nomes e as doses como aparecem no material.
+12. **Nenhum tema dos exemplos abaixo pode aparecer nas questões**: os exemplos são de áreas não relacionadas ao material, apenas para mostrar o padrão.
 
-EXEMPLOS DE ESTRUTURA (apenas do formato e do nível; NÃO reutilize estes temas, use o material fornecido):
-- Enunciado: "Segundo as diretrizes GOLD, qual critério espirométrico confirma a limitação persistente ao fluxo aéreo?"
-  A) Relação VEF1/CVF pós-broncodilatador inferior a 0,70, confirmada em exame repetido ou único conforme a diretriz
-  B) Relação VEF1/CVF pré-broncodilatador inferior a 0,80, confirmada em exame repetido ou único conforme a diretriz
-  C) VEF1 pós-broncodilatador inferior a 80% do previsto, confirmado em exame repetido ou único conforme a diretriz
-  D) CVF pós-broncodilatador inferior a 70% do previsto, confirmada em exame repetido ou único conforme a diretriz
-  (as quatro têm o mesmo tamanho e a mesma estrutura; cada distrator troca um parâmetro real do exame.)
-- Enunciado: "Qual o mecanismo responsável pela tosse seca persistente associada aos inibidores da ECA?"
-  A) Bloqueio de receptores β2 nas vias aéreas, com aumento do tônus broncomotor e tosse seca
-  B) Liberação de histamina por degranulação de mastócitos, com edema da mucosa e tosse seca
-  C) Acúmulo de bradicinina e substância P nas vias aéreas, por redução da degradação pela enzima inibida
-  D) Aumento de angiotensina II local, com hiperreatividade brônquica e tosse seca
-  (todas plausíveis para quem não estudou; nenhuma usa palavras do enunciado como pista.)
+EXEMPLOS DE PADRÃO (áreas não relacionadas ao material; NÃO reutilize estes temas):
+- Enunciado: "Qual o principal mecanismo pelo qual a metformina reduz a glicemia de jejum no diabetes tipo 2?"
+  A) Redução da gliconeogênese hepática, com ativação da AMPK e menor produção hepática de glicose
+  B) Aumento da secreção de insulina pelas células beta, por fechamento de canais de potássio dependentes de ATP
+  C) Inibição da reabsorção tubular de glicose no túbulo proximal, com aumento da glicosúria
+  D) Retardo da digestão de carboidratos no intestino delgado, com redução do pico glicêmico pós-prandial
+  (todas são mecanismos reais de antidiabéticos, de mesmo tamanho; o enunciado não dá pista; exige ter estudado.)
+- Enunciado: "Qual o alvo molecular primário das fluoroquinolonas?"
+  A) RNA polimerase dependente de DNA, impedindo o início da transcrição bacteriana
+  B) Subunidade ribossômica 30S, com leitura errônea do RNA mensageiro durante a tradução
+  C) DNA girase e topoisomerase IV, bloqueando o superenrolamento e a separação do DNA
+  D) Di-hidropteroato sintetase, impedindo a síntese do ácido fólico necessário à bactéria
+  (todos são alvos reais de outras classes de antimicrobianos; cada distrator é a resposta correta de outra pergunta.)
 
 2. **EXATAMENTE 3 questões de aplicação (V/F) baseadas em UM ÚNICO caso clínico compartilhado** — padrão de prova de residência médica/concurso público de alto nível (USP, UNIFESP, UNICAMP, UFRJ, AMRIGS, ENARE, Revalida, INEP, FCC, Cebraspe).
 
@@ -518,9 +523,9 @@ Responda EXCLUSIVAMENTE no formato JSON abaixo, sem nenhum texto adicional:
       const issues = auditIrat(irat);
       console.log(`[QA] ${issues.size} questão(ões) com problemas:`, JSON.stringify([...issues.entries()]));
       const remainingMs = AI_BUDGET_MS - (Date.now() - startedAt);
-      if (issues.size > 0 && remainingMs > 40000) {
+      if (irat.length > 0 && remainingMs > 35000) {
         const repairMessages = [
-          { role: "system", content: "Você é um revisor rigoroso de questões de múltipla escolha para TBL. Responda somente com JSON válido." },
+          { role: "system", content: "Você é um revisor rigoroso e exigente de questões de múltipla escolha para TBL e residência médica. Responda somente com JSON válido." },
           {
             role: "user",
             content: Array.isArray(userContent)

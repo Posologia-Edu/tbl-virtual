@@ -16,7 +16,7 @@ export interface IratQuestion {
 const LETTERS = ["A", "B", "C", "D"] as const;
 type Letter = (typeof LETTERS)[number];
 
-const ABSOLUTES = /\b(sempre|nunca|apenas|somente|exclusivamente|jamais|em nenhum (caso|cen[áa]rio)|em todos os (casos|cen[áa]rios)|todos os pacientes|nenhum paciente)\b/i;
+const ABSOLUTES = /\b(sempre|nunca|apenas|somente|exclusivamente|jamais|em nenhum (caso|cen[áa]rio)|em todos os (casos|cen[áa]rios)|todos os pacientes|nenhum paciente|definitiv[ao]s?|completamente|integralmente|imediatamente|totalmente)\b/i;
 const ALL_NONE = /\b(todas|nenhuma) (as|das) (anteriores|alternativas)\b|\b(todas|nenhuma) as anteriores\b/i;
 // Explanations that cite option letters cannot survive a reshuffle of the options.
 const CITES_LETTER = /\b(alternativas?|op[çc](?:ão|ões)|letras?|itens?)\s+[A-D]\b|\(\s*[A-D]\s*\)|\b[A-D]\)/i;
@@ -91,21 +91,30 @@ export function balanceCorrectPositions(questions: IratQuestion[]): IratQuestion
 }
 
 export function buildRepairInstruction(questions: IratQuestion[], issues: Map<number, string[]>): string {
-  const items = [...issues.entries()].map(([i, problems]) => ({
+  const items = questions.map((q, i) => ({
     indice: i,
-    problemas: problems,
-    questao: questions[i],
+    problemas_automaticos: issues.get(i) ?? [],
+    questao: q,
   }));
-  return `REVISÃO DE QUALIDADE. As questões de iRAT abaixo violaram regras de qualidade. Reescreva APENAS estas questões, mantendo o mesmo conteúdo-alvo do material e corrigindo os problemas apontados:
-- alternativas com tamanho parecido (diferença de até ~10%); a correta NÃO pode ser a mais longa nem a mais curta;
-- sem termos absolutos nos distratores (sempre, nunca, apenas, somente, exclusivamente...);
-- sem "todas/nenhuma das anteriores";
-- cada distrator com um erro definido e plausível; o mesmo fato observado em todas as alternativas;
-- a explicação NÃO deve citar letras de alternativas; descreva as alternativas pelo conteúdo.
+  return `REVISÃO CRÍTICA DAS QUESTÕES DE iRAT. Você é um revisor exigente de provas de residência. Revise TODAS as questões abaixo contra o material fornecido e REESCREVA SOMENTE as que tiverem algum defeito, mantendo o conteúdo-alvo do material.
 
-Responda EXCLUSIVAMENTE em JSON: {"irat_questions":[{"indice":<mesmo índice>,"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"A","explanation":"..."}]}
+Teste de chute (aplique a cada questão): "Um aluno que NÃO estudou o material acertaria por bom senso, por eliminar alternativas absurdas ou por pistas no enunciado?". Se sim, reescreva.
 
-QUESTÕES A CORRIGIR:
+Defeitos que exigem reescrita:
+- distrator absurdo, de outra categoria da correta (ex.: um corticoide numa pergunta sobre antibiótico) ou "contrário impossível" da correta; todos os distratores devem ser da MESMA categoria e REAIS (se a pergunta é sobre associações de fármacos, todas devem ser associações reais);
+- o enunciado entrega quais alternativas são erradas (ex.: cita "em comparação com a asma" e duas alternativas são claramente de asma) ou repete palavra-chave da correta;
+- absoluto disfarçado em distrator (definitiva, imediata, completa, total, sempre, nunca, apenas, somente);
+- alternativas com tamanho diferente (a correta não pode ser a mais longa nem a mais curta, diferença de até ~10%);
+- o enunciado afirma "deve" onde o material diz "considerar/pode/sugere", ou afirma algo que o material não sustenta;
+- fármaco, associação, dose ou valor que não existe ou não consta do material;
+- explicação que cita letras de alternativas (descreva pelo conteúdo).
+Ao reescrever, mantenha o mesmo fato de base do material e eleve a plausibilidade dos distratores (leituras parciais, valores próximos, mecanismos de classes vizinhas). Mantenha 4 alternativas.
+
+O campo "problemas_automaticos" lista defeitos já detectados por código; corrija-os, mas também aplique o teste acima às questões sem problemas listados.
+
+Responda EXCLUSIVAMENTE em JSON, incluindo apenas as questões reescritas: {"irat_questions":[{"indice":<mesmo índice>,"question_text":"...","option_a":"...","option_b":"...","option_c":"...","option_d":"...","correct_option":"A","explanation":"..."}]}. Se nenhuma precisar de ajuste, responda {"irat_questions":[]}.
+
+QUESTÕES:
 ${JSON.stringify(items, null, 2)}`;
 }
 
